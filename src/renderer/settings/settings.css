@@ -93,7 +93,8 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .swatches { display: flex; gap: 6px; align-items: center; }
 /* display: contents keeps the radiogroup wrapper out of the flex row, so the picker sits beside the palette. */
 .swatchRow { display: contents; }
-.swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid transparent; outline-offset: 1px; cursor: pointer; }
+/* box-sizing: the UA sheet gives <button> border-box but <label> content-box, which would make the picker bigger. */
+.swatch { box-sizing: border-box; width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid transparent; outline-offset: 1px; cursor: pointer; }
 .swatch.sel { border-color: var(--colorNeutralForeground1); }
 .swatch:focus-visible { outline: 2px solid var(--colorStrokeFocus2); }
 .swatch.custom { position: relative; border-color: var(--stroke); border-style: dashed; }
