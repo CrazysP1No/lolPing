@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LanTransport } from '../../src/main/lanTransport';
 import { RelayTransport } from '../../src/main/relayTransport';
 import { deriveRoomKeys } from '../../src/main/roomCrypto';
-import { RoomManager, type RemotePing, type RoomToast } from '../../src/main/roomManager';
+import { RoomManager, type RemotePing, type RoomToast, type RemoteText } from '../../src/main/roomManager';
 import type { Transport } from '../../src/main/transport';
 import { makeRoomCode } from '../../src/shared/roomCode';
 import { startFakeRelay } from './fixtures/fakeRelay';
@@ -30,10 +30,12 @@ function peer(name: string, transports: Transport[]) {
     resolveTarget: () => ({ displayId: 1, width: 1000, height: 500 }),
   });
   const pings: RemotePing[] = [];
+  const texts: RemoteText[] = [];
   const toasts: RoomToast[] = [];
   room.on('remotePing', (p: RemotePing) => pings.push(p));
+  room.on('remoteText', (p: RemoteText) => texts.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
-  return { room, pings, toasts, transports };
+  return { room, pings, texts, toasts, transports };
 }
 
 let relay: Awaited<ReturnType<typeof startFakeRelay>>;
@@ -63,6 +65,13 @@ describe('rooms over a relay', () => {
     b.room.sendPing('omw', { d: 1, x: 0.25, y: 0.5 });
     await until(() => a.pings.length === 1);
     expect(a.pings[0]).toMatchObject({ id: 'omw', x: 250, y: 250, tag: { name: 'Ben', color: 2 } });
+
+    b.room.sendText('走这边 🎮', { d: 1, x: 0.2, y: 0.8 });
+    await until(() => a.texts.length === 1);
+    expect(a.texts[0]).toMatchObject({ text: '走这边 🎮', x: 200, y: 400, tag: { name: 'Ben', color: 2 } });
+    a.room.sendText('收到', { d: 1, x: 0.5, y: 0.5 });
+    await until(() => b.texts.length === 1);
+    expect(b.texts[0].text).toBe('收到');
 
     b.room.leave();
     await until(() => a.toasts.some((t) => t.kind === 'left'));

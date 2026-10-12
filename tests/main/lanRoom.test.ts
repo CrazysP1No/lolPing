@@ -3,7 +3,7 @@ import { createSocket } from 'node:dgram';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LanTransport } from '../../src/main/lanTransport';
 import { deriveRoomKeys } from '../../src/main/roomCrypto';
-import { RoomManager, type RemotePing, type RoomToast } from '../../src/main/roomManager';
+import { RoomManager, type RemotePing, type RoomToast, type RemoteText } from '../../src/main/roomManager';
 import { makeRoomCode } from '../../src/shared/roomCode';
 
 // Two rooms on loopback. Loopback carries no broadcast, so each transport is seeded with the other's port.
@@ -31,12 +31,14 @@ function peer(port: number, other: number, name: string) {
     resolveTarget: () => ({ displayId: 1, width: 1000, height: 500 }),
   });
   const pings: RemotePing[] = [];
+  const texts: RemoteText[] = [];
   const toasts: RoomToast[] = [];
   let packets = 0;
   lan.on('packet', () => packets++);
   room.on('remotePing', (p: RemotePing) => pings.push(p));
+  room.on('remoteText', (p: RemoteText) => texts.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
-  return { lan, room, pings, toasts, packets: () => packets };
+  return { lan, room, pings, texts, toasts, packets: () => packets };
 }
 
 let open: ReturnType<typeof peer>[] = [];
@@ -58,6 +60,13 @@ describe('two rooms over loopback UDP', () => {
     a.room.sendPing('push', { d: 1, x: 0.5, y: 0.5 });
     await until(() => b.pings.length === 1);
     expect(b.pings[0]).toEqual({ displayId: 1, x: 500, y: 250, id: 'push', tag: { name: 'Alice', color: 1 } });
+
+    a.room.sendText('集合 🎮', { d: 1, x: 0.25, y: 0.75 });
+    await until(() => b.texts.length === 1);
+    expect(b.texts[0]).toEqual({ displayId: 1, x: 250, y: 375, text: '集合 🎮', tag: { name: 'Alice', color: 1 } });
+    b.room.sendText('收到', { d: 1, x: 0.5, y: 0.5 });
+    await until(() => a.texts.length === 1);
+    expect(a.texts[0].text).toBe('收到');
 
     b.lan.rebind();
     await until(() => b.lan.status === 'ok');

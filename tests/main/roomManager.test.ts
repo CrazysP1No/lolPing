@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
-import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
+import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast, type RemoteText } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
@@ -35,6 +35,7 @@ let room: RoomManager;
 let profile: { name: string; color: number; limit: number };
 let pings: RemotePing[];
 let emotes: RemoteEmote[];
+let texts: RemoteText[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
 
@@ -55,6 +56,7 @@ beforeEach(() => {
   profile = { name: 'Me', color: 1, limit: 5 };
   pings = [];
   emotes = [];
+  texts = [];
   toasts = [];
   saved = [];
   room = new RoomManager({
@@ -68,6 +70,7 @@ beforeEach(() => {
   });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
   room.on('remoteEmote', (p: RemoteEmote) => emotes.push(p));
+  room.on('remoteText', (p: RemoteText) => texts.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
   room.on('saveCode', (c: string | null) => saved.push(c));
 });
@@ -75,6 +78,66 @@ beforeEach(() => {
 afterEach(() => {
   room.quit();
   vi.useRealTimers();
+});
+
+describe('room text', () => {
+  it('sends encrypted plain text with the same display coordinates as pings', async () => {
+    await joinActive();
+    new Remote('1111111111111111', 'lan:a', lan).presence();
+    lan.sent = [];
+    room.sendText('  集合 🎮  ', { d: 1, x: 0.5, y: 0.25 });
+    expect(sentMessages('lan:a')).toEqual([expect.objectContaining({ t: 'text', text: '集合 🎮', d: 1, x: 0.5, y: 0.25 })]);
+    expect(Buffer.from(lan.sent[0].packet).includes(Buffer.from('集合'))).toBe(false);
+  });
+
+  it('maps received text onto the display and attaches its sender', async () => {
+    await joinActive();
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence({ name: 'Alex', color: 4 });
+    lan.deliver(remote.key, remote.packet({ t: 'text', text: '进攻', d: 1, x: 0.5, y: 0.25 }));
+    expect(texts).toEqual([{ displayId: 100, x: 960, y: 270, text: '进攻', tag: { name: 'Alex', color: 4 } }]);
+    expect(pings).toEqual([]);
+    expect(emotes).toEqual([]);
+  });
+
+  it.each(['paused', 'roomMuted', 'memberMuted', 'incompatible', 'unknown'] as const)('ignores text when %s', async (flag) => {
+    await joinActive();
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    if (flag !== 'unknown') remote.presence({ proto: flag === 'incompatible' ? 2 : 1 });
+    if (flag === 'paused') room.setStatusFlags({ paused: true, roomMuted: false });
+    if (flag === 'roomMuted') room.setStatusFlags({ paused: false, roomMuted: true });
+    if (flag === 'memberMuted') room.muteMember(remote.peer, true);
+    lan.deliver(remote.key, remote.packet({ t: 'text', text: '进攻', d: 1, x: 0.5, y: 0.25 }));
+    expect(texts).toEqual([]);
+  });
+
+  it('shares the incoming budget with pings and rejects replays', async () => {
+    await joinActive();
+    profile.limit = 1;
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping();
+    const packet = remote.packet({ t: 'text', text: '进攻', d: 1, x: 0.5, y: 0.25 });
+    lan.deliver(remote.key, packet);
+    expect(texts).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1100);
+    lan.deliver(remote.key, packet);
+    expect(texts).toEqual([]);
+    lan.deliver(remote.key, remote.packet({ t: 'text', text: '集合', d: 1, x: 0.5, y: 0.25 }));
+    expect(texts).toHaveLength(1);
+  });
+
+  it('does not send invalid text, or text while paused', async () => {
+    await joinActive();
+    new Remote('1111111111111111', 'lan:a', lan).presence();
+    lan.sent = [];
+    for (const text of ['', '  ', '字'.repeat(121)]) room.sendText(text, { d: 1, x: 0.5, y: 0.25 });
+    expect(lan.sent).toEqual([]);
+    room.setStatusFlags({ paused: true, roomMuted: false });
+    lan.sent = [];
+    room.sendText('进攻', { d: 1, x: 0.5, y: 0.25 });
+    expect(lan.sent).toEqual([]);
+  });
 });
 
 describe('joining', () => {

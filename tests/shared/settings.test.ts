@@ -84,6 +84,21 @@ describe('normalizeSettings', () => {
   });
 });
 
+describe('text shortcut', () => {
+  it('migrates old settings to Ctrl + Alt + T and keeps valid custom shortcuts', () => {
+    expect(normalizeSettings({}).textHotkey).toEqual({ mods: 3, vk: 0x54 });
+    expect(normalizeSettings({ textHotkey: { mods: 5, vk: 0x4b } }).textHotkey).toEqual({ mods: 5, vk: 0x4b });
+    expect(normalizeSettings({ textHotkey: { mods: 4, vk: 0x41 } }).textHotkey).toEqual({ mods: 3, vk: 0x54 });
+  });
+
+  it('rejects identical text and pause shortcuts in either direction', () => {
+    expect(patchClashes(DEFAULT_SETTINGS, { textHotkey: DEFAULT_SETTINGS.toggleHotkey })).toBe(true);
+    expect(patchClashes(DEFAULT_SETTINGS, { toggleHotkey: { mods: 3, vk: 0x54 } })).toBe(true);
+    expect(patchClashes(DEFAULT_SETTINGS, { textHotkey: { mods: 5, vk: 0x50 } })).toBe(false);
+    expect(normalizeSettings({ textHotkey: { mods: 3, vk: 0x50 } }).textHotkey).not.toEqual(DEFAULT_SETTINGS.toggleHotkey);
+  });
+});
+
 describe('room settings', () => {
   const identity = { name: 'darren', color: 5 };
 

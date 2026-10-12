@@ -56,6 +56,18 @@ const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).sor
 const entry = (n: number): CustomEmote => ({ id: `c:${n.toString(16).padStart(32, '0')}`, name: `e${n}`, animated: false });
 
 describe('EmoteLibrary', () => {
+  it('shares the validated still only, refusing missing, unsafe or oversized files', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const s = still();
+    await lib.save({ name: 'moving', still: s, anim: gif() }, []);
+    expect(lib.readStill(hashOf(s))).toEqual(Buffer.from(s));
+    expect(lib.readStill('../anything')).toBeNull();
+    expect(lib.readStill('f'.repeat(32))).toBeNull();
+    writeFileSync(join(lib.dir, `${hashOf(s)}.webp`), still(160, 160, 12_289));
+    expect(lib.readStill(hashOf(s))).toBeNull();
+    writeFileSync(join(lib.dir, `${hashOf(s)}.webp`), webpAnim());
+    expect(lib.readStill(hashOf(s))).toBeNull();
+  });
   it('saves a still and an animation', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
     const s = still();

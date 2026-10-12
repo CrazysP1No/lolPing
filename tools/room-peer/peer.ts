@@ -51,6 +51,7 @@ transport.on('packet', (from: string, data: Uint8Array) => {
   if (!msg || msg.peer === peer) return;
   if (msg.t === 'ping') console.log(`[in] ${msg.ping} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
   else if (msg.t === 'emote') console.log(`[in] emote ${msg.e} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
+  else if (msg.t === 'text') console.log(`[in] text ${JSON.stringify(msg.text)} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
   else if (msg.t === 'presence') console.log(`[in] presence: ${msg.name} (${msg.status})`);
   else console.log(`[in] bye from ${msg.peer}`);
 });

@@ -5,8 +5,12 @@ import { isTagColor } from './roomColors';
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
 export const MAX_NAME = 16;
+export const MAX_TEXT = 120;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
+export const EMOTE_CHUNK_BYTES = 750;
+export const EMOTE_MAX_CHUNKS = 17;
+const isHash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v);
 
 export type MemberStatus = 'on' | 'paused' | 'muted';
 const STATUSES: readonly MemberStatus[] = ['on', 'paused', 'muted'];
@@ -26,6 +30,8 @@ export interface PresenceMsg extends Base {
   name: string;
   color: number;
   status: MemberStatus;
+  /** Custom stills on the sender's wheel and centre. Optional for older peers. */
+  em?: string[];
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -48,7 +54,29 @@ export interface EmoteMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | ByeMsg;
+/** Older apps ignore this message type while retaining ping and emote compatibility. */
+export interface TextMsg extends Base {
+  t: 'text';
+  text: string;
+  d: number;
+  x: number;
+  y: number;
+}
+export interface WantMsg extends Base {
+  t: 'want';
+  to: string;
+  h: string;
+  /** Empty requests the whole still; otherwise only these chunk indexes. */
+  need: number[];
+}
+export interface ChunkMsg extends Base {
+  t: 'chunk';
+  h: string;
+  i: number;
+  n: number;
+  b: string;
+}
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | ByeMsg | WantMsg | ChunkMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -65,6 +93,12 @@ export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): 
   return name || fallback;
 }
 
+/** The same plain-text boundary for local input and room messages. */
+export function sanitizeText(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length > MAX_TEXT * 2 || [...raw].length > MAX_TEXT) return null;
+  return sanitizeName(raw, '', MAX_TEXT) || null;
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isUint = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 const isUnit = (v: unknown): v is number => typeof v === 'number' && v >= 0 && v <= 1;
@@ -77,10 +111,12 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const base = { peer, seq, ts };
   switch (t) {
     case 'presence': {
-      const { proto, app, name, color, status } = raw;
+      const { proto, app, name, color, status, em } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
-      return { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus };
+      if (em !== undefined && (!Array.isArray(em) || em.length > 9 || !em.every(isHash))) return null;
+      return { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
+        ...(em !== undefined ? { em: [...new Set(em as string[])] } : {}) };
     }
     case 'ping': {
       const { ping, d, x, y } = raw;
@@ -94,8 +130,27 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (!isUnit(x) || !isUnit(y)) return null;
       return { t, ...base, e, d: d as number, x, y };
     }
+    case 'text': {
+      const { d, x, y } = raw;
+      const text = sanitizeText(raw.text);
+      if (!text || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
+      if (!isUnit(x) || !isUnit(y)) return null;
+      return { t, ...base, text, d: d as number, x, y };
+    }
     case 'bye':
       return { t, ...base };
+    case 'want': {
+      const { to, h, need } = raw;
+      if (typeof to !== 'string' || !/^[0-9a-f]{16}$/.test(to) || !isHash(h) || !Array.isArray(need) || need.length > EMOTE_MAX_CHUNKS) return null;
+      if (!need.every((i) => isUint(i) && i < EMOTE_MAX_CHUNKS)) return null;
+      return { t, ...base, to, h, need: [...new Set(need as number[])] };
+    }
+    case 'chunk': {
+      const { h, i, n, b } = raw;
+      if (!isHash(h) || !isUint(n) || n < 1 || n > EMOTE_MAX_CHUNKS || !isUint(i) || i >= n) return null;
+      if (typeof b !== 'string' || b.length === 0 || b.length > 1000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(b)) return null;
+      return { t, ...base, h, i, n, b };
+    }
     default:
       return null;
   }
@@ -118,7 +173,7 @@ export function isOlderThan(app: string, version: string): boolean {
 }
 
 export function encodeMessage(m: RoomMessage): Uint8Array {
-  const out = m.t === 'ping' || m.t === 'emote' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
+  const out = m.t === 'ping' || m.t === 'emote' || m.t === 'text' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
 }
 

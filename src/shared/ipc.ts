@@ -30,6 +30,7 @@ export interface OverlayEvents {
   /** `owner` is 'self', 'preview' or a room member: each owner has at most one emote on screen. */
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
+  'text:spawn': Point & { text: string; tag?: PingTag };
   'toast:show': { title: string; body: string };
 }
 
@@ -37,7 +38,7 @@ export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
-  'toast:show',
+  'text:spawn', 'toast:show',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */

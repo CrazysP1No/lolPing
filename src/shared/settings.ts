@@ -36,6 +36,7 @@ export interface Settings {
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
+  textHotkey: Hotkey;
   pingSizePx: number;
   pingDurationS: number;
   volume: number;
@@ -87,6 +88,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clickPingId: DEFAULT_CLICK_PING,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
+  textHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 },
   pingSizePx: 110,
   pingDurationS: 3.2,
   volume: 70,
@@ -167,13 +169,16 @@ export function triggersClash(ping: TriggerKey, emote: EmoteTriggerKey, toggle: 
   return sameTrigger(ping, emote) || (vk !== null && vk === toggle.vk);
 }
 
-/** Whether applying `patch` to `current` leaves those three keys clashing, judged as normalizeSettings will read them. */
+/** Whether applying `patch` to `current` leaves triggers or shortcuts clashing, judged as normalizeSettings will read them. */
 export function patchClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey'>(k: K): unknown => (k in patch ? patch[k] : current[k]);
-  return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), hotkey(pick('toggleHotkey')));
+  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey' | 'textHotkey'>(k: K): unknown => (k in patch ? patch[k] : current[k]);
+  const toggle = hotkey(pick('toggleHotkey'));
+  const text = hotkey(pick('textHotkey'), DEFAULT_SETTINGS.textHotkey);
+  return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), toggle)
+    || (toggle.mods === text.mods && toggle.vk === text.vk);
 }
 
-function hotkey(raw: unknown): Hotkey {
+function hotkey(raw: unknown, fallback = DEFAULT_SETTINGS.toggleHotkey): Hotkey {
   // Needs Ctrl, Alt or Win: a Shift-only hotkey would swallow ordinary capital letters system-wide.
   if (
     isObj(raw) && Number.isInteger(raw.mods) && (raw.mods as number) >= 1 && (raw.mods as number) <= 15
@@ -181,7 +186,7 @@ function hotkey(raw: unknown): Hotkey {
   ) {
     return { mods: raw.mods as number, vk: raw.vk };
   }
-  return { ...DEFAULT_SETTINGS.toggleHotkey };
+  return { ...fallback };
 }
 
 function roomCode(raw: unknown): string | null {
@@ -213,6 +218,11 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
   const fallbackName = sanitizeName(identity.name);
   const pingTrigger = trigger(r.trigger, platform);
   const toggleHotkey = hotkey(r.toggleHotkey);
+  let textHotkey = hotkey(r.textHotkey, DEFAULT_SETTINGS.textHotkey);
+  if (textHotkey.mods === toggleHotkey.mods && textHotkey.vk === toggleHotkey.vk) {
+    textHotkey = { ...DEFAULT_SETTINGS.textHotkey };
+    if (textHotkey.mods === toggleHotkey.mods && textHotkey.vk === toggleHotkey.vk) textHotkey.mods |= MOD.shift;
+  }
   const emote = emoteKey(r.emoteTrigger, platform);
   const custom = customEmotes(r.customEmotes);
   return {
@@ -225,6 +235,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
+    textHotkey,
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),
     pingDurationS: num(r.pingDurationS, 'pingDurationS'),
     volume: num(r.volume, 'volume'),

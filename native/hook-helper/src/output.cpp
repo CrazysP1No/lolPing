@@ -15,6 +15,7 @@ std::string formatEmit(const Emit& e) {
     case Emit::Kind::WheelRelease: return pt("wheelRelease");
     case Emit::Kind::Click: return pt("click");
     case Emit::Kind::Cancel: return "{\"type\":\"cancel\"}";
+    case Emit::Kind::TextOpen: return "{\"type\":\"textOpen\"}";
     case Emit::Kind::Toggled: return std::string("{\"type\":\"toggled\",\"enabled\":") + (e.enabled ? "true" : "false") + "}";
   }
   return "{}";

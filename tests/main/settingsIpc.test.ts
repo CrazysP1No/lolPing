@@ -66,6 +66,12 @@ describe('settings IPC', () => {
     expect(await call(SETTINGS_CH.set, null)).toMatchObject({ ok: true, settings: { volume: store.get().volume } });
   });
 
+  it('saves the text shortcut and rejects a collision with pause', async () => {
+    expect(await call(SETTINGS_CH.set, { textHotkey: { mods: 5, vk: 0x4b } })).toMatchObject({ ok: true, settings: { textHotkey: { mods: 5, vk: 0x4b } } });
+    expect(await call(SETTINGS_CH.set, { textHotkey: store.get().toggleHotkey })).toMatchObject({ ok: false });
+    expect(store.get().textHotkey).toEqual({ mods: 5, vk: 0x4b });
+  });
+
   it('imports an emote: the files are saved and the entry is added', async () => {
     const s = still(1);
     expect(await call(SETTINGS_CH.emoteImport, { name: 'cat', still: s })).toEqual({ ok: true, id: idOf(s) });

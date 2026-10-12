@@ -11,6 +11,50 @@ const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
 
+describe('text messages', () => {
+  const text = { ...base, t: 'text', text: '一起进攻 🎮', d: 2, x: 0.25, y: 1 };
+
+  it('accepts plain text and keeps known fields only', () => {
+    expect(validateMessage({ ...text, extra: 'ignored' })).toEqual(text);
+    const valid = validateMessage(text)!;
+    expect(decodeMessage(encodeMessage(valid))).toEqual(text);
+    expect(decodeMessage(encodeMessage({ ...valid, x: 0.123456 } as RoomMessage))).toMatchObject({ x: 0.1235 });
+  });
+
+  it('accepts 120 emoji code points and strips unsafe characters without interpreting markup', () => {
+    expect(validateMessage({ ...text, text: '🎮'.repeat(120) })).toMatchObject({ text: '🎮'.repeat(120) });
+    expect(validateMessage({ ...text, text: '  一起\u0000\u202e进攻  ' })).toMatchObject({ text: '一起进攻' });
+    expect(validateMessage({ ...text, text: '<img src=x onerror=alert(1)>' })).toMatchObject({ text: '<img src=x onerror=alert(1)>' });
+  });
+
+  it.each([
+    { text: '' }, { text: '  ' }, { text: '\u200b\u0000' }, { text: 7 }, { text: null },
+    { text: '字'.repeat(121) }, { text: '🎮'.repeat(121) }, { d: 0 }, { d: 17 },
+    { x: -1 }, { x: Number.NaN }, { y: Infinity }, { y: '0.5' },
+  ])('rejects malformed text %j', (patch) => expect(validateMessage({ ...text, ...patch })).toBeNull());
+});
+
+describe('custom image transfer messages', () => {
+  const h = CUSTOM_REF.slice(2);
+  const want = { ...base, t: 'want', to: 'a'.repeat(16), h, need: [] };
+  const chunk = { ...base, t: 'chunk', h, i: 0, n: 17, b: 'YQ==' };
+
+  it('round-trips announcements, requests and chunks while retaining old presences', () => {
+    for (const m of [{ ...presence, em: [h] }, want, chunk]) {
+      expect(decodeMessage(encodeMessage(m as RoomMessage))).toEqual(m);
+    }
+    expect(validateMessage(presence)).toEqual(presence);
+  });
+
+  it.each([
+    { ...presence, em: [h.toUpperCase()] }, { ...presence, em: Array(10).fill(h) },
+    { ...want, h: '../image' }, { ...want, to: 'bad' }, { ...want, need: [17] },
+    { ...want, need: [-1] }, { ...want, need: Array(18).fill(0) },
+    { ...chunk, n: 18 }, { ...chunk, n: 0 }, { ...chunk, i: 17 },
+    { ...chunk, b: '?' }, { ...chunk, b: 'a'.repeat(1004) }, { ...chunk, b: '' },
+  ])('rejects invalid transfer data %j', (m) => expect(validateMessage(m)).toBeNull());
+});
+
 describe('encode / decode', () => {
   it.each<RoomMessage>([presence, ping, { ...base, t: 'bye' }])('round-trips $t', (m) => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);

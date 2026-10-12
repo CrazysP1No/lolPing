@@ -45,4 +45,15 @@ describe('RateLimiter', () => {
     rl.forget('a');
     expect(rl.allow('a', 1)).toBe(true);
   });
+
+  it('reserves five tokens for foreground traffic without consuming them on refusal', () => {
+    const { rl, advance } = limiter();
+    for (let i = 0; i < 5; i++) expect(rl.allow('relay', 5, 10, 5)).toBe(true);
+    expect(rl.allow('relay', 5, 10, 5)).toBe(false);
+    for (let i = 0; i < 5; i++) expect(rl.allow('relay', 5, 10)).toBe(true);
+    expect(rl.allow('relay', 5, 10)).toBe(false);
+    advance(1200);
+    expect(rl.allow('relay', 5, 10, 5)).toBe(true);
+    expect(rl.allow('relay', 5, 10, 5)).toBe(false);
+  });
 });
