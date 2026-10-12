@@ -149,6 +149,12 @@ npm run dev
 | `node tools/room-peer/run.mjs <房间码>` | 以假成员身份加入房间并随机发信号，一台电脑也能试用房间功能；加 `--relay` 则通过中继加入，加 `--emotes` 则同时发表情（见 [`tools/room-peer`](tools/room-peer)） |
 | `node tools/relay-probe/run.mjs` | 测试哪些公共 Nostr 中继适合传输房间信号，`src/main/relays.ts` 中的列表就是由它选出的（见 [`tools/relay-probe`](tools/relay-probe)） |
 
+### 用 GitHub Actions 手动打包
+
+打开 **Actions → Build installers → Run workflow**，在 **Branch** 中选择要打包的分支，再点 **Run workflow**。Windows x64 EXE 和 macOS arm64 DMG 会同时构建，并编译原生输入助手、运行测试。版本号取自所选分支的 `package.json`。
+
+运行成功后，在该次运行页面的 **Artifacts** 中下载 `lolPing-windows-x64` 和 `lolPing-mac-arm64`。ZIP 内包含安装包及更新文件，保留 14 天。工作流文件需要同时存在于默认分支和所选分支；旧分支先同步工作流文件再打包。
+
 ### 发布新版本
 
 修改 `package.json` 中的 `version` 并提交，然后推送对应的标签，例如 `v0.2.0`。Release 工作流会先把 GitHub Release 创建为草稿。Windows 任务附加安装程序、`latest.yml` 和安装程序的 `.blockmap`，Mac 任务附加磁盘映像。electron-updater 需要 `latest.yml` 和 `.blockmap` 两者才能更新已安装的程序。全部附加完成后，最后一个任务会发布这个 Release。

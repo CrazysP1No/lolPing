@@ -149,6 +149,12 @@ npm run dev
 | `node tools/room-peer/run.mjs <code>` | Joins a room as a fake member that pings at random, to try rooms with one computer; `--relay` joins through the relays and `--emotes` also sends emotes (see [`tools/room-peer`](tools/room-peer)) |
 | `node tools/relay-probe/run.mjs` | Tests which public Nostr relays can carry rooms; it chose the list in `src/main/relays.ts` (see [`tools/relay-probe`](tools/relay-probe)) |
 
+### Build installers with GitHub Actions
+
+Open **Actions → Build installers → Run workflow**, choose the source branch under **Branch**, and click **Run workflow**. Windows x64 EXE and macOS arm64 DMG builds run together, including the native helpers and tests. The version comes from that branch's `package.json`.
+
+When the run succeeds, download `lolPing-windows-x64` and `lolPing-mac-arm64` under **Artifacts**. The ZIPs contain the installers and update files and are kept for 14 days. The workflow must exist on the default branch and the branch you select; sync the workflow to an older branch before building it.
+
 ### Releasing
 
 Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow creates the GitHub release as a draft. The Windows job attaches the installer, `latest.yml` and the installer's `.blockmap`, and the Mac job attaches the disk image. electron-updater needs both `latest.yml` and the `.blockmap` to update installed copies. A last job publishes the release once everything is attached.
