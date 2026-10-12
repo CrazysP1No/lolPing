@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync, statSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -25,7 +26,7 @@ export function emoteFileFrom(raw: unknown): EmoteFile | null {
 }
 
 /** The still the settings window encoded: a still WebP of at most STILL_MAX_BYTES and STILL_SIDE px. */
-function checkStill(b: Uint8Array): ImportError | null {
+export function checkStill(b: Uint8Array): ImportError | null {
   if (sniffImage(b) !== 'webp' || isAnimatedWebp(b)) return 'type'; // the still is served as an <img> on every overlay: it must not move
   if (b.length > STILL_MAX_BYTES) return 'size';
   const size = webpSize(b);
@@ -59,6 +60,19 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
 export class EmoteLibrary {
   /** `dir` is <settings folder>/emotes. */
   constructor(readonly dir: string) {}
+
+  /** Only a validated, bounded still is shared; original animations never leave this computer. */
+  readStill(hash: string): Uint8Array | null {
+    if (!/^[0-9a-f]{32}$/.test(hash)) return null;
+    try {
+      const file = join(this.dir, `${hash}.webp`);
+      if (statSync(file).size > STILL_MAX_BYTES) return null;
+      const bytes = readFileSync(file);
+      return checkStill(bytes) === null ? bytes : null;
+    } catch {
+      return null;
+    }
+  }
 
   async save(file: EmoteFile, existing: readonly CustomEmote[]): Promise<SaveResult> {
     const f = emoteFileFrom(file);

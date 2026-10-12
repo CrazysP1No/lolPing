@@ -5,14 +5,14 @@ export class RateLimiter {
   constructor(private readonly now: () => number) {}
 
   /** `perSecond` 0 means unlimited. */
-  allow(key: string, perSecond: number, burst = perSecond): boolean {
+  allow(key: string, perSecond: number, burst = perSecond, reserve = 0): boolean {
     if (perSecond <= 0) return true;
     const now = this.now();
     const b = this.buckets.get(key) ?? { tokens: burst, at: now };
     b.tokens = Math.min(burst, b.tokens + ((now - b.at) / 1000) * perSecond);
     b.at = now;
     this.buckets.set(key, b);
-    if (b.tokens < 1) return false;
+    if (b.tokens < 1 + reserve) return false;
     b.tokens -= 1;
     return true;
   }
