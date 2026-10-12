@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { EmoteRef } from '../shared/emotes';
+import { customHash, isCustomRef, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
@@ -7,6 +7,7 @@ import {
   decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, type MemberStatus, type PresenceMsg, type RoomMessage,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
+import { EmoteTransfer } from './emoteTransfer';
 import { ReplayGuard } from './replayGuard';
 import { open, seal, type RoomKeys } from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
@@ -53,6 +54,8 @@ export interface RemoteEmote {
   /** The sender, so their earlier emote can be replaced: everyone has one on screen at a time. */
   peer: string;
   tag: { name: string; color: number };
+  /** A verified custom still received from the sender. */
+  art?: EmoteArt;
 }
 
 export type RoomToast =
@@ -70,6 +73,8 @@ export interface RoomDeps {
   profile(): { name: string; color: number; limit: number };
   /** Display number → where a ping for it lands here, or null to drop it. The hook share mode will replace. */
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
+  customEmotes?(): readonly EmoteRef[];
+  readEmote?(hash: string): Uint8Array | null;
 }
 
 interface Member {
@@ -128,6 +133,10 @@ export class RoomManager extends EventEmitter {
   private readonly relayCap: RateLimiter;
   /** A presence waiting out SHARED_PRESENCE_MS, per shared transport. */
   private readonly sharedTimers = new Map<Transport, NodeJS.Timeout>();
+  private readonly emoteTransfer: EmoteTransfer;
+  private readonly dataCap: RateLimiter;
+  private readonly sentChunks = new Set<string>();
+  private readonly pendingEmotes = new Map<string, { emote: RemoteEmote; at: number }>();
 
   constructor(private readonly deps: RoomDeps) {
     super();
@@ -135,6 +144,22 @@ export class RoomManager extends EventEmitter {
     this.guard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
     this.relayCap = new RateLimiter(deps.now);
+    this.dataCap = new RateLimiter(deps.now);
+    this.emoteTransfer = new EmoteTransfer({
+      now: deps.now,
+      hashes: () => this.customHashes(),
+      read: (h) => deps.readEmote?.(h) ?? null,
+      send: (peer, body) => this.sendEmoteData(peer, body),
+      ready: (h) => {
+        for (const [peer, pending] of this.pendingEmotes) {
+          if (customHash(pending.emote.ref) !== h) continue;
+          this.pendingEmotes.delete(peer);
+          const member = this.members.get(peer);
+          if (!member || this.paused || this.roomMuted || member.muted || member.needsUpdate || deps.now() - pending.at > 10_000) continue;
+          this.emit('remoteEmote', { ...pending.emote, art: this.emoteTransfer.art(pending.emote.ref) } satisfies RemoteEmote);
+        }
+      },
+    });
     for (const t of deps.transports) {
       t.on('packet', (peer: PeerKey, packet: Uint8Array) => this.onPacket(t, peer, packet));
       t.on('peerGone', (peer: PeerKey) => this.onPeerGone(t, peer));
@@ -192,10 +217,36 @@ export class RoomManager extends EventEmitter {
     for (const t of sharedRoutes) if (this.relayCap.allow(t.kind, RELAY_PING_RATE, RELAY_PING_BURST)) t.broadcast(packet);
   }
 
+  private customHashes(): string[] {
+    return [...new Set((this.deps.customEmotes?.() ?? []).filter(isCustomRef).map(customHash))].slice(0, 9);
+  }
+
+  /** Transfers use the ordinary room envelope, with five relay tokens reserved for pings and emotes. */
+  private sendEmoteData(peer: string, body: Record<string, unknown>): boolean {
+    const member = this.members.get(peer);
+    if (!this.keys || !member || this.paused || member.needsUpdate) return false;
+    const route = this.route(member);
+    if (!route) return false;
+    const chunk = body.t === 'chunk' ? `${route.transport.kind}:${body.h}:${body.i}` : null;
+    if (route.transport.shared) {
+      if (chunk && this.sentChunks.has(chunk)) return true; // one relay broadcast fills all requesters' assemblies
+      if (!this.relayCap.allow(route.transport.kind, RELAY_PING_RATE, RELAY_PING_BURST, 5)) return false;
+      route.transport.broadcast(this.seal(body));
+      if (chunk) this.sentChunks.add(chunk);
+    } else {
+      route.transport.sendTo(route.key, this.seal(body));
+    }
+    return true;
+  }
+
   setStatusFlags(f: { paused: boolean; roomMuted: boolean }): void {
     if (f.paused === this.paused && f.roomMuted === this.roomMuted) return;
     this.paused = f.paused;
     this.roomMuted = f.roomMuted;
+    if (f.paused || f.roomMuted) {
+      this.emoteTransfer.clear();
+      this.pendingEmotes.clear();
+    }
     this.announce();
     this.emitState();
   }
@@ -204,6 +255,10 @@ export class RoomManager extends EventEmitter {
     const m = this.members.get(peer);
     if (!m) return;
     m.muted = on;
+    if (on) {
+      this.emoteTransfer.forget(peer);
+      this.pendingEmotes.delete(peer);
+    }
     this.emitState();
   }
 
@@ -339,6 +394,10 @@ export class RoomManager extends EventEmitter {
     this.phase = 'idle';
     this.code = this.keys = null;
     this.members.clear();
+    this.emoteTransfer.clear();
+    this.pendingEmotes.clear();
+    this.sentChunks.clear();
+    this.dataCap.clear();
     this.answered.clear();
     this.staleStrikes.clear();
     this.lastPresence = {};
@@ -358,6 +417,9 @@ export class RoomManager extends EventEmitter {
     for (const t of this.active) {
       if (now - (this.lastPresence[t.kind] ?? 0) >= PRESENCE_MS[t.kind]) this.sendPresence(t);
     }
+    this.sentChunks.clear();
+    this.emoteTransfer.tick();
+    for (const [peer, p] of this.pendingEmotes) if (now - p.at > 10_000) this.pendingEmotes.delete(peer);
     this.emitState();
   }
 
@@ -380,15 +442,32 @@ export class RoomManager extends EventEmitter {
     }
     if (!m) return;
     this.heard(m, t, key);
+    // Muting only silences what we hear; peers can still fetch the images we share with them.
+    if (msg.t === 'want') {
+      if (!this.paused && !m.needsUpdate && msg.to === this.self && this.dataCap.allow(m.peer, 20, 40)) this.emoteTransfer.want(msg);
+      return;
+    }
     // Pings and emotes pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
+    if (msg.t === 'chunk') {
+      if (!this.dataCap.allow(m.peer, 20, 40)) return;
+      this.emoteTransfer.chunk(msg);
+      return;
+    }
     if (!this.limiter.allow(m.peer, this.deps.profile().limit)) return;
     const target = this.deps.resolveTarget(msg.d);
     if (!target) return;
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag = { name: m.name, color: m.color };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
-    else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
+    else {
+      this.pendingEmotes.delete(m.peer);
+      if (isCustomRef(msg.e)) this.emoteTransfer.request(m.peer, customHash(msg.e));
+      const art = this.emoteTransfer.art(msg.e);
+      const emote: RemoteEmote = { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag, ...(art ? { art } : {}) };
+      if (isCustomRef(msg.e) && !art) this.pendingEmotes.set(m.peer, { emote, at: this.deps.now() });
+      this.emit('remoteEmote', emote);
+    }
   }
 
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {
@@ -408,6 +487,7 @@ export class RoomManager extends EventEmitter {
     m.needsUpdate = msg.proto !== PROTOCOL_VERSION;
     m.noEmotes = isOlderThan(msg.app, EMOTES_SINCE);
     this.heard(m, t, key);
+    if (!this.paused && !this.roomMuted && !m.muted && !m.needsUpdate) this.emoteTransfer.announce(m.peer, msg.em ?? []);
     if (!this.answered.has(key)) {
       this.answered.add(key);
       if (t.shared) this.announce(t); // everyone hears it anyway, so it's an ordinary presence
@@ -442,6 +522,9 @@ export class RoomManager extends EventEmitter {
   private remove(m: Member, kind: 'left' | 'disconnected'): void {
     this.members.delete(m.peer);
     this.limiter.forget(m.peer);
+    this.dataCap.forget(m.peer);
+    this.emoteTransfer.forget(m.peer);
+    this.pendingEmotes.delete(m.peer);
     for (const p of Object.values(m.paths)) this.answered.delete(p.key);
     if (this.members.size === 0 && this.phase !== 'idle') this.aloneSince = this.deps.now();
     this.emit('toast', { kind, name: m.name } satisfies RoomToast);
@@ -471,7 +554,9 @@ export class RoomManager extends EventEmitter {
 
   private presencePacket(): Buffer {
     const p = this.deps.profile();
-    return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status() });
+    const em = this.customHashes();
+    return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
+      ...(em.length ? { em } : {}) });
   }
 
   /**

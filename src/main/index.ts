@@ -137,6 +137,8 @@ function start(): void {
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
     profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit }),
+    customEmotes: () => [...settings.emoteWheel, settings.clickEmoteId],
+    readEmote: (h) => library.readStill(h),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
@@ -327,7 +329,8 @@ function start(): void {
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
-    if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
+    if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor ||
+        s.emoteWheel.some((ref, i) => ref !== previous.emoteWheel[i]) || s.clickEmoteId !== previous.clickEmoteId) room.profileChanged();
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();
