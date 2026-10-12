@@ -3,6 +3,7 @@ import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
+import { WHEEL } from './geometry';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
@@ -33,6 +34,8 @@ export interface Settings {
   clickPingId: PingId;
   /** Fullscreen apps (games) keep every click: trigger + click passes through while one is front. */
   gameCheck: boolean;
+  /** The displayed SVG size, shared by the ping and emote wheels. */
+  wheelSizePx: number;
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
@@ -85,6 +88,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clickPing: false,
   gameCheck: true,
   clickPingId: DEFAULT_CLICK_PING,
+  wheelSizePx: WHEEL.size,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
   pingSizePx: 110,
@@ -114,6 +118,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const LIMITS = {
   dragThresholdPx: { min: 2, max: 40, step: 1 },
+  wheelSizePx: { min: 300, max: 900, step: 10 },
   pingSizePx: { min: 60, max: 220, step: 1 },
   pingDurationS: { min: 1, max: 8, step: 0.1 },
   volume: { min: 0, max: 100, step: 1 },
@@ -222,6 +227,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     dragThresholdPx: num(r.dragThresholdPx, 'dragThresholdPx'),
     clickPing: bool(r.clickPing, 'clickPing'),
     gameCheck: bool(r.gameCheck, 'gameCheck'),
+    wheelSizePx: num(r.wheelSizePx, 'wheelSizePx'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
@@ -280,13 +286,13 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 
 export type OverlaySettings = Pick<
   Settings,
-  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheel' | 'clickPingId'
+  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheelSizePx' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
   pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
-  wheel: [...s.wheel], clickPingId: s.clickPingId,
+  wheelSizePx: s.wheelSizePx, wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),
 });

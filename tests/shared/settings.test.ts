@@ -84,6 +84,32 @@ describe('normalizeSettings', () => {
   });
 });
 
+describe('wheel size', () => {
+  it('keeps the existing size for settings files without a wheel size', () => {
+    expect(normalizeSettings({ version: 1, pingSizePx: 120 }).wheelSizePx).toBe(600);
+  });
+
+  it('clamps and rounds the wheel size', () => {
+    expect(normalizeSettings({ wheelSizePx: 100 }).wheelSizePx).toBe(300);
+    expect(normalizeSettings({ wheelSizePx: 1200 }).wheelSizePx).toBe(900);
+    expect(normalizeSettings({ wheelSizePx: 457 }).wheelSizePx).toBe(460);
+  });
+
+  it('falls back to the default for invalid wheel sizes', () => {
+    for (const wheelSizePx of [undefined, null, '450', NaN, Infinity, -Infinity]) {
+      expect(normalizeSettings({ wheelSizePx }).wheelSizePx).toBe(600);
+    }
+  });
+
+  it('accepts renderer patches and sends the size to overlays without changing effect sizes', () => {
+    const s = mergeSettings(DEFAULT_SETTINGS, rendererPatch({ wheelSizePx: 450 }));
+    expect(s.wheelSizePx).toBe(450);
+    expect(overlaySettings(s).wheelSizePx).toBe(450);
+    expect(s.pingSizePx).toBe(DEFAULT_SETTINGS.pingSizePx);
+    expect(s.emoteSizePx).toBe(DEFAULT_SETTINGS.emoteSizePx);
+  });
+});
+
 describe('room settings', () => {
   const identity = { name: 'darren', color: 5 };
 
@@ -383,7 +409,7 @@ describe('helpers', () => {
   it('extracts overlay settings', () => {
     expect(overlaySettings(DEFAULT_SETTINGS)).toEqual({
       pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,
-      wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
+      wheelSizePx: 600, wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
     });
   });
