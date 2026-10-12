@@ -171,7 +171,7 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
   return (
     <>
       <NameRow value={s.displayName} onSave={(displayName) => void update({ displayName })} />
-      <SettingRow icon={<Color24Regular />} title={t.roomColor}>
+      <SettingRow icon={<Color24Regular />} title={t.roomColor} description={t.roomColorCustomHint}>
         <div className="swatches">
           <div className="swatchRow" role="radiogroup" aria-label={t.roomColor}>
             {TAG_COLORS.map((c, i) => {
@@ -183,8 +183,8 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
               );
             })}
           </div>
-          <label className={`swatch custom${s.tagColorCustom ? ' sel' : ''}`} title={t.roomColorCustomHint}
-            style={{ background: tagColorCss(s.tagColor, s.tagColorCustom) }}>
+          <label className={`swatch custom${s.tagColorCustom ? ' sel' : ' unset'}`} title={t.roomColorCustom}
+            style={s.tagColorCustom ? { background: tagColorCss(s.tagColor, s.tagColorCustom) } : undefined}>
             <input type="color" value={pickerValue} aria-label={t.roomColorCustom}
               onChange={(e) => {
                 const picked = tagRgbFromHex(e.target.value);
