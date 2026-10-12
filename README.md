@@ -105,7 +105,7 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
 - **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images show as a "?" to friends for now. Friends on v0.4 or older don't see emotes, and the Room page says so under their names.
 - **Mute room**, muting one person, and an **Incoming ping and emote limit** (up to Unlimited, counted for both together) keep the spam under control. Pausing lolPing with the shortcut pauses room pings and emotes too.
-- A room holds up to 8 people. Leave and create a new room to get rid of someone.
+- A room holds up to 16 people. Leave and create a new room to get rid of someone.
 - **Privacy:** pings, emotes and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes or name. Turn **Allow internet connections** off to stay on your local network.
 
 ## Known limitations
