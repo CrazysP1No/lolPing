@@ -7,7 +7,7 @@ import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
 import { DEFAULT_CLICK_PING, DEFAULT_WHEEL, isPingId, type PingId } from './pings';
 import type { Platform } from './platform';
-import { isTagColor } from './roomColors';
+import { isTagColor, isTagRgb, readableTagRgb, type TagRgb } from './roomColors';
 import { parseRoomCode } from './roomCode';
 import { sanitizeName } from './roomProtocol';
 import { isVersion } from './update';
@@ -45,8 +45,10 @@ export interface Settings {
   language: LanguagePref;
   /** Shown under your pings on other people's screens. */
   displayName: string;
-  /** Index into TAG_COLORS. */
+  /** Index into TAG_COLORS. Ignored while `tagColorCustom` is set, and still what older builds are shown. */
   tagColor: number;
+  /** A custom tag colour, or null to use the palette entry. Stored already clamped, so it is what everyone sees. */
+  tagColorCustom: TagRgb | null;
   /** Pings per second accepted from each room member; 0 = unlimited. */
   incomingPingLimit: number;
   allowInternet: boolean;
@@ -96,6 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
   displayName: 'Player',
   tagColor: 0,
+  tagColorCustom: null,
   incomingPingLimit: 5,
   allowInternet: true,
   rejoinRoom: true,
@@ -234,6 +237,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     language: (LANGUAGE_PREFS as readonly unknown[]).includes(r.language) ? (r.language as LanguagePref) : DEFAULT_SETTINGS.language,
     displayName: typeof r.displayName === 'string' ? sanitizeName(r.displayName, fallbackName) : fallbackName,
     tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,
+    tagColorCustom: isTagRgb(r.tagColorCustom) ? readableTagRgb(r.tagColorCustom) : null,
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),

@@ -1,6 +1,6 @@
 import { isEmoteRefShape, type EmoteRef } from './emotes';
 import { isPingId, type PingId } from './pings';
-import { isTagColor } from './roomColors';
+import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
@@ -25,6 +25,8 @@ export interface PresenceMsg extends Base {
   app: string;
   name: string;
   color: number;
+  /** A custom tag colour, three 0–255 channels. Optional: a peer on an older build sends none, and ignores ours. */
+  rgb?: TagRgb;
   status: MemberStatus;
 }
 export interface PingMsg extends Base {
@@ -77,10 +79,14 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const base = { peer, seq, ts };
   switch (t) {
     case 'presence': {
-      const { proto, app, name, color, status } = raw;
+      const { proto, app, name, color, rgb, status } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
-      return { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus };
+      const presence: PresenceMsg = {
+        t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
+      };
+      // A malformed custom colour is dropped rather than the whole presence: an unreadable tag beats a missing member.
+      return isTagRgb(rgb) ? { ...presence, rgb } : presence;
     }
     case 'ping': {
       const { ping, d, x, y } = raw;

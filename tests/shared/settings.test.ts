@@ -111,6 +111,24 @@ describe('room settings', () => {
     expect(normalizeSettings({ tagColor: 2 }, 'win', identity).tagColor).toBe(2);
   });
 
+  it('keeps a well-formed custom tag colour and drops anything else', () => {
+    expect(DEFAULT_SETTINGS.tagColorCustom).toBeNull();
+    expect(normalizeSettings({ tagColorCustom: [79, 195, 247] }).tagColorCustom).toEqual([79, 195, 247]);
+    for (const v of [[0, 0], [0, 0, 999], [0, 0, -1], ['1', 2, 3], 'red', 3, null, undefined]) {
+      expect(normalizeSettings({ tagColorCustom: v }).tagColorCustom).toBeNull();
+    }
+  });
+
+  it('stores a custom tag colour already lightened, so the swatch, the wire and the tag agree', () => {
+    // Too dark to read on the dark pill: stored lifted, and neutral in stays neutral out.
+    const dark = normalizeSettings({ tagColorCustom: [0, 0, 0] }).tagColorCustom;
+    expect(dark).not.toBeNull();
+    expect(dark?.[0]).toBe(dark?.[1]);
+    expect(dark?.[0]).toBeGreaterThan(100);
+    // A colour that already reads is stored untouched.
+    expect(normalizeSettings({ tagColorCustom: [255, 255, 255] }).tagColorCustom).toEqual([255, 255, 255]);
+  });
+
   it('sanitises the display name and falls back to the identity name', () => {
     expect(normalizeSettings({ displayName: '‮  Alex  ' }, 'win', identity).displayName).toBe('Alex');
     expect(normalizeSettings({ displayName: '   ' }, 'win', identity).displayName).toBe('darren');
