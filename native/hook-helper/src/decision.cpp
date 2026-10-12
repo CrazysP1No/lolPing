@@ -206,6 +206,12 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
   const bool repeat = keyDown_[vk];
   keyDown_[vk] = true;
 
+  // Keep the opening key's repeats swallowed until key-up, even when the input was already cancelled.
+  if (repeat && vk == cfg_.textVk && swallowKeyUps_.count(vk) != 0) {
+    r.swallow = true;
+    return;
+  }
+
   // Another program's chord is starting (Alt+Tab's switcher, Win+Tab's task view, Alt+F4...):
   // until every trigger is released, clicks belong to that context and must not open a wheel.
   // Only in Idle: a foreign key arriving mid-gesture (Esc cancelling a wheel) says nothing about
@@ -228,6 +234,15 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     return;
   }
   if (active()) {
+    if (!repeat && cfg_.textVk != 0 && vk == cfg_.textVk && mods() == cfg_.textMods) {
+      r.swallow = true;
+      swallowKeyUps_.insert(vk);
+      markSwallow();
+      cancelGesture(r);
+      suspended_ = true;  // typing must be safe before Electron receives TextOpen
+      r.emits.push_back(Emit{Emit::Kind::TextOpen});
+      return;
+    }
     if (vk == kVkEsc && (state_ == State::Pending || state_ == State::Wheel)) {
       r.swallow = true;
       swallowKeyUps_.insert(vk);

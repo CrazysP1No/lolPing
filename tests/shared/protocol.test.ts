@@ -39,7 +39,7 @@ describe('commands', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
       type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true,
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, dragThresholdPx: 8,
-      toggleMods: 3, toggleVk: 0x50, enabled: true,
+      toggleMods: 3, toggleVk: 0x50, textMods: 3, textVk: 0x54, enabled: true,
     });
   });
 

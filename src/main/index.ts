@@ -24,6 +24,7 @@ import { RoomManager, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
+import { TextInputWindow } from './textInputWindow';
 import { AppTray, trayUpdateFrom, type TrayMode } from './tray';
 import { trayUpdateHandlers } from './trayUpdate';
 import { MacBackend, RELEASES_API } from './updateMac';
@@ -87,6 +88,7 @@ function start(): void {
   let enabled = settings.enabledOnStart;
   let quitting = false; // read by pushStatus: once true, the tray and overlays are gone
   let capturing = false; // the settings page is listening for a key, so the helper must stay suspended
+  let typing = false;
 
   const overlays = new OverlayManager(overlaySettings(settings), (ref, remote) => resolveEmoteArt(ref, settings.customEmotes, remote));
   overlays.start();
@@ -248,6 +250,23 @@ function start(): void {
     settingsWindow()?.webContents.send(SETTINGS_CH.roomChanged, s);
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
+  const syncInputSuspension = (): void => bridge.send({ type: 'suspend', on: capturing || typing });
+  const textInput = new TextInputWindow({
+    config: () => {
+      const t = text();
+      return { lang: t.lang, title: t.textInputTitle, placeholder: t.textInputPlaceholder,
+        hint: room.state().phase === 'idle' ? t.textInputLocalHint : t.textInputRoomHint, send: t.textSend, cancel: t.textCancel };
+    },
+    setTyping: (on) => { typing = on; syncInputSuspension(); },
+    send: (text, position) => {
+      if (!enabled || quitting || !screen.getAllDisplays().some((d) => d.id === position.displayId)) return;
+      overlays.spawnText({ text, ...position });
+      const shared = toShared(overlays.numbered(), position.displayId, position.x, position.y);
+      if (shared) room.sendText(text, shared);
+    },
+  });
+  room.on('remoteText', (p) => overlays.spawnText(p));
+  overlays.on('displays', () => textInput.cancel());
   room.on('state', pushRoom);
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
@@ -293,6 +312,7 @@ function start(): void {
   function setEnabled(on: boolean): void {
     if (on === enabled) return;
     enabled = on;
+    if (!on) textInput.cancel();
     bridge.send(configCommand(store.get(), enabled)); // also refreshes the config re-sent after restarts
     const t = text();
     overlays.toast(on ? t.toastOn : t.toastOff, t.toastToggleHint(hotkeyLabel(store.get().toggleHotkey, PLATFORM)));
@@ -304,13 +324,18 @@ function start(): void {
     if (ev.type === 'toggled') setEnabled(ev.enabled);
     else if (ev.type === 'ready') {
       // A restarted helper starts unsuspended: re-apply an active key capture.
-      if (capturing) bridge.send({ type: 'suspend', on: true });
+      syncInputSuspension();
+    } else if (ev.type === 'textOpen') {
+      if (!enabled || capturing || quitting) return syncInputSuspension();
+      overlays.cancelWheel();
+      try { textInput.open(); }
+      catch (error) { console.warn('[text]', error); textInput.cancel(); syncInputSuspension(); }
     } else if (ev.type === 'error') console.warn('[helper]', ev.code ?? '', ev.message);
     else overlays.handle(ev);
   });
   bridge.on('status', (s: HelperStatus) => {
     // A helper that is starting or has stopped can no longer send the cancel that dismisses a wheel left on screen.
-    if (s !== 'running') overlays.cancelWheel();
+    if (s !== 'running') { overlays.cancelWheel(); textInput.cancel(); }
     if (s === 'noAccess') {
       // Allowed but still refused is an entry left over from an earlier build. Otherwise wait for the user to allow it.
       if (trusted()) staleAccess = true;
@@ -357,7 +382,7 @@ function start(): void {
     retryHelper: startHelper,
     setCapturing: (on) => {
       capturing = on;
-      bridge.send({ type: 'suspend', on });
+      syncInputSuspension();
     },
     openAccessibility: () => {
       systemPreferences.isTrustedAccessibilityClient(true); // adds lolPing to the list and shows the system prompt
@@ -384,7 +409,7 @@ function start(): void {
   onSettingsWindowGone(() => {
     if (!capturing) return;
     capturing = false;
-    bridge.send({ type: 'suspend', on: false });
+    syncInputSuspension();
   });
 
   bridge.send(configCommand(settings, enabled));
@@ -415,6 +440,7 @@ function start(): void {
     updater?.stop(); // aborts a download and drops a check in flight; an install that is quitting the app is left alone
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
     stopWaitingForAccess();
+    textInput.cancel();
     tray.destroy();
     overlays.destroy();
     void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed()]).then(() => app.exit(0));

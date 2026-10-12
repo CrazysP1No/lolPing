@@ -129,6 +129,10 @@ export class OverlayManager extends EventEmitter {
     this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });
   }
 
+  spawnText(p: { displayId: number; x: number; y: number; text: string; tag?: PingTag }): void {
+    this.send(p.displayId, 'text:spawn', { text: p.text, x: p.x, y: p.y, ...(p.tag ? { tag: p.tag } : {}) });
+  }
+
   /** Shows an emote in the middle of the main display, without sharing it (the settings page's preview). */
   previewEmote(ref: EmoteRef): void {
     const d = screen.getPrimaryDisplay();

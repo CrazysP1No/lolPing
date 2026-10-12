@@ -4,7 +4,7 @@ import type { PingId } from '../shared/pings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
-  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, type MemberStatus, type PresenceMsg, type RoomMessage,
+  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, sanitizeText, type MemberStatus, type PresenceMsg, type RoomMessage,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
 import { EmoteTransfer } from './emoteTransfer';
@@ -43,6 +43,14 @@ export interface RemotePing {
   x: number;
   y: number;
   id: PingId;
+  tag: { name: string; color: number };
+}
+
+export interface RemoteText {
+  displayId: number;
+  x: number;
+  y: number;
+  text: string;
   tag: { name: string; color: number };
 }
 
@@ -201,6 +209,11 @@ export class RoomManager extends EventEmitter {
 
   sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }): void {
     this.sendShared({ t: 'emote', e, ...shared });
+  }
+
+  sendText(raw: string, shared: { d: number; x: number; y: number }): void {
+    const text = sanitizeText(raw);
+    if (text) this.sendShared({ t: 'text', text, ...shared });
   }
 
   /** A ping or an emote: each member gets it over its own route; shared transports get one send, within the relay cap. */
@@ -447,7 +460,7 @@ export class RoomManager extends EventEmitter {
       if (!this.paused && !m.needsUpdate && msg.to === this.self && this.dataCap.allow(m.peer, 20, 40)) this.emoteTransfer.want(msg);
       return;
     }
-    // Pings and emotes pass the same gates and share one budget per member.
+    // Pings, emotes and text pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
     if (msg.t === 'chunk') {
       if (!this.dataCap.allow(m.peer, 20, 40)) return;
@@ -460,6 +473,7 @@ export class RoomManager extends EventEmitter {
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag = { name: m.name, color: m.color };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
+    else if (msg.t === 'text') this.emit('remoteText', { displayId: target.displayId, x, y, text: msg.text, tag } satisfies RemoteText);
     else {
       this.pendingEmotes.delete(m.peer);
       if (isCustomRef(msg.e)) this.emoteTransfer.request(m.peer, customHash(msg.e));

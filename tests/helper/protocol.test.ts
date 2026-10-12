@@ -101,6 +101,46 @@ describe('hook-helper --simulate', () => {
     expect(events).toContainEqual({ type: 'toggled', enabled: false });
   });
 
+  it('opens text once, swallows repeats and suspends custom trigger keys immediately', async () => {
+    const events = await simulate([
+      { ...config, trigger: 'vk', triggerVk: 0x56, textMods: 3, textVk: 0x54 },
+      sim('kdown', { vk: CTRL }), sim('kdown', { vk: ALT }),
+      sim('kdown', { vk: 0x54 }), sim('kdown', { vk: 0x54 }), sim('kup', { vk: 0x54 }),
+      sim('kdown', { vk: 0x56 }), sim('kup', { vk: 0x56 }),
+      { type: 'suspend', on: false }, sim('kdown', { vk: 0x56 }),
+    ]);
+    expect(events.filter((e) => e.type === 'textOpen')).toEqual([{ type: 'textOpen' }]);
+    expect(events.filter((e) => e.type === 'sim').map((e) => e.type === 'sim' && e.swallow))
+      .toEqual([false, false, true, true, true, false, false, true]);
+  });
+
+  it.each([{ enabled: false }, { suspended: true }])('does not open text while paused %j', async (flags) => {
+    const events = await simulate([
+      { ...config, textMods: 3, textVk: 0x54, enabled: flags.enabled ?? true },
+      { type: 'suspend', on: flags.suspended ?? false },
+      sim('kdown', { vk: CTRL }), sim('kdown', { vk: ALT }), sim('kdown', { vk: 0x54 }),
+    ]);
+    expect(events.some((e) => e.type === 'textOpen')).toBe(false);
+    expect(events.at(-1)).toMatchObject({ type: 'sim', swallow: false });
+  });
+
+  it('does not reopen after cancel until the opening shortcut key is released', async () => {
+    const events = await simulate([
+      { ...config, textMods: 3, textVk: 0x54 }, sim('kdown', { vk: CTRL }), sim('kdown', { vk: ALT }),
+      sim('kdown', { vk: 0x54 }), { type: 'suspend', on: false }, sim('kdown', { vk: 0x54 }),
+    ]);
+    expect(events.filter((e) => e.type === 'textOpen')).toEqual([{ type: 'textOpen' }]);
+    expect(events.at(-1)).toMatchObject({ type: 'sim', swallow: true });
+  });
+
+  it('uses a configured text combination and requires exact modifiers', async () => {
+    const events = await simulate([
+      { ...config, textMods: 1, textVk: 0x4b }, sim('kdown', { vk: CTRL }), sim('kdown', { vk: ALT }),
+      sim('kdown', { vk: 0x4b }), sim('kup', { vk: 0x4b }), sim('kup', { vk: ALT }), sim('kdown', { vk: 0x4b }),
+    ]);
+    expect(events.filter((e) => e.type === 'textOpen')).toEqual([{ type: 'textOpen' }]);
+  });
+
   it('reports invalid commands as errors', async () => {
     const events = await simulate([{ type: 'bogus' }]);
     expect(events.some((e) => e.type === 'error')).toBe(true);

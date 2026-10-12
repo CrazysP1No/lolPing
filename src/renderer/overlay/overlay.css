@@ -1,5 +1,16 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-#pings, #emotes, #toasts { position: fixed; inset: 0; pointer-events: none; }
+#pings, #emotes, #texts, #toasts { position: fixed; inset: 0; pointer-events: none; }
+
+.textBubble {
+  position: absolute; max-width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
+  box-sizing: border-box; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap;
+  padding: 12px 16px; border-radius: 10px; color: #fff; background: rgba(9, 19, 27, .95);
+  border: 1px solid #c8aa6e; box-shadow: 0 5px 22px #0006;
+  font: 500 16px/1.5 "Segoe UI", -apple-system, sans-serif;
+  animation: life 5s linear forwards;
+}
+.textBubble small { display: block; margin-top: 5px; font-size: 12px; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .textBubble { animation: none; } }
 
 /* ---------- wheel ---------- */
 #wheel, #emoteWheel {

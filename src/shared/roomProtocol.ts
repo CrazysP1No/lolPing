@@ -5,6 +5,7 @@ import { isTagColor } from './roomColors';
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
 export const MAX_NAME = 16;
+export const MAX_TEXT = 120;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
 export const EMOTE_CHUNK_BYTES = 750;
@@ -53,6 +54,14 @@ export interface EmoteMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
+/** Older apps ignore this message type while retaining ping and emote compatibility. */
+export interface TextMsg extends Base {
+  t: 'text';
+  text: string;
+  d: number;
+  x: number;
+  y: number;
+}
 export interface WantMsg extends Base {
   t: 'want';
   to: string;
@@ -67,7 +76,7 @@ export interface ChunkMsg extends Base {
   n: number;
   b: string;
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | ByeMsg | WantMsg | ChunkMsg;
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | ByeMsg | WantMsg | ChunkMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -82,6 +91,12 @@ export const clampNameInput = (v: string): string => [...v].slice(0, MAX_NAME).j
 export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): string {
   const name = [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, max).join('').trim();
   return name || fallback;
+}
+
+/** The same plain-text boundary for local input and room messages. */
+export function sanitizeText(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length > MAX_TEXT * 2 || [...raw].length > MAX_TEXT) return null;
+  return sanitizeName(raw, '', MAX_TEXT) || null;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -114,6 +129,13 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (!isEmoteRefShape(e) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
       return { t, ...base, e, d: d as number, x, y };
+    }
+    case 'text': {
+      const { d, x, y } = raw;
+      const text = sanitizeText(raw.text);
+      if (!text || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
+      if (!isUnit(x) || !isUnit(y)) return null;
+      return { t, ...base, text, d: d as number, x, y };
     }
     case 'bye':
       return { t, ...base };
@@ -151,7 +173,7 @@ export function isOlderThan(app: string, version: string): boolean {
 }
 
 export function encodeMessage(m: RoomMessage): Uint8Array {
-  const out = m.t === 'ping' || m.t === 'emote' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
+  const out = m.t === 'ping' || m.t === 'emote' || m.t === 'text' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
 }
 

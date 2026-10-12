@@ -153,6 +153,11 @@ describe('OverlayManager emote reports from the overlay', () => {
 });
 
 describe('OverlayManager remote and preview emotes', () => {
+  it('shows text only on its target display, retaining the sender tag', () => {
+    mgr.spawnText({ displayId: 2, x: 5, y: 6, text: '集合', tag: { name: 'Bob', color: 2 } });
+    expect(sent(1)).toEqual([['text:spawn', { x: 5, y: 6, text: '集合', tag: { name: 'Bob', color: 2 } }]]);
+    expect(sent(0)).toEqual([]);
+  });
   it('shows a room member\'s emote on the target display with their tag, and clears theirs on the others', () => {
     mgr.spawnRemoteEmote({ displayId: 2, x: 5, y: 6, ref: 'gg_heart', peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
     expect(resolveArt).toHaveBeenCalledWith('gg_heart', true);

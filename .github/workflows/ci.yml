@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/build-0.5.2]
   pull_request:
 
 permissions:
@@ -22,8 +22,16 @@ jobs:
       # Builds hook-helper.exe and runs the C++ tests. The TypeScript tests need the built helper.
       - run: npm run test:helper
       - run: npm test
-      - run: npm run build
+      - run: npm run dist
       - run: npm run build:site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lolPing-windows-x64
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+          retention-days: 14
 
   test-mac:
     runs-on: macos-latest # Apple Silicon

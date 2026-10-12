@@ -6,7 +6,7 @@ import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
-import { patchClashes, rendererPatch } from '../shared/settings';
+import { mergeSettings, patchClashes, rendererPatch } from '../shared/settings';
 import type { UpdateState } from '../shared/update';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
@@ -81,9 +81,12 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
     if (patchClashes(d.store.get(), patch, d.platform)) {
       return { ok: false, error: d.text().emoteKeyClash, settings: d.store.get() };
     }
-    if (patch.toggleHotkey) {
-      const error = hotkeyConflict(patch.toggleHotkey, d.store.get().toggleHotkey, d.text(), d.platform);
-      if (error) return { ok: false, error, settings: d.store.get() };
+    const next = mergeSettings(d.store.get(), patch, d.platform);
+    for (const key of ['toggleHotkey', 'textHotkey'] as const) {
+      if (patch[key]) {
+        const error = hotkeyConflict(next[key], d.store.get()[key], d.text(), d.platform);
+        if (error) return { ok: false, error, settings: d.store.get() };
+      }
     }
     return { ok: true, settings: d.store.update(patch) };
   });
