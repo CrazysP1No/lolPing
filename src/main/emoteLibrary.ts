@@ -68,6 +68,22 @@ export class EmoteLibrary {
     }
   }
 
+  /** Only a validated, bounded original video is shared with local playback. */
+  readVideo(hash: string): Uint8Array | null {
+    if (!/^[0-9a-f]{32}$/.test(hash)) return null;
+    for (const type of ['mp4', 'webm'] as const) {
+      try {
+        const file = join(this.dir, `${hash}.video.${type}`);
+        if (statSync(file).size > VIDEO_MAX_BYTES) continue;
+        const bytes = readFileSync(file);
+        if (bytes.length <= VIDEO_MAX_BYTES && sniffVideo(bytes) === type) return bytes;
+      } catch {
+        // A missing or unreadable copy is treated like an unavailable video.
+      }
+    }
+    return null;
+  }
+
   async save(file: EmoteFile, existing: readonly CustomEmote[]): Promise<SaveResult> {
     const f = emoteFileFrom(file);
     if (!f) return fail('type');

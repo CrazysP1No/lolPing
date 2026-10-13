@@ -129,6 +129,9 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 .emote .fx img, .emote .fx video { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 8px #fff8); }
 /* A video stays fully visible until its ended event; its duration is independent of the image timer. */
 .emote.video .fx { animation: emoteIn .25s ease-out both, emoteBob 1.4s ease-in-out infinite; }
+.emote.loading .fx { opacity: .55; animation: emoteIn .25s ease-out both; }
+.emote .loadingTxt { position: absolute; top: calc(var(--size) * .35); left: 0; transform: translateX(-50%); white-space: nowrap;
+  font: 600 12px/20px "Segoe UI", -apple-system, sans-serif; color: #fff; padding: 0 6px; border-radius: 4px; background: #111b; }
 .emote .bubble {
   position: absolute; left: 8%; top: 8%; width: 84%; height: 68%; box-sizing: border-box; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

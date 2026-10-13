@@ -1,17 +1,19 @@
 import { EventEmitter } from 'node:events';
-import { customHash, isCustomRef, type EmoteArt, type EmoteRef } from '../shared/emotes';
+import { customHash, isCustomRef, type EmoteArt, type EmoteRef, type SharedVideo } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
 import type { WardSprite } from '../shared/ipc';
 import { DEFAULT_SETTINGS } from '../shared/settings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
-  decodeMessage, encodeMessage, isOlderThan, EMOTE_MAX_REFS, PROTOCOL_VERSION, sanitizeText, type MemberStatus, type PresenceMsg, type RoomMessage,
+  decodeMessage, encodeMessage, isOlderThan, EMOTE_MAX_REFS, PROTOCOL_VERSION, VIDEO_CHUNK_BYTES, VIDEO_LAN_CHUNK_BYTES, VIDEO_TRANSFER_MS,
+  sanitizeText, type MemberStatus, type PresenceMsg, type RoomMessage,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
 import { EmoteTransfer } from './emoteTransfer';
 import { ReplayGuard } from './replayGuard';
-import { open, seal, type RoomKeys } from './roomCrypto';
+import { open, seal, sealVideo, type RoomKeys } from './roomCrypto';
+import { RoomVideoTransfer } from './roomVideoTransfer';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export const MAX_MEMBERS = 8;
@@ -91,6 +93,11 @@ export interface RoomDeps {
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
   customEmotes?(): readonly EmoteRef[];
   readEmote?(hash: string): Uint8Array | null;
+  readVideo?(posterHash: string): Uint8Array | null;
+  cachedVideo?(hash: string): string | null;
+  saveVideo?(hash: string, bytes: Uint8Array): Promise<string | null>;
+  clearVideos?(): void;
+  videoLoadingText?(): string;
 }
 
 interface Member {
@@ -156,6 +163,9 @@ export class RoomManager extends EventEmitter {
   private readonly dataCap: RateLimiter;
   private readonly sentChunks = new Set<string>();
   private readonly pendingEmotes = new Map<string, { emote: RemoteEmote; at: number }>();
+  private readonly pendingVideos = new Map<string, { emote: RemoteEmote; video: SharedVideo; at: number }>();
+  private readonly videoTransfer: RoomVideoTransfer;
+  private readonly videoCap: RateLimiter;
 
   constructor(private readonly deps: RoomDeps) {
     super();
@@ -164,12 +174,34 @@ export class RoomManager extends EventEmitter {
     this.limiter = new RateLimiter(deps.now);
     this.relayCap = new RateLimiter(deps.now);
     this.dataCap = new RateLimiter(deps.now);
+    this.videoCap = new RateLimiter(deps.now);
+    this.videoTransfer = new RoomVideoTransfer({
+      now: deps.now,
+      chunkBytes: (peer) => {
+        const m = this.members.get(peer);
+        return m && this.route(m)?.transport.kind === 'lan' ? VIDEO_LAN_CHUNK_BYTES : VIDEO_CHUNK_BYTES;
+      },
+      read: (ref) => isCustomRef(ref) && this.customHashes().includes(customHash(ref)) ? deps.readVideo?.(customHash(ref)) ?? null : null,
+      cached: (h) => deps.cachedVideo?.(h) ?? null,
+      save: (h, bytes) => deps.saveVideo?.(h, bytes) ?? Promise.resolve(null),
+      send: (peer, body) => this.sendEmoteData(peer, body),
+      ready: (peer, h, url) => this.finishVideo(peer, h, url),
+      failed: (peer, h) => this.finishVideo(peer, h, null),
+    });
     this.emoteTransfer = new EmoteTransfer({
       now: deps.now,
       hashes: () => this.customHashes(),
       read: (h) => deps.readEmote?.(h) ?? null,
       send: (peer, body) => this.sendEmoteData(peer, body),
       ready: (h) => {
+        for (const p of this.pendingVideos.values()) {
+          if (customHash(p.emote.ref) !== h) continue;
+          const art = this.emoteTransfer.art(p.emote.ref);
+          if (art?.kind === 'custom') {
+            p.emote.art = { kind: 'video-loading', poster: art.url, label: this.deps.videoLoadingText?.() };
+            this.emit('remoteEmote', p.emote);
+          }
+        }
         for (const [peer, pending] of this.pendingEmotes) {
           if (customHash(pending.emote.ref) !== h) continue;
           this.pendingEmotes.delete(peer);
@@ -251,7 +283,8 @@ export class RoomManager extends EventEmitter {
   }
 
   sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'emote', e, ...shared });
+    const video = this.keys && !this.paused ? this.videoTransfer.describe(e) : undefined;
+    this.sendShared({ t: 'emote', e, ...shared, ...(video ? { video } : {}) });
   }
 
   sendText(raw: string, shared: { d: number; x: number; y: number }): void {
@@ -280,13 +313,15 @@ export class RoomManager extends EventEmitter {
   /** Transfers use the ordinary room envelope, with five relay tokens reserved for pings and emotes. */
   private sendEmoteData(peer: string, body: Record<string, unknown>): boolean {
     const member = this.members.get(peer);
-    if (!this.keys || !member || this.paused || member.needsUpdate) return false;
+    const cancel = body.t === 'vwant' && body.need === null;
+    if (!this.keys || !member || (this.paused && !cancel) || member.needsUpdate) return false;
     const route = this.route(member);
     if (!route) return false;
-    const chunk = body.t === 'chunk' ? `${route.transport.kind}:${body.h}:${body.i}` : null;
+    if (body.t === 'vchunk' && route.transport.kind === 'lan' && String(body.b).length > VIDEO_LAN_CHUNK_BYTES * 4 / 3) return false;
+    const chunk = body.t === 'chunk' || body.t === 'vchunk' ? `${body.t}:${route.transport.kind}:${body.h}:${body.n}:${body.i}` : null;
     if (route.transport.shared) {
       if (chunk && this.sentChunks.has(chunk)) return true; // one relay broadcast fills all requesters' assemblies
-      if (!this.relayCap.allow(route.transport.kind, RELAY_PING_RATE, RELAY_PING_BURST, 5)) return false;
+      if (!this.relayCap.allow(route.transport.kind, RELAY_PING_RATE, RELAY_PING_BURST, cancel ? 0 : 5)) return false;
       route.transport.broadcast(this.seal(body));
       if (chunk) this.sentChunks.add(chunk);
     } else {
@@ -300,6 +335,10 @@ export class RoomManager extends EventEmitter {
     this.paused = f.paused;
     this.roomMuted = f.roomMuted;
     if (f.paused || f.roomMuted) {
+      this.clearPendingVideos();
+      for (const peer of this.members.keys()) this.emit('clearEmote', peer);
+    }
+    if (f.paused || f.roomMuted) {
       this.emoteTransfer.clear();
       this.pendingEmotes.clear();
     }
@@ -312,6 +351,9 @@ export class RoomManager extends EventEmitter {
     if (!m) return;
     m.muted = on;
     if (on) {
+      this.videoTransfer.forget(peer);
+      this.pendingVideos.delete(peer);
+      this.emit('clearEmote', peer);
       this.emoteTransfer.forget(peer);
       this.pendingEmotes.delete(peer);
     }
@@ -437,6 +479,9 @@ export class RoomManager extends EventEmitter {
 
   private stop(): void {
     this.session++;
+    this.clearPendingVideos();
+    for (const peer of this.members.keys()) this.emit('clearEmote', peer);
+    this.deps.clearVideos?.();
     if (this.keys) {
       const bye = this.seal({ t: 'bye' });
       for (const t of this.active) this.spread(t, bye);
@@ -457,6 +502,7 @@ export class RoomManager extends EventEmitter {
     this.pendingEmotes.clear();
     this.sentChunks.clear();
     this.dataCap.clear();
+    this.videoCap.clear();
     this.answered.clear();
     this.staleStrikes.clear();
     this.lastPresence = {};
@@ -478,6 +524,10 @@ export class RoomManager extends EventEmitter {
     }
     this.sentChunks.clear();
     this.emoteTransfer.tick();
+    this.videoTransfer.tick();
+    for (const [peer, p] of this.pendingVideos) if (now - p.at > VIDEO_TRANSFER_MS) {
+      this.videoTransfer.cancel(peer); this.pendingVideos.delete(peer); this.emit('clearEmote', peer);
+    }
     for (const [peer, p] of this.pendingEmotes) if (now - p.at > 10_000) this.pendingEmotes.delete(peer);
     this.emitState();
   }
@@ -487,6 +537,7 @@ export class RoomManager extends EventEmitter {
     const plain = open(this.keys.msgKey, packet);
     const msg = plain && decodeMessage(plain);
     if (!msg || msg.peer === this.self) return;
+    if (packet[0] === 2 && msg.t !== 'vchunk') return;
     const verdict = this.guard.accept(msg.peer, msg.seq, msg.ts);
     if (verdict === 'stale') return this.onStale(msg);
     if (verdict !== 'ok') return;
@@ -502,12 +553,20 @@ export class RoomManager extends EventEmitter {
     if (!m) return;
     this.heard(m, t, key);
     // Muting only silences what we hear; peers can still fetch the images we share with them.
+    if (msg.t === 'vwant') {
+      if ((!this.paused || msg.need === null) && !m.needsUpdate && msg.to === this.self && this.videoCap.allow(m.peer, 20, 40)) this.videoTransfer.want(msg);
+      return;
+    }
     if (msg.t === 'want') {
       if (!this.paused && !m.needsUpdate && msg.to === this.self && this.dataCap.allow(m.peer, 20, 40)) this.emoteTransfer.want(msg);
       return;
     }
     // Pings, emotes and text pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
+    if (msg.t === 'vchunk') {
+      if (this.videoCap.allow(m.peer, 20, 40)) this.videoTransfer.chunk(msg);
+      return;
+    }
     if (msg.t === 'chunk') {
       if (!this.dataCap.allow(m.peer, 20, 40)) return;
       this.emoteTransfer.chunk(msg);
@@ -529,6 +588,17 @@ export class RoomManager extends EventEmitter {
       if (isCustomRef(msg.e)) this.emoteTransfer.request(m.peer, customHash(msg.e));
       const art = this.emoteTransfer.art(msg.e);
       const emote: RemoteEmote = { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag, ...(art ? { art } : {}) };
+      if (msg.video) {
+        const url = this.videoTransfer.request(m.peer, msg.e, msg.video);
+        const poster = art?.kind === 'custom' ? art.url : '';
+        emote.art = url ? { kind: 'video', url, poster } : { kind: 'video-loading', poster, label: this.deps.videoLoadingText?.() };
+        if (!url) this.pendingVideos.set(m.peer, { emote, video: msg.video, at: this.deps.now() });
+        else this.pendingVideos.delete(m.peer);
+        this.emit('remoteEmote', emote);
+        return;
+      }
+      this.videoTransfer.cancel(m.peer);
+      this.pendingVideos.delete(m.peer);
       if (isCustomRef(msg.e) && !art) this.pendingEmotes.set(m.peer, { emote, at: this.deps.now() });
       this.emit('remoteEmote', emote);
     }
@@ -586,6 +656,10 @@ export class RoomManager extends EventEmitter {
   }
 
   private remove(m: Member, kind: 'left' | 'disconnected'): void {
+    this.videoTransfer.forget(m.peer);
+    this.pendingVideos.delete(m.peer);
+    this.videoCap.forget(m.peer);
+    this.emit('clearEmote', m.peer);
     this.members.delete(m.peer);
     this.limiter.forget(m.peer);
     this.dataCap.forget(m.peer);
@@ -675,7 +749,25 @@ export class RoomManager extends EventEmitter {
 
   private seal(body: Record<string, unknown>): Buffer {
     const msg = { peer: this.self, seq: ++this.seq, ts: this.deps.now(), ...body } as RoomMessage;
-    return seal(this.keys!.msgKey, encodeMessage(msg));
+    return body.t === 'vchunk' ? sealVideo(this.keys!.msgKey, encodeMessage(msg)) : seal(this.keys!.msgKey, encodeMessage(msg));
+  }
+
+  private finishVideo(peer: string, hash: string, url: string | null): void {
+    const p = this.pendingVideos.get(peer);
+    if (!p || p.video.h !== hash) return;
+    this.pendingVideos.delete(peer);
+    const m = this.members.get(peer);
+    if (!m || this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
+    const art = this.emoteTransfer.art(p.emote.ref);
+    const poster = art?.kind === 'custom' ? art.url : '';
+    this.emit('remoteEmote', { ...p.emote, art: url ? { kind: 'video', url, poster }
+      : poster ? { kind: 'custom', url: poster, animated: false } : { kind: 'placeholder' } } satisfies RemoteEmote);
+  }
+
+  private clearPendingVideos(): void {
+    this.videoTransfer.clear();
+    for (const peer of this.pendingVideos.keys()) this.emit('clearEmote', peer);
+    this.pendingVideos.clear();
   }
 
   private emitState(): void {

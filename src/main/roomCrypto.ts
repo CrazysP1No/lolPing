@@ -2,11 +2,14 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, scrypt } from 
 
 /** Every room packet: format byte, nonce, AES-256-GCM ciphertext and tag. Larger packets are never sent or read. */
 export const MAX_PACKET = 1200;
+export const MAX_VIDEO_PACKET = 32768;
 const FORMAT = 0x01;
+const VIDEO_FORMAT = 0x02;
 const NONCE = 12;
 const TAG = 16;
 const OVERHEAD = 1 + NONCE + TAG;
 const AAD = Buffer.from([FORMAT]);
+const VIDEO_AAD = Buffer.from([VIDEO_FORMAT]);
 
 export interface RoomKeys {
   /** Encrypts every room message. Never leaves the main process. */
@@ -28,21 +31,34 @@ export function deriveRoomKeys(canonical: string): Promise<RoomKeys> {
 }
 
 export function seal(key: Buffer, plain: Uint8Array): Buffer {
-  if (plain.length + OVERHEAD > MAX_PACKET) throw new Error('room message too large');
+  return sealFormat(key, plain, FORMAT, MAX_PACKET, 'room message too large');
+}
+
+export function sealVideo(key: Buffer, plain: Uint8Array): Buffer {
+  return sealFormat(key, plain, VIDEO_FORMAT, MAX_VIDEO_PACKET, 'room video too large');
+}
+
+function sealFormat(key: Buffer, plain: Uint8Array, format: number, limit: number, error: string): Buffer {
+  if (plain.length + OVERHEAD > limit) throw new Error(error);
   const nonce = randomBytes(NONCE);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  cipher.setAAD(AAD);
+  cipher.setAAD(format === VIDEO_FORMAT ? VIDEO_AAD : AAD);
   const body = Buffer.concat([cipher.update(plain), cipher.final()]);
-  return Buffer.concat([AAD, nonce, body, cipher.getAuthTag()]);
+  return Buffer.concat([Buffer.from([format]), nonce, body, cipher.getAuthTag()]);
+}
+
+export function packetLimit(packet: Uint8Array): number {
+  return packet[0] === VIDEO_FORMAT ? MAX_VIDEO_PACKET : MAX_PACKET;
 }
 
 /** The plaintext, or null for anything that isn't a packet sealed with this key. */
 export function open(key: Buffer, packet: Uint8Array): Buffer | null {
-  if (packet.length < OVERHEAD || packet.length > MAX_PACKET || packet[0] !== FORMAT) return null;
+  const format = packet[0];
+  if (packet.length < OVERHEAD || packet.length > packetLimit(packet) || (format !== FORMAT && format !== VIDEO_FORMAT)) return null;
   const buf = Buffer.from(packet.buffer, packet.byteOffset, packet.length);
   try {
     const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(1, 1 + NONCE));
-    decipher.setAAD(AAD);
+    decipher.setAAD(format === VIDEO_FORMAT ? VIDEO_AAD : AAD);
     decipher.setAuthTag(buf.subarray(buf.length - TAG));
     return Buffer.concat([decipher.update(buf.subarray(1 + NONCE, buf.length - TAG)), decipher.final()]);
   } catch {

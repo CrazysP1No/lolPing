@@ -15,6 +15,7 @@ class FakeElement {
   play = vi.fn(() => Promise.resolve());
   pause = vi.fn();
   load = vi.fn();
+  setAttribute(_name: string, _value: string): void {}
   removeAttribute(name: string): void {
     if (name === 'src') this.src = '';
   }
@@ -69,6 +70,19 @@ afterEach(() => {
 
 describe('EmoteStage', () => {
   const videoArt = { kind: 'video' as const, url: 'lolping://emotes/clip.video', poster: 'lolping://emotes/clip.webp' };
+  it('keeps a receiving-video poster visible until it is replaced by the completed video', async () => {
+    vi.useFakeTimers();
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('friend', { kind: 'video-loading', poster: videoArt.poster }, 10, 20, { sizePx: 150 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(layer.find('emote')).toHaveLength(1);
+    stage.spawn('friend', videoArt, 10, 20, { sizePx: 150 });
+    const video = layer.find('fx')[0].children[0];
+    expect(video.tagName).toBe('video');
+    video.dispatch('playing'); video.dispatch('ended');
+    expect(layer.find('emote')).toHaveLength(0);
+  });
   it('keeps a video past three seconds and removes it only after playback ends', async () => {
     vi.useFakeTimers();
     const layer = new FakeElement('div');

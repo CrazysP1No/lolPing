@@ -23,6 +23,7 @@ import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
+import { RoomVideoCache } from './roomVideoCache';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
 import { TextInputWindow } from './textInputWindow';
 import { AppTray, trayUpdateFrom, type TrayMode } from './tray';
@@ -70,9 +71,10 @@ function setMacMenu(): void {
 
 function start(): void {
   const library = new EmoteLibrary(join(settingsDir(), 'emotes'));
+  const videos = new RoomVideoCache(join(settingsDir(), 'room-videos'));
   serveAppScheme({
     rendererRoot: process.env.ELECTRON_RENDERER_URL ? null : join(__dirname, '../renderer'), // development pages come from Vite
-    emoteDirs: () => [library.dir],
+    emoteDirs: () => [library.dir, videos.dir],
   });
   if (IS_MAC) {
     app.dock?.hide(); // a menu bar app: the Dock icon only shows while settings are open
@@ -141,6 +143,11 @@ function start(): void {
     profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit, pingSizePx: settings.pingSizePx }),
     customEmotes: () => [...settings.emoteWheel, settings.clickEmoteId],
     readEmote: (h) => library.readStill(h),
+    readVideo: (h) => library.readVideo(h),
+    cachedVideo: (h) => videos.get(h),
+    saveVideo: (h, bytes) => videos.put(h, bytes),
+    clearVideos: () => videos.clear(),
+    videoLoadingText: () => text().roomVideoLoading,
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
@@ -278,6 +285,7 @@ function start(): void {
     if (shared) room.sendPing(p.id, shared);
   });
   room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
+  room.on('clearEmote', (peer) => overlays.clearRemoteEmote(peer));
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
