@@ -9,6 +9,7 @@ const withHead = (head: number[], total: number): Uint8Array => {
 };
 const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const GIF_HEAD = [...ascii('GIF89a'), 10, 0, 10, 0];
+const MP4_HEAD = [0, 0, 0, 24, ...ascii('ftypisom'), 0, 0, 0, 0, ...ascii('isommp42')];
 
 describe('stillAttempts', () => {
   it('tries 160 px then 128 px', () => {
@@ -28,6 +29,10 @@ describe('fitSize', () => {
 });
 
 describe('checkInput', () => {
+  it('accepts bounded video and rejects video over 20 MB', () => {
+    expect(checkInput(withHead(MP4_HEAD, 20_971_520))).toBeNull();
+    expect(checkInput(withHead(MP4_HEAD, 20_971_521))).toBe('videoSize');
+  });
   it('checks input', () => {
     expect(checkInput(withHead(PNG_HEAD, 100))).toBeNull();
     expect(checkInput(withHead(GIF_HEAD, 100))).toBeNull();

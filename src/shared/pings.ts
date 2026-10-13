@@ -1,6 +1,7 @@
 export type PingId =
   | 'danger' | 'push' | 'omw' | 'allin' | 'assist' | 'needvision' | 'missing' | 'enemyvision' | 'generic'
-  | 'bait' | 'visioncleared' | 'ward';
+  | 'bait' | 'visioncleared' | 'ward'
+  | 'orb_gray' | 'orb_blue' | 'orb_gold' | 'orb_prismatic' | 'orb_void';
 
 export const WARD_CLEAR_SOUND = 'ward_clear';
 
@@ -17,7 +18,7 @@ export interface PingDef {
   color: string;
 }
 
-/** Every ping, in the order the settings window lists them: the default wheel, then the extras. */
+/** Every ping in the settings gallery: standard signals followed by loot orbs. */
 export const ALL_PINGS: readonly PingDef[] = [
   { id: 'danger', name: 'Danger', icon: 'pingwheel_retreatrender', art: ['pingwheel_retreatrender'], sound: 'SRP_12', color: '#ff3b55' },
   { id: 'push', name: 'Push', icon: 'push', art: ['pingwheel_pushrender'], sound: 'SRP_9', color: '#35d27a' },
@@ -31,12 +32,20 @@ export const ALL_PINGS: readonly PingDef[] = [
   { id: 'bait', name: 'Bait', icon: 'pingwheel_baitrender', art: ['pingwheel_baitrender'], sound: 'SRP_11', color: '#efbc12' },
   { id: 'visioncleared', name: 'Vision Cleared', icon: 'vision_cleared', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
   { id: 'ward', name: 'Place Ward', icon: 'ward', art: ['ward'], sound: 'ward_place', color: '#63eea0' },
+  { id: 'orb_gray', name: 'Gray Loot Orb', icon: 'orb_gray', art: ['orb_gray'], sound: 'Base', color: '#aab8c8' },
+  { id: 'orb_blue', name: 'Blue Loot Orb', icon: 'orb_blue', art: ['orb_blue'], sound: 'Base', color: '#59b8ff' },
+  { id: 'orb_gold', name: 'Gold Loot Orb', icon: 'orb_gold', art: ['orb_gold'], sound: 'Base', color: '#ffd66a' },
+  { id: 'orb_prismatic', name: 'Prismatic Loot Orb', icon: 'orb_prismatic', art: ['orb_prismatic'], sound: 'Base', color: '#ceb5ff' },
+  { id: 'orb_void', name: 'Void Loot Orb', icon: 'orb_void', art: ['orb_void'], sound: 'Base', color: '#a05cff' },
 ];
 
-/** The wheel as League ships it, top (N) then clockwise. Array index = slice index from pickSlice(). */
-export const DEFAULT_WHEEL: readonly PingId[] = ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'];
+/** Original compass slots stay at even indices; the extra slots include the five loot orb styles. */
+export const DEFAULT_WHEEL: readonly PingId[] = [
+  'danger', 'bait', 'push', 'visioncleared', 'omw', 'orb_prismatic', 'allin', 'ward',
+  'assist', 'orb_gray', 'needvision', 'orb_blue', 'missing', 'orb_gold', 'enemyvision', 'orb_void',
+];
 export const DEFAULT_CLICK_PING: PingId = 'generic';
-export const WHEEL_SLOTS = 8;
+export const WHEEL_SLOTS = 16;
 
 export const TICK_SOUND = 'button';
 export const FALLBACK_TEXTURE = 'generic_ping';

@@ -53,6 +53,7 @@ export class Wheel {
     this.items = items;
     this.icons.forEach((icon, i) => {
       const item = items[i];
+      icon.classList.toggle('orb', item?.key.startsWith('orb_') ?? false);
       if (item) icon.setAttribute('href', item.icon);
       else icon.removeAttribute('href');
     });
@@ -125,21 +126,23 @@ export class Wheel {
         <stop offset="0" stop-color="#2c5d60"/><stop offset="1" stop-color="#11292c"/></radialGradient>`;
 
     const slots = [...Array(WHEEL_SLOTS).keys()];
+    const step = 360 / WHEEL_SLOTS;
+    const half = step / 2;
     slots.forEach((i) => {
-      const mid = -90 + i * 45;
-      if (i % 2 === 0) el('path', { d: sector(outerR, extR, mid - 22.5, mid + 22.5), fill: `url(#${id}-ext)` }, svg);
+      const mid = -90 + i * step;
+      if (i % (WHEEL_SLOTS / 4) === 0) el('path', { d: sector(outerR, extR, mid - half, mid + half), fill: `url(#${id}-ext)` }, svg);
     });
     el('circle', { r: (innerR + outerR) / 2, fill: 'none', stroke: `url(#${id}-ring)`, 'stroke-width': outerR - innerR, opacity: 0.92 }, svg);
     slots.forEach((i) => {
-      const mid = -90 + i * 45;
-      const reach = i % 2 === 0 ? extR : outerR;
-      this.wedges.push(el('path', { d: sector(innerR, reach, mid - 22.5, mid + 22.5), fill: `url(#${id}-hot)`, 'fill-opacity': 0, class: 'wedge' }, svg));
-      const [x0, y0] = polar(innerR, mid - 22.5);
-      const [x1, y1] = polar(outerR, mid - 22.5);
+      const mid = -90 + i * step;
+      const reach = i % (WHEEL_SLOTS / 4) === 0 ? extR : outerR;
+      this.wedges.push(el('path', { d: sector(innerR, reach, mid - half, mid + half), fill: `url(#${id}-hot)`, 'fill-opacity': 0, class: 'wedge' }, svg));
+      const [x0, y0] = polar(innerR, mid - half);
+      const [x1, y1] = polar(outerR, mid - half);
       el('line', { x1: x0, y1: y0, x2: x1, y2: y1, stroke: '#a08a5c', 'stroke-opacity': 0.45, 'stroke-width': 1.2 }, svg);
     });
     slots.forEach((i) => {
-      const [ix, iy] = polar(iconR, -90 + i * 45);
+      const [ix, iy] = polar(iconR, -90 + i * step);
       this.icons.push(el('image', { x: ix - iconSize / 2, y: iy - iconSize / 2, width: iconSize, height: iconSize, class: 'icon' }, svg));
     });
 

@@ -11,7 +11,8 @@ export interface EmoteOptions {
 
 interface Live {
   root: HTMLElement;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | null;
+  video: HTMLVideoElement | null;
   /** The object URL of a bundled emote's image, once its Blob has arrived. */
   url: string | null;
   gone: boolean;
@@ -51,7 +52,7 @@ async function fetchImage(url: string): Promise<Blob> {
   return res.blob();
 }
 
-/** The emotes on this overlay: at most one per owner ('self', 'preview' or a room member's id), each gone after EMOTE_DURATION_S. */
+/** One emote per owner; images expire on a timer and videos expire when playback ends. */
 export class EmoteStage {
   private readonly live = new Map<string, Live>();
   private readonly blobs = new Map<string, Promise<Blob>>();
@@ -67,12 +68,13 @@ export class EmoteStage {
     root.style.setProperty('--size', `${opts.sizePx}px`);
     root.style.setProperty('--dur', `${EMOTE_DURATION_S}s`);
     const live: Live = {
-      root, url: null, gone: false,
-      timer: setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150),
+      root, url: null, gone: false, video: null,
+      timer: art.kind === 'video' ? null : setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150),
     };
     this.live.set(owner, live);
 
     if (art.kind === 'bundled') this.showBundled(live, art.slug);
+    else if (art.kind === 'video') this.showVideo(owner, live, art);
     else if (art.kind === 'custom') {
       const img = image();
       img.addEventListener('error', () => img.replaceWith(bubble()), { once: true });
@@ -95,6 +97,54 @@ export class EmoteStage {
   clear(owner: string): void {
     const live = this.live.get(owner);
     if (live) this.end(owner, live);
+  }
+
+  private showVideo(owner: string, live: Live, art: Extract<EmoteArt, { kind: 'video' }>): void {
+    const video = document.createElement('video');
+    live.video = video;
+    live.root.className = 'emote video';
+    video.muted = true;
+    video.playsInline = true;
+    video.poster = art.poster;
+    const fallback = (): void => {
+      if (live.gone || live.video !== video) return;
+      const img = image();
+      img.addEventListener('error', () => img.replaceWith(bubble()), { once: true });
+      img.src = art.poster;
+      video.replaceWith(img);
+      live.root.className = 'emote';
+      this.stopVideo(live);
+      if (live.timer) clearTimeout(live.timer);
+      live.timer = setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150);
+    };
+    const waiting = (): void => {
+      if (live.gone || live.video !== video) return;
+      if (live.timer) clearTimeout(live.timer);
+      live.timer = setTimeout(fallback, 15_000); // Only stalled loading is timed, never normal playback.
+    };
+    video.addEventListener('playing', () => {
+      if (live.gone || live.video !== video) return;
+      if (live.timer) clearTimeout(live.timer);
+      live.timer = null;
+    });
+    video.addEventListener('waiting', waiting);
+    video.addEventListener('ended', () => {
+      if (live.video === video) this.end(owner, live);
+    }, { once: true });
+    video.addEventListener('error', fallback, { once: true });
+    video.src = art.url;
+    live.root.append(envelope(video));
+    waiting();
+    void video.play().catch(fallback);
+  }
+
+  private stopVideo(live: Live): void {
+    const video = live.video;
+    live.video = null;
+    if (!video) return;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
   }
 
   /**
@@ -139,7 +189,8 @@ export class EmoteStage {
   private end(owner: string, live: Live): void {
     if (live.gone) return;
     live.gone = true;
-    clearTimeout(live.timer);
+    if (live.timer) clearTimeout(live.timer);
+    this.stopVideo(live);
     live.root.remove();
     if (live.url) URL.revokeObjectURL(live.url);
     if (this.live.get(owner) === live) this.live.delete(owner);

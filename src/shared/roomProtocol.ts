@@ -1,5 +1,5 @@
 import { isEmoteRefShape, type EmoteRef } from './emotes';
-import { isPingId, type PingId } from './pings';
+import { WHEEL_SLOTS, isPingId, type PingId } from './pings';
 import { isTagColor } from './roomColors';
 
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
@@ -10,6 +10,7 @@ const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
 export const EMOTE_CHUNK_BYTES = 750;
 export const EMOTE_MAX_CHUNKS = 17;
+export const EMOTE_MAX_REFS = WHEEL_SLOTS + 1;
 const isHash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v);
 
 export type MemberStatus = 'on' | 'paused' | 'muted';
@@ -32,6 +33,8 @@ export interface PresenceMsg extends Base {
   status: MemberStatus;
   /** Custom stills on the sender's wheel and centre. Optional for older peers. */
   em?: string[];
+  /** Additional wheel stills; keeping em at nine lets older clients accept presence. */
+  emMore?: string[];
   /** Wards cleared in this room session. Optional for older peers. */
   points?: number;
 }
@@ -113,13 +116,15 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const base = { peer, seq, ts };
   switch (t) {
     case 'presence': {
-      const { proto, app, name, color, status, em, points } = raw;
+      const { proto, app, name, color, status, em, emMore, points } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
       if (em !== undefined && (!Array.isArray(em) || em.length > 9 || !em.every(isHash))) return null;
+      if (emMore !== undefined && (!Array.isArray(emMore) || emMore.length > EMOTE_MAX_REFS - 9 || !emMore.every(isHash))) return null;
       if (points !== undefined && !isUint(points)) return null;
       return { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
-        ...(em !== undefined ? { em: [...new Set(em as string[])] } : {}), ...(points !== undefined ? { points } : {}) };
+        ...(em !== undefined ? { em: [...new Set(em as string[])] } : {}),
+        ...(emMore !== undefined ? { emMore: [...new Set(emMore as string[])] } : {}), ...(points !== undefined ? { points } : {}) };
     }
     case 'ping': {
       const { ping, d, x, y } = raw;

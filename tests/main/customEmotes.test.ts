@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RoomManager, type RemoteEmote } from '../../src/main/roomManager';
+import { EmoteTransfer } from '../../src/main/emoteTransfer';
 import { MAX_PACKET, open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { STILL_MAX_BYTES } from '../../src/shared/emotes';
 import { makeRoomCode } from '../../src/shared/roomCode';
@@ -78,6 +79,18 @@ async function pair(kind: 'lan' | 'internet', image = still(), count = 1) {
 }
 
 describe('custom emotes in rooms', () => {
+  it('keeps all 17 stills from each of seven members cached without evicting the first member', () => {
+    const images = new Map<string, Buffer>(Array.from({ length: 7 * 17 }, (_, i) => {
+      const bytes = still();
+      bytes[31] = i;
+      return [hashOf(bytes), bytes];
+    }));
+    const hashes = [...images.keys()];
+    const transfer = new EmoteTransfer({ now: () => 0, hashes: () => [], read: (h) => images.get(h) ?? null,
+      send: () => true, ready: () => undefined });
+    for (let i = 0; i < 7; i++) transfer.announce(i.toString(16).padStart(16, '0'), hashes.slice(i * 17, (i + 1) * 17));
+    for (const h of hashes) expect(transfer.art(`c:${h}`), h).toMatchObject({ kind: 'custom' });
+  });
   it('can share our own images while room mute only silences what we receive', async () => {
     const p = await pair('lan');
     p.peers[0].setStatusFlags({ paused: false, roomMuted: true });
@@ -106,9 +119,13 @@ describe('custom emotes in rooms', () => {
     expect(p.emotes.at(-1)).toMatchObject({ ref: p.ref, peer: p.peers[0].self, art: { kind: 'custom' } });
   });
 
-  it('eventually synchronizes all nine maximum-size wheel and centre stills over relays', async () => {
-    const p = await pair('internet', still(), 9);
-    for (let i = 0; i < 60; i++) {
+  it.each(['lan', 'internet'] as const)('synchronizes all 17 maximum-size wheel and centre stills over %s', async (kind) => {
+    const p = await pair(kind, still(), 17);
+    const requests = p.transports[1].sent.map((s) => decodeMessage(open(KEYS.msgKey, s.packet)!)).filter((m) => m?.t === 'want');
+    expect(requests).toHaveLength(kind === 'lan' ? 17 : 5); // relays retain their five-token reserve
+    const presence = p.transports[0].sent.map((s) => decodeMessage(open(KEYS.msgKey, s.packet)!)).find((m) => m?.t === 'presence');
+    expect(presence).toMatchObject({ em: p.refs.slice(0, 9).map((r) => r.slice(2)), emMore: p.refs.slice(9).map((r) => r.slice(2)) });
+    for (let i = 0; i < 120; i++) {
       await vi.advanceTimersByTimeAsync(1000);
       p.pump();
     }

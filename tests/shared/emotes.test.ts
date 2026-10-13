@@ -52,6 +52,14 @@ describe('emote refs', () => {
 });
 
 describe('normalizeEmoteWheel', () => {
+  it('expands legacy slots at the same directions without losing custom refs or repeating emotes', () => {
+    const old = [`c:${HASH}`, 'facepalm', 'bee_sad', 'poro_snax', 'gg_heart', 'unworthy_cn', 'wahaha', 'nice'];
+    const out = normalizeEmoteWheel(old, [custom(HASH)]);
+    expect(out).toHaveLength(16);
+    expect(out.filter((_, i) => i % 2 === 0)).toEqual(old);
+    expect(new Set(out).size).toBe(16);
+    expect(normalizeEmoteWheel(out, [custom(HASH)])).toEqual(out);
+  });
   it('falls back to the default wheel', () => {
     expect(normalizeEmoteWheel(undefined, [])).toEqual(DEFAULT_EMOTE_WHEEL);
     const seven = DEFAULT_EMOTE_WHEEL.slice(0, 7);
@@ -98,7 +106,7 @@ describe('normalizeEmoteWheel', () => {
     const out = normalizeEmoteWheel(wheel, []);
     const free = EMOTE_CATALOG.map((e) => e.slug).find((s) => !wheel.includes(s));
     expect(out[3]).toBe(free);
-    expect(new Set(out).size).toBe(8);
+    expect(new Set(out).size).toBe(16);
   });
 
   it('never repeats a ref when several slots are replaced', () => {
@@ -108,7 +116,7 @@ describe('normalizeEmoteWheel', () => {
     wheel[1] = `c:${HASH}`;
     wheel[2] = `c:${HASH_B}`;
     const out = normalizeEmoteWheel(wheel, []);
-    expect(new Set(out).size).toBe(8);
+    expect(new Set(out).size).toBe(16);
     expect(out.every(isBundledEmote)).toBe(true);
     expect(out[0]).toBe(DEFAULT_EMOTE_WHEEL[1]); // a valid ref is never the one that moves
   });

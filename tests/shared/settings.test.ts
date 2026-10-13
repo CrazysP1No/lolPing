@@ -8,6 +8,13 @@ import {
 } from '../../src/shared/settings';
 
 describe('normalizeSettings', () => {
+  it('expands a saved 8-slot ping wheel while preserving its compass directions', () => {
+    const old = ['missing', 'push', 'danger', 'assist', 'allin', 'enemyvision', 'needvision', 'omw'];
+    const s = normalizeSettings({ wheel: old });
+    expect(s.wheel).toHaveLength(16);
+    expect(s.wheel.filter((_, i) => i % 2 === 0)).toEqual(old);
+    expect(normalizeSettings(s).wheel).toEqual(s.wheel);
+  });
   it('returns defaults for missing or non-object input', () => {
     for (const raw of [undefined, null, 42, 'x', [1, 2]]) expect(normalizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
   });
@@ -57,7 +64,7 @@ describe('normalizeSettings', () => {
   });
 
   it('keeps a valid custom wheel and click ping', () => {
-    const wheel = ['bait', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'visioncleared'];
+    const wheel = ['bait', ...DEFAULT_SETTINGS.wheel.slice(1)];
     const s = normalizeSettings({ wheel, clickPingId: 'danger' });
     expect(s.wheel).toEqual(wheel);
     expect(s.clickPingId).toBe('danger');
@@ -207,11 +214,19 @@ describe('emote settings', () => {
     expect(normalizeSettings({ customEmotes: 'nope' }).customEmotes).toEqual([]);
   });
 
-  it('custom emotes keep the first 24', () => {
-    const many = Array.from({ length: 30 }, (_, i) => ({ id: `c:${i.toString(16).padStart(32, '0')}`, name: `E${i}`, animated: false }));
+  it('retains the video flag across settings saves while dropping invalid flags', () => {
+    const video = { ...entry('a', 'Clip', true), video: true };
+    expect(normalizeSettings({ customEmotes: [video] }).customEmotes).toEqual([video]);
+    for (const bad of [false, 'yes', 1]) {
+      expect(normalizeSettings({ customEmotes: [{ ...video, video: bad }] }).customEmotes).toEqual([entry('a', 'Clip', true)]);
+    }
+  });
+
+  it('custom emotes keep the first 100', () => {
+    const many = Array.from({ length: 110 }, (_, i) => ({ id: `c:${i.toString(16).padStart(32, '0')}`, name: `E${i}`, animated: false }));
     const kept = normalizeSettings({ customEmotes: many }).customEmotes;
-    expect(kept).toHaveLength(24);
-    expect(kept.map((c) => c.name)).toEqual(many.slice(0, 24).map((c) => c.name));
+    expect(kept).toHaveLength(100);
+    expect(kept.map((c) => c.name)).toEqual(many.slice(0, 100).map((c) => c.name));
   });
 
   it('custom emote names are sanitised and cut to 24 code points', () => {
@@ -398,7 +413,7 @@ describe('helpers', () => {
   it('extracts overlay settings', () => {
     expect(overlaySettings(DEFAULT_SETTINGS)).toEqual({
       pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,
-      wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
+      wheel: [...DEFAULT_SETTINGS.wheel], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
     });
   });

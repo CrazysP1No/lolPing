@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from '../shared/settings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
-  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, sanitizeText, type MemberStatus, type PresenceMsg, type RoomMessage,
+  decodeMessage, encodeMessage, isOlderThan, EMOTE_MAX_REFS, PROTOCOL_VERSION, sanitizeText, type MemberStatus, type PresenceMsg, type RoomMessage,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
 import { EmoteTransfer } from './emoteTransfer';
@@ -274,7 +274,7 @@ export class RoomManager extends EventEmitter {
   }
 
   private customHashes(): string[] {
-    return [...new Set((this.deps.customEmotes?.() ?? []).filter(isCustomRef).map(customHash))].slice(0, 9);
+    return [...new Set((this.deps.customEmotes?.() ?? []).filter(isCustomRef).map(customHash))].slice(0, EMOTE_MAX_REFS);
   }
 
   /** Transfers use the ordinary room envelope, with five relay tokens reserved for pings and emotes. */
@@ -553,7 +553,7 @@ export class RoomManager extends EventEmitter {
     m.needsUpdate = msg.proto !== PROTOCOL_VERSION;
     m.noEmotes = isOlderThan(msg.app, EMOTES_SINCE);
     this.heard(m, t, key);
-    if (!this.paused && !this.roomMuted && !m.muted && !m.needsUpdate) this.emoteTransfer.announce(m.peer, msg.em ?? []);
+    if (!this.paused && !this.roomMuted && !m.muted && !m.needsUpdate) this.emoteTransfer.announce(m.peer, [...(msg.em ?? []), ...(msg.emMore ?? [])]);
     if (!this.answered.has(key)) {
       this.answered.add(key);
       if (t.shared) this.announce(t); // everyone hears it anyway, so it's an ordinary presence
@@ -622,7 +622,7 @@ export class RoomManager extends EventEmitter {
     const p = this.deps.profile();
     const em = this.customHashes();
     return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(), points: this.points,
-      ...(em.length ? { em } : {}) });
+      ...(em.length ? { em: em.slice(0, 9) } : {}), ...(em.length > 9 ? { emMore: em.slice(9) } : {}) });
   }
 
   /**

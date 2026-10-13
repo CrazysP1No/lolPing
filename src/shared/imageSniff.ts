@@ -1,4 +1,5 @@
 export type ImageType = 'png' | 'jpeg' | 'gif' | 'webp';
+export type VideoType = 'mp4' | 'webm';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -19,6 +20,21 @@ export function sniffImage(bytes: Uint8Array): ImageType | null {
   if (startsWith(bytes, 0, [0xff, 0xd8, 0xff])) return 'jpeg';
   if (startsWith(bytes, 0, GIF87) || startsWith(bytes, 0, GIF89)) return 'gif';
   if (startsWith(bytes, 0, RIFF) && startsWith(bytes, 8, WEBP)) return 'webp';
+  return null;
+}
+
+/** Container signatures only; the browser must also decode a video frame before import. */
+export function sniffVideo(bytes: Uint8Array): VideoType | null {
+  if (bytes.length >= 16 && startsWith(bytes, 4, ascii('ftyp'))) {
+    const brand = String.fromCharCode(...bytes.subarray(8, 12));
+    if (/^(isom|iso[2-9]|mp4[12]|avc1|M4V |dash)$/.test(brand)) return 'mp4';
+  }
+  if (startsWith(bytes, 0, [0x1a, 0x45, 0xdf, 0xa3])) {
+    const docType = [0x42, 0x82, 0x84, ...ascii('webm')];
+    for (let at = 4; at < Math.min(bytes.length, 64) - docType.length + 1; at++) {
+      if (startsWith(bytes, at, docType)) return 'webm';
+    }
+  }
   return null;
 }
 

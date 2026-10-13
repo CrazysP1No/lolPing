@@ -16,13 +16,14 @@ import { SettingRow, SliderRow, SwitchRow } from './rows';
 import { TriggerPicker } from './TriggerPicker';
 import { WheelEditor, type PoolItem } from './WheelEditor';
 
-const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
+const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,.mp4,.webm';
 
 function importMessage(t: Strings, error: ImportError, file: string): string {
   switch (error) {
     case 'type': return t.importErrType(file);
     case 'size': return t.importErrSize(file);
     case 'animSize': return t.importErrAnimSize(file);
+    case 'videoSize': return t.importErrVideoSize(file);
     case 'detail': return t.importErrDetail(file);
     case 'full': return t.importErrFull;
     case 'duplicate': return t.importErrDuplicate(file);
@@ -30,7 +31,7 @@ function importMessage(t: Strings, error: ImportError, file: string): string {
   }
 }
 
-/** Prepares one image here and hands it to main, which checks and saves it. */
+/** Prepares one image or video here and hands it to main, which checks and saves it. */
 async function importFile(file: File): Promise<ImportError | null> {
   try {
     const prepared = await prepareEmote(file);
@@ -108,6 +109,7 @@ export function EmoteSection({ settings: s, update, lengthUnit }: { settings: Se
     ...EMOTE_CATALOG.map((e) => ({ id: e.slug, icon: emoteIconUrl(e.slug), name: emoteName(e.slug, t.lang, s.customEmotes) })),
     ...s.customEmotes.map((c) => ({
       id: c.id, icon: customStillUrl(customHash(c.id)), name: c.name,
+      ...(c.video ? { badge: t.videoBadge } : {}),
       onRemove: () => {
         clearErrors();
         void api.removeEmote(c.id);

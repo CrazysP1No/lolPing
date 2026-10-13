@@ -9,13 +9,13 @@ import { resolveInside } from './safePath';
  */
 export const APP_SCHEME = 'lolping';
 
-/** The only names lolping://emotes serves: a hash and `.webp` (the still) or `.anim` (the animation). */
-export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim)$/;
+/** Only hashed still, animation and video paths are served. */
+export const EMOTE_URL_RE = /^\/([0-9a-f]{32})\.(webp|anim|video)$/;
 
 /** Must run before app 'ready'. */
 export function registerAppScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
 }
 
@@ -27,7 +27,8 @@ export function resolveEmoteFile(dirs: readonly string[], urlPath: string): stri
   const m = EMOTE_URL_RE.exec(urlPath);
   if (!m) return null;
   const [, hash, kind] = m;
-  const names = kind === 'webp' ? [`${hash}.webp`] : [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`];
+  const names = kind === 'webp' ? [`${hash}.webp`] : kind === 'video' ? [`${hash}.video.mp4`, `${hash}.video.webm`]
+    : [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`];
   for (const name of names) {
     for (const dir of dirs) {
       const file = resolveInside(dir, `/${name}`);
@@ -40,8 +41,8 @@ export function resolveEmoteFile(dirs: readonly string[], urlPath: string): stri
 const notFound = (): Response => new Response('Not found', { status: 404 });
 
 /** Imported emotes can be removed and imported again under the same name, so nothing may cache them. */
-async function fetchUncached(file: string): Promise<Response> {
-  const res = await net.fetch(pathToFileURL(file).toString());
+async function fetchUncached(file: string, request: Request): Promise<Response> {
+  const res = await net.fetch(pathToFileURL(file).toString(), { headers: request.headers });
   const headers = new Headers(res.headers);
   headers.set('Cache-Control', 'no-store');
   return new Response(res.body, { status: res.status, headers });
@@ -53,7 +54,7 @@ export function serveAppScheme(opts: { rendererRoot: string | null; emoteDirs: (
     const url = new URL(request.url);
     if (url.host === 'emotes') {
       const file = resolveEmoteFile(opts.emoteDirs(), url.pathname);
-      return file ? fetchUncached(file) : notFound();
+      return file ? fetchUncached(file, request) : notFound();
     }
     if (url.host === 'app' && opts.rendererRoot) {
       const file = resolveInside(opts.rendererRoot, url.pathname);

@@ -100,8 +100,9 @@ EMOTE_SET: dict[str, int] = {
     'such_foolishness': 4730,
 }
 # The default emote wheel, top slot then clockwise, and the centre (click) emote.
-DEFAULT_EMOTE_WHEEL: list[str] = ['unworthy_cn', 'poro_snax', 'sad_kitten', 'cheeky_poro', 'angry_kitty', 'gg_heart',
-                                  'bee_happy', 'bee_mad']
+DEFAULT_EMOTE_WHEEL: list[str] = ['unworthy_cn', 'unworthy', 'poro_snax', 'snoozy_poro', 'sad_kitten', 'bee_sad',
+                                  'cheeky_poro', 'wahaha', 'angry_kitty', 'omg_love_it', 'gg_heart', 'poro_ride',
+                                  'bee_happy', 'dont_make_me_laugh', 'bee_mad', 'woah_dizzy']
 DEFAULT_CLICK_EMOTE = 'facepalm'
 # Names for the catalog where the client's are not enough: slug -> (name, nameZh). The client calls both Unworthy emotes
 # "Unworthy" / "弱爆", and the app's settings list emotes by name.

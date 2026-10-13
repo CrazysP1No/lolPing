@@ -1,6 +1,6 @@
 import { DEFAULT_CLICK_EMOTE, EMOTE_CATALOG } from '../../shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, isBundledEmote,
+  allEmoteAssetFiles, catalogEmote, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, resolveEmoteArt,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
 import {
@@ -58,15 +58,6 @@ function emoteItem(ref: EmoteRef): WheelItem {
   return { key: ref, icon: textureUrl('generic_ping') };
 }
 
-/** This machine's own emotes: the settings know what an imported one looks like, and whether it moves. */
-function localArt(ref: EmoteRef): EmoteArt {
-  if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
-  const custom = settings.customEmotes.find((c) => c.id === ref);
-  if (!custom) return { kind: 'placeholder' };
-  const hash = customHash(ref);
-  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated };
-}
-
 function applySettings(s: OverlaySettings): void {
   settings = s;
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
@@ -94,7 +85,7 @@ window.overlay.on('wheel:release', (p) => {
   const chosen = wheelOf(p).release(p.x, p.y);
   if (!chosen) return;
   if (p.wheel === 'emote') {
-    emote('self', localArt(chosen.key), chosen.x, chosen.y);
+    emote('self', resolveEmoteArt(chosen.key, settings.customEmotes, false), chosen.x, chosen.y);
     window.overlay.reportEmote(chosen.key, chosen.x, chosen.y);
   } else {
     const def = pingById(chosen.key) ?? fallbackPing;

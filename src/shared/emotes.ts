@@ -7,26 +7,30 @@ export type EmoteRef = string;
 export interface CustomEmote {
   id: EmoteRef;
   name: string;
-  /** Has a `.anim` file besides the still. */
+  /** Has an animation or video besides the still. */
   animated: boolean;
+  /** Original media is a video; absent on existing image entries. */
+  video?: boolean;
 }
 
 /** What an emote looks like on screen. A placeholder stands in for a custom emote whose files are missing. */
 export type EmoteArt =
   | { kind: 'bundled'; slug: string }
   | { kind: 'custom'; url: string; animated: boolean }
+  | { kind: 'video'; url: string; poster: string }
   | { kind: 'placeholder' };
 
-export type ImportError = 'type' | 'size' | 'animSize' | 'detail' | 'full' | 'duplicate' | 'disk';
-/** What the settings renderer sends the main process when importing: the 160 px still and, optionally, the original animation. */
+export type ImportError = 'type' | 'size' | 'animSize' | 'videoSize' | 'detail' | 'full' | 'duplicate' | 'disk';
+/** Import payload: a small still and, optionally, the original animation or video. */
 export interface EmoteFile {
   name: string;
   still: Uint8Array;
   anim?: Uint8Array;
+  video?: Uint8Array;
 }
 export type ImportResult = { ok: true; id: EmoteRef } | { ok: false; error: ImportError };
 
-export const MAX_CUSTOM_EMOTES = 24;
+export const MAX_CUSTOM_EMOTES = 100;
 export const EMOTE_DURATION_S = 3;
 export const CUSTOM_NAME_MAX = 24;
 export const STILL_MAX_BYTES = 12_288;
@@ -37,6 +41,8 @@ export const INPUT_MAX_BYTES = 8_388_608;
 export const INPUT_MAX_SIDE = 8192;
 export const ANIM_MAX_BYTES = 5_242_880;
 export const ANIM_MAX_SIDE = 1024;
+export const VIDEO_MAX_BYTES = 20_971_520;
+export const VIDEO_MAX_SIDE = 1920;
 
 const SLUG = /^[a-z0-9_]{1,40}$/;
 const CUSTOM = /^c:[0-9a-f]{32}$/;
@@ -58,6 +64,18 @@ export const emoteSoundUrl = (slug: string): string => `../emotes/${slug}.ogg`;
 /** Imported emotes live in the user's data folder; the lolping:// protocol serves them. */
 export const customStillUrl = (hash: string): string => `lolping://emotes/${hash}.webp`;
 export const customAnimUrl = (hash: string): string => `lolping://emotes/${hash}.anim`;
+export const customVideoUrl = (hash: string): string => `lolping://emotes/${hash}.video`;
+
+/** Local playback uses original media; room playback uses only the small still. */
+export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], remote: boolean): EmoteArt {
+  if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
+  const emote = isCustomRef(ref) ? custom.find((c) => c.id === ref) : undefined;
+  if (!emote) return { kind: 'placeholder' };
+  const hash = customHash(ref);
+  if (emote.video && !remote) return { kind: 'video', url: customVideoUrl(hash), poster: customStillUrl(hash) };
+  const animated = emote.animated && !remote;
+  return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated };
+}
 
 /** Every bundled file that has to ship, relative to assets/. */
 export function allEmoteAssetFiles(): string[] {
@@ -74,15 +92,15 @@ const isKnown = (ref: EmoteRef, custom: readonly CustomEmote[]): boolean =>
   isBundledEmote(ref) || (isCustomRef(ref) && custom.some((c) => c.id === ref));
 
 /**
- * A wheel is 8 distinct, well-formed refs. Anything else gives the default wheel. A slot whose emote no longer exists
+ * A wheel is 16 distinct, well-formed refs; legacy 8-slot wheels keep their original directions. A missing emote
  * gets that slot's default, or, when the wheel already holds it, the first catalog emote that isn't on the wheel.
  */
 export function normalizeEmoteWheel(raw: unknown, custom: readonly CustomEmote[]): EmoteRef[] {
   const slots = DEFAULT_EMOTE_WHEEL.length;
-  if (!Array.isArray(raw) || raw.length !== slots || !raw.every(isEmoteRefShape) || new Set(raw).size !== slots) {
+  if (!Array.isArray(raw) || (raw.length !== slots && raw.length !== 8) || !raw.every(isEmoteRefShape) || new Set(raw).size !== raw.length) {
     return [...DEFAULT_EMOTE_WHEEL];
   }
-  const wheel: EmoteRef[] = [...raw];
+  const wheel: EmoteRef[] = raw.length === slots ? [...raw] : Array.from({ length: slots }, (_, i) => i % 2 === 0 ? raw[i / 2] : '');
   const used = new Set(wheel.filter((ref) => isKnown(ref, custom)));
   for (let i = 0; i < slots; i++) {
     if (isKnown(wheel[i], custom)) continue;

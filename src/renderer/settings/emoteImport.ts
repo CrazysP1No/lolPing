@@ -1,7 +1,8 @@
 import {
-  ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, STILL_FALLBACK_SIDE, STILL_MAX_BYTES, STILL_SIDE, type EmoteFile, type ImportError,
+  ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, STILL_FALLBACK_SIDE, STILL_MAX_BYTES, STILL_SIDE,
+  VIDEO_MAX_BYTES, VIDEO_MAX_SIDE, type EmoteFile, type ImportError,
 } from '../../shared/emotes';
-import { imageSize, sniffImage, type ImageType } from '../../shared/imageSniff';
+import { imageSize, sniffImage, sniffVideo, type ImageType, type VideoType } from '../../shared/imageSniff';
 
 export type Prepared = { ok: true; file: EmoteFile } | { ok: false; error: ImportError };
 
@@ -21,8 +22,9 @@ export function fitSize(w: number, h: number, side: number): { width: number; he
   return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
 }
 
-/** PNG, JPEG, GIF or WebP by its first bytes, whatever the file is called, and at most INPUT_MAX_BYTES. */
+/** Supported image or video container, with separate byte limits. */
 export function checkInput(bytes: Uint8Array): ImportError | null {
+  if (sniffVideo(bytes)) return bytes.length > VIDEO_MAX_BYTES ? 'videoSize' : null;
   if (!sniffImage(bytes)) return 'type';
   return bytes.length > INPUT_MAX_BYTES ? 'size' : null;
 }
@@ -47,10 +49,10 @@ export function checkAnimation(bytes: Uint8Array, width: number, height: number)
 export const nameFromFile = (fileName: string): string => fileName.replace(/(.)\.[^.]*$/, '$1');
 
 /** The first encoding of `frame` that fits STILL_MAX_BYTES, or null when even the smallest is too big. */
-async function encodeStill(frame: VideoFrame): Promise<Uint8Array | null> {
+async function encodeStill(frame: CanvasImageSource, width: number, height: number): Promise<Uint8Array | null> {
   let canvas: OffscreenCanvas | null = null;
   for (const { side, quality } of stillAttempts()) {
-    const size = fitSize(frame.displayWidth, frame.displayHeight, side);
+    const size = fitSize(width, height, side);
     if (!canvas || canvas.width !== size.width || canvas.height !== size.height) {
       canvas = new OffscreenCanvas(size.width, size.height);
       const ctx = canvas.getContext('2d');
@@ -64,18 +66,51 @@ async function encodeStill(frame: VideoFrame): Promise<Uint8Array | null> {
   return null;
 }
 
+async function prepareVideo(file: File, bytes: Uint8Array<ArrayBuffer>, type: VideoType): Promise<Prepared> {
+  const video = document.createElement('video');
+  const url = URL.createObjectURL(new Blob([bytes], { type: `video/${type}` }));
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    video.muted = true;
+    video.preload = 'auto';
+    await new Promise<void>((resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error('Video load timed out')), 15_000);
+      video.onloadeddata = () => resolve();
+      video.onerror = () => reject(new Error('Video decode failed'));
+      video.src = url;
+    });
+    if (!video.videoWidth || !video.videoHeight) return fail('type');
+    if (Math.max(video.videoWidth, video.videoHeight) > VIDEO_MAX_SIDE) return fail('videoSize');
+    const still = await encodeStill(video, video.videoWidth, video.videoHeight);
+    return still ? { ok: true, file: { name: nameFromFile(file.name), still, video: bytes } } : fail('detail');
+  } catch {
+    return fail('type');
+  } finally {
+    clearTimeout(timeout);
+    video.onloadeddata = null;
+    video.onerror = null;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
  * Turns a picked or dropped file into what main saves: a small WebP still of its first frame and, for a GIF or WebP with
  * more than one frame, the original bytes as the animation.
  */
 export async function prepareEmote(file: File): Promise<Prepared> {
-  if (file.size > INPUT_MAX_BYTES) {
+  const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
+  const videoType = sniffVideo(header);
+  if (file.size > (videoType ? VIDEO_MAX_BYTES : INPUT_MAX_BYTES)) {
     // Refused without reading the rest of what may be a huge file.
-    return fail(sniffImage(new Uint8Array(await file.slice(0, 16).arrayBuffer())) ? 'size' : 'type');
+    return fail(videoType ? 'videoSize' : sniffImage(header) ? 'size' : 'type');
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const bad = checkInput(bytes) ?? checkDimensions(bytes);
+  const bad = checkInput(bytes) ?? (videoType ? null : checkDimensions(bytes));
   if (bad) return fail(bad);
+  if (videoType) return prepareVideo(file, bytes, videoType);
   const type = sniffImage(bytes) as ImageType;
 
   let decoder: ImageDecoder | null = null;
@@ -90,7 +125,7 @@ export async function prepareEmote(file: File): Promise<Prepared> {
       const tooBig = checkAnimation(bytes, frame.displayWidth, frame.displayHeight);
       if (tooBig) return fail(tooBig);
     }
-    const still = await encodeStill(frame);
+    const still = await encodeStill(frame, frame.displayWidth, frame.displayHeight);
     if (!still) return fail('detail');
     const name = nameFromFile(file.name);
     return { ok: true, file: animated ? { name, still, anim: bytes } : { name, still } };

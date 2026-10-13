@@ -89,12 +89,12 @@ describe('settings IPC', () => {
     expect(existsSync(library.dir) ? readdirSync(library.dir) : []).toEqual([]);
   });
 
-  it('imports several at once one after another, so the 25th is refused', async () => {
-    const results = await Promise.all(Array.from({ length: 25 }, (_, i) => call(SETTINGS_CH.emoteImport, { name: `e${i}`, still: still(i + 1) })));
-    expect(results.filter((r) => (r as { ok: boolean }).ok)).toHaveLength(24);
-    expect(results[24]).toEqual({ ok: false, error: 'full' });
-    expect(store.get().customEmotes).toHaveLength(24);
-    expect(readdirSync(library.dir)).toHaveLength(24);
+  it('imports several at once one after another, so the 101st is refused', async () => {
+    const results = await Promise.all(Array.from({ length: 101 }, (_, i) => call(SETTINGS_CH.emoteImport, { name: `e${i}`, still: still(i + 1) })));
+    expect(results.filter((r) => (r as { ok: boolean }).ok)).toHaveLength(100);
+    expect(results[100]).toEqual({ ok: false, error: 'full' });
+    expect(store.get().customEmotes).toHaveLength(100);
+    expect(readdirSync(library.dir)).toHaveLength(100);
   });
 
   it('removes an emote: its files and entry go, and the wheel slot falls back', async () => {

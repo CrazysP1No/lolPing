@@ -3,13 +3,16 @@ import { readFileSync, statSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  ANIM_MAX_BYTES, ANIM_MAX_SIDE, CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, STILL_MAX_BYTES, STILL_SIDE, customAnimUrl, customHash,
-  customStillUrl, isBundledEmote, isCustomRef, type CustomEmote, type EmoteArt, type EmoteFile, type EmoteRef, type ImportError,
+  ANIM_MAX_BYTES, ANIM_MAX_SIDE, CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, STILL_MAX_BYTES, STILL_SIDE, VIDEO_MAX_BYTES, customHash,
+  isCustomRef, type CustomEmote, type EmoteFile, type EmoteRef, type ImportError,
 } from '../shared/emotes';
-import { gifExtent, isAnimatedWebp, sniffImage, webpSize } from '../shared/imageSniff';
+import { gifExtent, isAnimatedWebp, sniffImage, sniffVideo, webpSize } from '../shared/imageSniff';
 import { sanitizeName } from '../shared/roomProtocol';
 import { isFile } from './fileState';
 import { renameWithRetry } from './settingsStore';
+import { checkVideo } from './videoValidation';
+
+export { resolveEmoteArt } from '../shared/emotes';
 
 export type SaveResult = { ok: true; emote: CustomEmote } | { ok: false; error: ImportError };
 
@@ -19,8 +22,9 @@ const longest = (size: { width: number; height: number }): number => Math.max(si
 /** An import as it arrived over IPC, rebuilt from its known fields: a string name and byte arrays. Null for anything else. */
 export function emoteFileFrom(raw: unknown): EmoteFile | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const { name, still, anim } = raw as Record<string, unknown>;
+  const { name, still, anim, video } = raw as Record<string, unknown>;
   if (typeof name !== 'string' || !(still instanceof Uint8Array)) return null;
+  if (video !== undefined) return anim === undefined && video instanceof Uint8Array ? { name, still, video } : null;
   if (anim === undefined) return { name, still };
   return anim instanceof Uint8Array ? { name, still, anim } : null;
 }
@@ -43,23 +47,13 @@ function checkAnim(b: Uint8Array): ImportError | null {
   return longest(size) > ANIM_MAX_SIDE ? 'animSize' : null;
 }
 
-/** What an emote looks like on screen. A room member's imported emote shows as its still, and only when it is one of ours too. */
-export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], remote: boolean): EmoteArt {
-  if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
-  const emote = isCustomRef(ref) ? custom.find((c) => c.id === ref) : undefined;
-  if (!emote) return { kind: 'placeholder' };
-  const hash = customHash(ref);
-  const animated = emote.animated && !remote;
-  return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated };
-}
-
 /**
- * Imported emotes on disk: `<hash>.webp` (the still) and `<hash>.anim.gif|webp` (the original animation) in `dir`.
+ * Imported emotes on disk: `<hash>.webp` plus an optional `.anim.gif|webp` or `.video.mp4|webm` in `dir`.
  * Everything that arrives is checked again here, whatever the settings window already checked, and the id is computed here.
  */
 export class EmoteLibrary {
   /** `dir` is <settings folder>/emotes. */
-  constructor(readonly dir: string) {}
+  constructor(readonly dir: string, private readonly validateVideo: (bytes: Uint8Array) => Promise<ImportError | null> = checkVideo) {}
 
   /** Only a validated, bounded still is shared; original animations never leave this computer. */
   readStill(hash: string): Uint8Array | null {
@@ -77,17 +71,26 @@ export class EmoteLibrary {
   async save(file: EmoteFile, existing: readonly CustomEmote[]): Promise<SaveResult> {
     const f = emoteFileFrom(file);
     if (!f) return fail('type');
+    const videoType = f.video ? sniffVideo(f.video) : null;
     const error = checkStill(f.still) ?? (f.anim ? checkAnim(f.anim) : null);
     if (error) return fail(error);
+    if (f.video && !videoType) return fail('type');
+    if (f.video && f.video.length > VIDEO_MAX_BYTES) return fail('videoSize');
     const hash = createHash('sha256').update(f.still).digest('hex').slice(0, 32);
     const id = `c:${hash}`;
     if (existing.some((c) => c.id === id)) return fail('duplicate');
     if (existing.length >= MAX_CUSTOM_EMOTES) return fail('full');
+    if (f.video) {
+      const videoError = await this.validateVideo(f.video);
+      if (videoError) return fail(videoError);
+    }
 
     const animName = f.anim ? `${hash}.anim.${sniffImage(f.anim)}` : null;
-    const files = [{ name: `${hash}.webp`, data: f.still }, ...(f.anim && animName ? [{ name: animName, data: f.anim }] : [])];
+    const videoName = videoType ? `${hash}.video.${videoType}` : null;
+    const files = [{ name: `${hash}.webp`, data: f.still }, ...(f.anim && animName ? [{ name: animName, data: f.anim }] : []),
+      ...(f.video && videoName ? [{ name: videoName, data: f.video }] : [])];
     // Files left by an earlier copy of this image: an animation in the other format would be served instead of this one.
-    const stale = [`${hash}.anim.gif`, `${hash}.anim.webp`].filter((n) => n !== animName);
+    const stale = [`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.video.mp4`, `${hash}.video.webm`].filter((n) => n !== animName && n !== videoName);
     try {
       await this.write(files, stale);
     } catch (err) {
@@ -96,14 +99,14 @@ export class EmoteLibrary {
     }
     // A name with nothing left shows the first characters of its hash, as in normalizeSettings.
     const name = sanitizeName(f.name.slice(0, 256), hash.slice(0, 6), CUSTOM_NAME_MAX);
-    return { ok: true, emote: { id, name, animated: f.anim !== undefined } };
+    return { ok: true, emote: { id, name, animated: f.anim !== undefined || f.video !== undefined, ...(f.video ? { video: true } : {}) } };
   }
 
   /** Deletes an emote's files. Best effort: a file that can't be deleted is only an orphan, which a later import overwrites. */
   async remove(id: EmoteRef): Promise<void> {
     if (!isCustomRef(id)) return;
     const hash = customHash(id);
-    await Promise.all([`${hash}.webp`, `${hash}.anim.gif`, `${hash}.anim.webp`].map((n) =>
+    await Promise.all([`${hash}.webp`, `${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.video.mp4`, `${hash}.video.webm`].map((n) =>
       rm(join(this.dir, n), { force: true }).catch((err: Error) => console.warn('[emotes] could not delete', n, err.message))));
   }
 
