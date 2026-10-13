@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveRoomKeys, MAX_PACKET, open, seal } from '../../src/main/roomCrypto';
+import { deriveRoomKeys, MAX_PACKET, MAX_VIDEO_PACKET, open, packetLimit, seal, sealVideo } from '../../src/main/roomCrypto';
 
 describe('deriveRoomKeys', () => {
   // Computed once with plain node:crypto (scrypt N=2^15 r=8 p=1, then HKDF-SHA256). Every OS must derive the same keys.
@@ -19,6 +19,7 @@ describe('deriveRoomKeys', () => {
 describe('seal / open', () => {
   const key = Buffer.alloc(32, 7);
   const msg = new TextEncoder().encode('{"t":"bye"}');
+  const OVERHEAD = 1 + 12 + 16;
 
   it('round-trips', () => {
     expect(open(key, seal(key, msg))).toEqual(Buffer.from(msg));
@@ -47,5 +48,28 @@ describe('seal / open', () => {
 
   it('refuses to seal more than fits in a packet', () => {
     expect(() => seal(key, new Uint8Array(MAX_PACKET))).toThrow();
+  });
+
+  it('round-trips a full-size video packet with its own format and limit', () => {
+    const plain = new Uint8Array(MAX_VIDEO_PACKET - OVERHEAD).fill(7);
+    const packet = sealVideo(key, plain);
+    expect(packet[0]).toBe(0x02);
+    expect(packet).toHaveLength(MAX_VIDEO_PACKET);
+    expect(packetLimit(packet)).toBe(MAX_VIDEO_PACKET);
+    expect(open(key, packet)).toEqual(Buffer.from(plain));
+  });
+
+  it('keeps video and control packet limits strict', () => {
+    expect(packetLimit(Uint8Array.from([0x01]))).toBe(MAX_PACKET);
+    expect(packetLimit(Uint8Array.from([0x02]))).toBe(MAX_VIDEO_PACKET);
+    const video = sealVideo(key, new Uint8Array(MAX_PACKET));
+    expect(video.length).toBeGreaterThan(MAX_PACKET);
+    const mislabeled = Buffer.from(video);
+    mislabeled[0] = 0x01;
+    expect(open(key, mislabeled)).toBeNull();
+    const smallMislabeled = Buffer.from(sealVideo(key, msg));
+    smallMislabeled[0] = 0x01;
+    expect(open(key, smallMislabeled)).toBeNull();
+    expect(() => sealVideo(key, new Uint8Array(MAX_VIDEO_PACKET - OVERHEAD + 1))).toThrow();
   });
 });

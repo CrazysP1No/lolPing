@@ -156,6 +156,10 @@ export class OverlayManager extends EventEmitter {
     this.clearElsewhere(p.displayId, p.peer);
   }
 
+  clearRemoteEmote(peer: string): void {
+    for (const id of this.windows.keys()) this.send(id, 'emote:clear', { owner: peer });
+  }
+
   /** This machine's displays with their room numbers (#1 = primary). */
   numbered(): NumberedDisplay[] {
     return this.numberedList;

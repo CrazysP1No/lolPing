@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createSocket } from 'node:dgram';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LanTransport } from '../../src/main/lanTransport';
-import { deriveRoomKeys } from '../../src/main/roomCrypto';
+import { deriveRoomKeys, sealVideo } from '../../src/main/roomCrypto';
 import { RoomManager, type RemotePing, type RoomToast, type RemoteText } from '../../src/main/roomManager';
 import { makeRoomCode } from '../../src/shared/roomCode';
 
@@ -34,11 +34,15 @@ function peer(port: number, other: number, name: string) {
   const texts: RemoteText[] = [];
   const toasts: RoomToast[] = [];
   let packets = 0;
-  lan.on('packet', () => packets++);
+  const packetLengths: number[] = [];
+  lan.on('packet', (_peer: string, packet: Uint8Array) => {
+    packets++;
+    packetLengths.push(packet.length);
+  });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
   room.on('remoteText', (p: RemoteText) => texts.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
-  return { lan, room, pings, texts, toasts, packets: () => packets };
+  return { lan, room, pings, texts, toasts, packets: () => packets, packetLengths: () => [...packetLengths] };
 }
 
 let open: ReturnType<typeof peer>[] = [];
@@ -134,6 +138,29 @@ describe('two rooms over loopback UDP', () => {
     expect(through).toBeGreaterThan(50);
     expect(through).toBeLessThanOrEqual(130);
     expect(b.room.state().members).toHaveLength(1);
+  });
+
+  it('accepts a video-sized packet but still rejects an oversized control packet', async () => {
+    const a = peer(A_PORT, B_PORT, 'Alice');
+    const b = peer(B_PORT, A_PORT, 'Bob');
+    open = [a, b];
+    await Promise.all([a.room.join(CODE), b.room.join(CODE)]);
+    await until(() => a.lan.status === 'ok' && b.lan.status === 'ok');
+
+    const video = sealVideo((await deriveRoomKeys(CODE)).msgKey, new Uint8Array(8_000));
+    a.lan.broadcast(video);
+    await until(() => b.packetLengths().includes(video.length));
+    expect(b.packetLengths()).toContain(video.length);
+
+    const control = Buffer.from(video);
+    control[0] = 0x01;
+    const controlBefore = b.packetLengths().filter((length) => length === control.length).length;
+    a.lan.broadcast(control);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(b.packetLengths().filter((length) => length === control.length)).toHaveLength(controlBefore);
+    a.room.quit();
+    b.room.quit();
+    await Promise.all([a.lan.whenClosed(), b.lan.whenClosed()]);
   });
 
   it('reports a port that is already taken as unavailable', async () => {

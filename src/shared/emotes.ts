@@ -4,6 +4,9 @@ import type { Lang } from './i18n';
 /** A bundled emote's slug, or 'c:' + 32 lower-case hex characters (the hash of an imported emote). */
 export type EmoteRef = string;
 
+/** Content identity of an original video, independent of its poster. */
+export interface SharedVideo { h: string; size: number }
+
 export interface CustomEmote {
   id: EmoteRef;
   name: string;
@@ -18,6 +21,7 @@ export type EmoteArt =
   | { kind: 'bundled'; slug: string }
   | { kind: 'custom'; url: string; animated: boolean }
   | { kind: 'video'; url: string; poster: string }
+  | { kind: 'video-loading'; poster: string; label?: string }
   | { kind: 'placeholder' };
 
 export type ImportError = 'type' | 'size' | 'animSize' | 'videoSize' | 'detail' | 'full' | 'duplicate' | 'disk';
@@ -66,7 +70,7 @@ export const customStillUrl = (hash: string): string => `lolping://emotes/${hash
 export const customAnimUrl = (hash: string): string => `lolping://emotes/${hash}.anim`;
 export const customVideoUrl = (hash: string): string => `lolping://emotes/${hash}.video`;
 
-/** Local playback uses original media; room playback uses only the small still. */
+/** Remote poster fallback; RoomManager resolves transferred videos from its verified cache. */
 export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], remote: boolean): EmoteArt {
   if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
   const emote = isCustomRef(ref) ? custom.find((c) => c.id === ref) : undefined;

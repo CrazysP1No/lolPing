@@ -1,4 +1,4 @@
-import { isEmoteRefShape, type EmoteRef } from './emotes';
+import { VIDEO_MAX_BYTES, isCustomRef, isEmoteRefShape, type EmoteRef, type SharedVideo } from './emotes';
 import { WHEEL_SLOTS, isPingId, type PingId } from './pings';
 import { isTagColor } from './roomColors';
 
@@ -11,6 +11,10 @@ const MAX_APP_VERSION = 64;
 export const EMOTE_CHUNK_BYTES = 750;
 export const EMOTE_MAX_CHUNKS = 17;
 export const EMOTE_MAX_REFS = WHEEL_SLOTS + 1;
+export const VIDEO_CHUNK_BYTES = 24_000;
+export const VIDEO_LAN_CHUNK_BYTES = 6000;
+export const VIDEO_MAX_CHUNKS = Math.ceil(VIDEO_MAX_BYTES / VIDEO_LAN_CHUNK_BYTES);
+export const VIDEO_TRANSFER_MS = 600_000;
 const isHash = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v);
 
 export type MemberStatus = 'on' | 'paused' | 'muted';
@@ -52,6 +56,7 @@ export interface EmoteMsg extends Base {
   t: 'emote';
   /** A bundled slug (possibly one only a newer app has) or 'c:' + hash of an imported emote. */
   e: EmoteRef;
+  video?: SharedVideo;
   d: number;
   x: number;
   y: number;
@@ -81,7 +86,13 @@ export interface ChunkMsg extends Base {
   n: number;
   b: string;
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | ByeMsg | WantMsg | ChunkMsg;
+export interface VideoWantMsg extends Base {
+  t: 'vwant'; to: string; e: EmoteRef; h: string; c: number;
+  /** Empty requests all chunks; null cancels; otherwise requests only these indexes. */
+  need: number[] | null;
+}
+export interface VideoChunkMsg extends Base { t: 'vchunk'; h: string; i: number; n: number; b: string }
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | ByeMsg | WantMsg | ChunkMsg | VideoWantMsg | VideoChunkMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -133,10 +144,12 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, ping, d: d as number, x, y };
     }
     case 'emote': {
-      const { e, d, x, y } = raw;
+      const { e, d, x, y, video } = raw;
       if (!isEmoteRefShape(e) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
-      return { t, ...base, e, d: d as number, x, y };
+      if (video !== undefined && (!isCustomRef(e) || !isObj(video) || !isHash(video.h) || !isUint(video.size) || video.size < 1 || video.size > VIDEO_MAX_BYTES)) return null;
+      return { t, ...base, e, d: d as number, x, y,
+        ...(isObj(video) ? { video: { h: video.h as string, size: video.size as number } } : {}) };
     }
     case 'text': {
       const { d, x, y } = raw;
@@ -157,6 +170,19 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       const { h, i, n, b } = raw;
       if (!isHash(h) || !isUint(n) || n < 1 || n > EMOTE_MAX_CHUNKS || !isUint(i) || i >= n) return null;
       if (typeof b !== 'string' || b.length === 0 || b.length > 1000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(b)) return null;
+      return { t, ...base, h, i, n, b };
+    }
+    case 'vwant': {
+      const { to, e, h, need, c } = raw;
+      if (typeof to !== 'string' || !/^[0-9a-f]{16}$/.test(to) || !isCustomRef(e) || !isHash(h)) return null;
+      if (c !== VIDEO_CHUNK_BYTES && c !== VIDEO_LAN_CHUNK_BYTES) return null;
+      if (need !== null && (!Array.isArray(need) || need.length > 64 || !need.every((i) => isUint(i) && i < VIDEO_MAX_CHUNKS))) return null;
+      return { t, ...base, to, e, h, c, need: need === null ? null : [...new Set(need as number[])] };
+    }
+    case 'vchunk': {
+      const { h, i, n, b } = raw;
+      if (!isHash(h) || !isUint(n) || n < 1 || n > VIDEO_MAX_CHUNKS || !isUint(i) || i >= n) return null;
+      if (typeof b !== 'string' || b.length === 0 || b.length > VIDEO_CHUNK_BYTES * 4 / 3 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(b)) return null;
       return { t, ...base, h, i, n, b };
     }
     default:

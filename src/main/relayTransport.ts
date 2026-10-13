@@ -3,7 +3,7 @@ import { makeKeyPair, ROOM_EVENT_KIND, signEvent, type KeyPair, type NostrEvent 
 import type { SocketFactory } from './relayConnection';
 import { RelayPool } from './relayPool';
 import { RELAYS } from './relays';
-import type { RoomKeys } from './roomCrypto';
+import { MAX_VIDEO_PACKET, packetLimit, type RoomKeys } from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export interface RelayTransportOptions {
@@ -12,8 +12,8 @@ export interface RelayTransportOptions {
   random?: () => number;
 }
 
-/** A sealed packet (≤ 1200 bytes) in base64. */
-const MAX_CONTENT = 1600;
+/** A sealed packet (≤ 32768 bytes) in base64. */
+const MAX_CONTENT = 4 * Math.ceil(MAX_VIDEO_PACKET / 3);
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 /** Longest a stop waits for the relays to take the bye RoomManager sent just before. */
 const DRAIN_MS = 500;
@@ -123,7 +123,9 @@ export class RelayTransport extends EventEmitter implements Transport {
 
   private onEvent(e: NostrEvent): void {
     if (e.content.length > MAX_CONTENT || !BASE64.test(e.content)) return;
-    this.emit('packet', `net:${e.pubkey}`, Buffer.from(e.content, 'base64'));
+    const packet = Buffer.from(e.content, 'base64');
+    if (packet.length > packetLimit(packet)) return;
+    this.emit('packet', `net:${e.pubkey}`, packet);
   }
 
   private setStatus(s: TransportStatus): void {

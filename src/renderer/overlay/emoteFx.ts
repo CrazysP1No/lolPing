@@ -1,6 +1,7 @@
 import { EMOTE_DURATION_S, emoteAnimUrl, type EmoteArt } from '../../shared/emotes';
 import type { PingTag } from '../../shared/ipc';
 import { TAG_COLORS } from '../../shared/roomColors';
+import { VIDEO_TRANSFER_MS } from '../../shared/roomProtocol';
 
 export interface EmoteOptions {
   /** How wide the emote's art appears. */
@@ -69,12 +70,24 @@ export class EmoteStage {
     root.style.setProperty('--dur', `${EMOTE_DURATION_S}s`);
     const live: Live = {
       root, url: null, gone: false, video: null,
-      timer: art.kind === 'video' ? null : setTimeout(() => this.end(owner, live), EMOTE_DURATION_S * 1000 + 150),
+      timer: art.kind === 'video' ? null : setTimeout(() => this.end(owner, live),
+        art.kind === 'video-loading' ? VIDEO_TRANSFER_MS : EMOTE_DURATION_S * 1000 + 150),
     };
     this.live.set(owner, live);
 
     if (art.kind === 'bundled') this.showBundled(live, art.slug);
     else if (art.kind === 'video') this.showVideo(owner, live, art);
+    else if (art.kind === 'video-loading') {
+      root.className = 'emote loading';
+      const img = image();
+      img.addEventListener('error', () => img.replaceWith(bubble()), { once: true });
+      if (art.poster) img.src = art.poster;
+      root.append(envelope(art.poster ? img : bubble()));
+      const label = div('loadingTxt');
+      label.textContent = art.label ?? 'Receiving video…';
+      label.setAttribute('role', 'status');
+      root.append(label);
+    }
     else if (art.kind === 'custom') {
       const img = image();
       img.addEventListener('error', () => img.replaceWith(bubble()), { once: true });

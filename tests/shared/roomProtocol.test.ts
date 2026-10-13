@@ -11,6 +11,22 @@ const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
 
+describe('shared video messages', () => {
+  const video = { h: 'a'.repeat(32), size: 100_000 };
+  it('round-trips the original video descriptor and chunk requests', () => {
+    for (const raw of [{ ...emote, e: CUSTOM_REF, video }, { ...base, t: 'vwant', to: base.peer, e: CUSTOM_REF, h: video.h, c: 24_000, need: [] },
+      { ...base, t: 'vchunk', h: video.h, i: 0, n: 5, b: Buffer.alloc(24_000).toString('base64') }]) {
+      expect(decodeMessage(encodeMessage(raw as RoomMessage))).toEqual(raw);
+    }
+  });
+  it('rejects forged, oversize or non-custom video descriptors', () => {
+    for (const bad of [{ ...video, size: 20_971_521 }, { ...video, size: 0 }, { ...video, h: '../file' }])
+      expect(validateMessage({ ...emote, e: CUSTOM_REF, video: bad })).toBeNull();
+    expect(validateMessage({ ...emote, video })).toBeNull();
+    expect(validateMessage({ ...base, t: 'vchunk', h: video.h, i: 0, n: 4000, b: 'YQ==' })).toBeNull();
+  });
+});
+
 describe('wards and room points', () => {
   it('accepts a ward ping and optional points while keeping old presences compatible', () => {
     expect(validateMessage({ ...ping, ping: 'ward' })).toEqual({ ...ping, ping: 'ward' });

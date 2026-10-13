@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveEmoteFile } from '../../src/main/appProtocol';
 import { EmoteLibrary, emoteFileFrom, resolveEmoteArt } from '../../src/main/emoteLibrary';
-import type { CustomEmote, EmoteFile } from '../../src/shared/emotes';
+import { VIDEO_MAX_BYTES, type CustomEmote, type EmoteFile } from '../../src/shared/emotes';
 
 vi.mock('electron', () => ({ net: {}, protocol: {} }));
 
@@ -115,6 +115,23 @@ describe('EmoteLibrary', () => {
     expect(lib.readStill(hashOf(s))).toBeNull();
     writeFileSync(join(lib.dir, `${hashOf(s)}.webp`), webpAnim());
     expect(lib.readStill(hashOf(s))).toBeNull();
+  });
+  it('reads only a bounded video with the matching container from its own folder', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'), validVideo);
+    const s = still();
+    const video = mp4();
+    await lib.save({ name: 'video', still: s, video }, []);
+    const hash = hashOf(s);
+    expect(lib.readVideo(hash)).toEqual(Buffer.from(video));
+    expect(lib.readVideo('../anything')).toBeNull();
+    expect(lib.readVideo('f'.repeat(32))).toBeNull();
+
+    writeFileSync(join(lib.dir, `${hash}.video.mp4`), webm());
+    expect(lib.readVideo(hash)).toBeNull();
+    writeFileSync(join(lib.dir, `${hash}.video.mp4`), mp4(VIDEO_MAX_BYTES + 1));
+    expect(lib.readVideo(hash)).toBeNull();
+    writeFileSync(join(lib.dir, `${hash}.video.webm`), webm());
+    expect(lib.readVideo(hash)).toEqual(Buffer.from(webm()));
   });
   it('saves a still and an animation', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
