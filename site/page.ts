@@ -18,6 +18,7 @@ const MEANINGS: Record<PingId, string> = {
   generic: 'Look here.',
   bait: 'Act weak and lure them in.',
   visioncleared: 'Their ward here is gone.',
+  ward: 'Place a persistent ward on friends’ screens.',
 };
 
 const $ = <T extends HTMLElement>(sel: string): T => document.querySelector(sel) as T;

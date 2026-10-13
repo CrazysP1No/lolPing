@@ -13,8 +13,8 @@ describe('ping table', () => {
     expect(DEFAULT_WHEEL_PINGS.map((p) => p.id)).toEqual(DEFAULT_WHEEL);
   });
 
-  it('offers the generic, Bait and Vision Cleared pings beyond the default wheel', () => {
-    expect(ALL_PINGS.map((p) => p.id)).toEqual([...DEFAULT_WHEEL, 'generic', 'bait', 'visioncleared']);
+  it('offers the generic, Bait, Vision Cleared and Ward pings beyond the default wheel', () => {
+    expect(ALL_PINGS.map((p) => p.id)).toEqual([...DEFAULT_WHEEL, 'generic', 'bait', 'visioncleared', 'ward']);
   });
 
   it('uses the in-game sounds for Bait and Vision Cleared', () => {

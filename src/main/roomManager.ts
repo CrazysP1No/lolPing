@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { customHash, isCustomRef, type EmoteArt, type EmoteRef } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
+import type { WardSprite } from '../shared/ipc';
+import { DEFAULT_SETTINGS } from '../shared/settings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
@@ -13,6 +15,8 @@ import { open, seal, type RoomKeys } from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export const MAX_MEMBERS = 8;
+/** New wards are refused at the cap; an existing ward is only removed by a local Enemy Vision ping or leaving the room. */
+export const MAX_WARDS = 32;
 const SETTLE_MS = 3000;
 /** Relays can take a while to answer: the "room full" check never waits longer than this after joining. */
 const SETTLE_CAP_MS = 15_000;
@@ -44,6 +48,10 @@ export interface RemotePing {
   y: number;
   id: PingId;
   tag: { name: string; color: number };
+}
+
+export interface RemoteWard extends WardSprite {
+  displayId: number;
 }
 
 export interface RemoteText {
@@ -78,7 +86,7 @@ export interface RoomDeps {
   deriveKeys(canonical: string): Promise<RoomKeys>;
   appVersion: string;
   /** Read on every use, so settings changes apply at once. `limit`: incoming pings per second per member, 0 = unlimited. */
-  profile(): { name: string; color: number; limit: number };
+  profile(): { name: string; color: number; limit: number; pingSizePx?: number };
   /** Display number → where a ping for it lands here, or null to drop it. The hook share mode will replace. */
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
   customEmotes?(): readonly EmoteRef[];
@@ -93,6 +101,7 @@ interface Member {
   needsUpdate: boolean;
   noEmotes: boolean;
   muted: boolean;
+  points: number;
   firstSeen: number;
   /** Ever heard over the internet: dropped after the longer silence. */
   viaInternet: boolean;
@@ -117,6 +126,8 @@ export class RoomManager extends EventEmitter {
   private session = 0;
   private seq = 0;
   private members = new Map<string, Member>();
+  private readonly wards = new Map<string, { d: number; x: number; y: number; tag: WardSprite['tag'] }>();
+  private points = 0;
   private answered = new Set<PeerKey>();
   /** Per peer ID: stale presences seen, and when the last one came. Never turns into a member. */
   private staleStrikes = new Map<string, { count: number; at: number }>();
@@ -204,7 +215,39 @@ export class RoomManager extends EventEmitter {
   }
 
   sendPing(ping: PingId, shared: { d: number; x: number; y: number }): void {
+    if (ping === 'enemyvision' && this.keys && !this.paused) this.clearWard(shared);
     this.sendShared({ t: 'ping', ping, ...shared });
+  }
+
+  /** Re-map persistent wards when a display's size or numbering changes. */
+  wardsOnScreen(): RemoteWard[] {
+    return [...this.wards].flatMap(([key, ward]) => {
+      const target = this.deps.resolveTarget(ward.d);
+      return target ? [{ key, displayId: target.displayId, x: ward.x * target.width, y: ward.y * target.height, tag: ward.tag }] : [];
+    });
+  }
+
+  private clearWard(shared: { d: number; x: number; y: number }): void {
+    const target = this.deps.resolveTarget(shared.d);
+    if (!target) return;
+    const radius = (this.deps.profile().pingSizePx ?? DEFAULT_SETTINGS.pingSizePx) / 2;
+    let nearest: RemoteWard | undefined;
+    let distance = radius;
+    for (const ward of this.wardsOnScreen()) {
+      if (ward.displayId !== target.displayId) continue;
+      const next = Math.hypot(ward.x - shared.x * target.width, ward.y - shared.y * target.height);
+      if (next <= distance) {
+        nearest = ward;
+        distance = next;
+      }
+    }
+    if (!nearest) return;
+    this.wards.delete(nearest.key);
+    this.points = Math.min(Number.MAX_SAFE_INTEGER, this.points + 1);
+    this.emit('wardCleared', { ...nearest, points: this.points });
+    this.emit('wards', this.wardsOnScreen());
+    this.announce();
+    this.emitState();
   }
 
   sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }): void {
@@ -318,10 +361,10 @@ export class RoomManager extends EventEmitter {
       this.phase === 'idle' ? 'off' : ([...this.active].find((t) => t.kind === kind)?.status ?? 'off');
     const p = this.deps.profile();
     const members: RoomMember[] = this.phase === 'idle' ? [] : [
-      { peer: this.self, name: p.name, color: p.color, path: 'lan', status: this.status(), needsUpdate: false, noEmotes: false, muted: false, self: true },
+      { peer: this.self, name: p.name, color: p.color, path: 'lan', status: this.status(), needsUpdate: false, noEmotes: false, muted: false, self: true, points: this.points },
       ...[...this.members.values()].map((m) => ({
         peer: m.peer, name: m.name, color: m.color, path: this.path(m, now), status: m.status,
-        needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, muted: m.muted, self: false,
+        needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, muted: m.muted, self: false, points: m.points,
       })),
     ];
     return {
@@ -407,6 +450,9 @@ export class RoomManager extends EventEmitter {
     this.phase = 'idle';
     this.code = this.keys = null;
     this.members.clear();
+    this.wards.clear();
+    this.points = 0;
+    this.emit('wards', []);
     this.emoteTransfer.clear();
     this.pendingEmotes.clear();
     this.sentChunks.clear();
@@ -472,7 +518,11 @@ export class RoomManager extends EventEmitter {
     if (!target) return;
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag = { name: m.name, color: m.color };
-    if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
+    if (msg.t === 'ping' && msg.ping === 'ward') {
+      if (this.wards.size >= MAX_WARDS) return;
+      this.wards.set(`${msg.peer}:${msg.seq}`, { d: msg.d, x: msg.x, y: msg.y, tag });
+      this.emit('wards', this.wardsOnScreen());
+    } else if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
     else if (msg.t === 'text') this.emit('remoteText', { displayId: target.displayId, x, y, text: msg.text, tag } satisfies RemoteText);
     else {
       this.pendingEmotes.delete(m.peer);
@@ -489,7 +539,7 @@ export class RoomManager extends EventEmitter {
     const isNew = !m;
     if (!m) {
       m = {
-        peer: msg.peer, name: msg.name, color: msg.color, status: msg.status, needsUpdate: false, noEmotes: false, muted: false,
+        peer: msg.peer, name: msg.name, color: msg.color, status: msg.status, needsUpdate: false, noEmotes: false, muted: false, points: 0,
         firstSeen: this.deps.now(), viaInternet: false, paths: {},
       };
       this.members.set(m.peer, m);
@@ -498,6 +548,8 @@ export class RoomManager extends EventEmitter {
     m.name = msg.name;
     m.color = msg.color;
     m.status = msg.status;
+    // Presences can arrive out of order; points only increase within a peer's room session.
+    m.points = Math.max(m.points, msg.points ?? 0);
     m.needsUpdate = msg.proto !== PROTOCOL_VERSION;
     m.noEmotes = isOlderThan(msg.app, EMOTES_SINCE);
     this.heard(m, t, key);
@@ -569,7 +621,7 @@ export class RoomManager extends EventEmitter {
   private presencePacket(): Buffer {
     const p = this.deps.profile();
     const em = this.customHashes();
-    return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
+    return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(), points: this.points,
       ...(em.length ? { em } : {}) });
   }
 

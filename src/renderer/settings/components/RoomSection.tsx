@@ -1,6 +1,6 @@
 import { Button, Input, Slider, Spinner } from '@fluentui/react-components';
 import {
-  ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
+  ArrowSync24Regular, Color24Regular, Desktop24Regular, Eye24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
   SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -92,6 +92,7 @@ function MemberRow({ m }: { m: RoomMember }) {
       {m.status === 'paused' ? <span className="badge">{t.roomPaused}</span> : null}
       {m.status === 'muted' ? <span className="badge">{t.roomMutedBadge}</span> : null}
       {m.needsUpdate ? <span className="badge bad">{t.roomNeedsUpdate}</span> : null}
+      <span className="badge">{t.roomPoints(m.points)}</span>
       {m.self ? null : (
         <Button size="small" appearance={m.muted ? 'primary' : 'secondary'} onClick={() => void api.muteMember(m.peer, !m.muted)}>
           {m.muted ? t.roomUnmuteMember : t.roomMuteMember}
@@ -176,6 +177,9 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
               className={`swatch${s.tagColor === i ? ' sel' : ''}`} style={{ background: c }} onClick={() => void update({ tagColor: i })} />
           ))}
         </div>
+      </SettingRow>
+      <SettingRow icon={<Eye24Regular />} title={t.roomWards} description={t.roomWardsDesc}>
+        <Button as="a" href="#wheel">{t.roomWardsSetup}</Button>
       </SettingRow>
       {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} />}
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}

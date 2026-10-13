@@ -41,6 +41,7 @@ export class OverlayManager extends EventEmitter {
   private numberedList: NumberedDisplay[] = [];
   private wheelDisplay: number | null = null;
   private wheelKind: WheelKind = 'ping';
+  private wards: (OverlayEvents['ward:sync']['wards'][number] & { displayId: number })[] = [];
 
   /** `resolveArt` says what an emote looks like: `remote` is true for a room member's, whose files may be missing here. */
   constructor(private settings: OverlaySettings, private readonly resolveArt: (ref: EmoteRef, remote: boolean) => EmoteArt) {
@@ -131,6 +132,16 @@ export class OverlayManager extends EventEmitter {
 
   spawnText(p: { displayId: number; x: number; y: number; text: string; tag?: PingTag }): void {
     this.send(p.displayId, 'text:spawn', { text: p.text, x: p.x, y: p.y, ...(p.tag ? { tag: p.tag } : {}) });
+  }
+
+  syncWards(wards: typeof this.wards, silent = false): void {
+    this.wards = wards;
+    for (const id of this.windows.keys()) this.send(id, 'ward:sync', { wards: wards.filter((ward) => ward.displayId === id), silent });
+  }
+
+  clearWard(p: OverlayEvents['ward:clear'] & { displayId: number }): void {
+    this.wards = this.wards.filter((ward) => ward.key !== p.key);
+    this.send(p.displayId, 'ward:clear', { key: p.key, points: p.points });
   }
 
   /** Shows an emote in the middle of the main display, without sharing it (the settings page's preview). */
@@ -226,7 +237,10 @@ export class OverlayManager extends EventEmitter {
     win.setIgnoreMouseEvents(true);
     win.setAlwaysOnTop(true, 'screen-saver');
     if (IS_MAC) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-    win.webContents.on('did-finish-load', () => win.webContents.send('overlay:settings', this.settings));
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.send('overlay:settings', this.settings);
+      win.webContents.send('ward:sync', { wards: this.wards.filter((ward) => ward.displayId === d.id), silent: true });
+    });
     win.once('ready-to-show', () => {
       win.showInactive();
       win.setBounds(d.bounds); // re-apply: mixed-DPI setups can size the first frame wrong

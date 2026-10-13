@@ -32,6 +32,8 @@ export interface PresenceMsg extends Base {
   status: MemberStatus;
   /** Custom stills on the sender's wheel and centre. Optional for older peers. */
   em?: string[];
+  /** Wards cleared in this room session. Optional for older peers. */
+  points?: number;
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -111,12 +113,13 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const base = { peer, seq, ts };
   switch (t) {
     case 'presence': {
-      const { proto, app, name, color, status, em } = raw;
+      const { proto, app, name, color, status, em, points } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
       if (em !== undefined && (!Array.isArray(em) || em.length > 9 || !em.every(isHash))) return null;
+      if (points !== undefined && !isUint(points)) return null;
       return { t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
-        ...(em !== undefined ? { em: [...new Set(em as string[])] } : {}) };
+        ...(em !== undefined ? { em: [...new Set(em as string[])] } : {}), ...(points !== undefined ? { points } : {}) };
     }
     case 'ping': {
       const { ping, d, x, y } = raw;

@@ -1,6 +1,8 @@
 export type PingId =
   | 'danger' | 'push' | 'omw' | 'allin' | 'assist' | 'needvision' | 'missing' | 'enemyvision' | 'generic'
-  | 'bait' | 'visioncleared';
+  | 'bait' | 'visioncleared' | 'ward';
+
+export const WARD_CLEAR_SOUND = 'ward_clear';
 
 export interface PingDef {
   id: PingId;
@@ -28,6 +30,7 @@ export const ALL_PINGS: readonly PingDef[] = [
   { id: 'generic', name: 'Generic', icon: 'generic_ping', art: ['pingwheel_basicpingrender'], sound: 'Base', color: '#2e8bff' },
   { id: 'bait', name: 'Bait', icon: 'pingwheel_baitrender', art: ['pingwheel_baitrender'], sound: 'SRP_11', color: '#efbc12' },
   { id: 'visioncleared', name: 'Vision Cleared', icon: 'vision_cleared', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
+  { id: 'ward', name: 'Place Ward', icon: 'ward', art: ['ward'], sound: 'ward_place', color: '#63eea0' },
 ];
 
 /** The wheel as League ships it, top (N) then clockwise. Array index = slice index from pickSlice(). */
@@ -54,7 +57,7 @@ export const textureUrl = (name: string): string => `../textures/${name}.png`;
 export const soundUrl = (name: string): string => `../sounds/${name}.wav`;
 
 export function allSoundNames(): string[] {
-  return [...new Set([...ALL_PINGS.map((p) => p.sound), TICK_SOUND])];
+  return [...new Set([...ALL_PINGS.map((p) => p.sound), TICK_SOUND, WARD_CLEAR_SOUND])];
 }
 
 export function allTextureNames(): string[] {

@@ -42,7 +42,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
-const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared']);
+const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'ward']);
 
 /** The settings change for a ping wheel edit: only the fields it touches, since an undefined field would reset that setting. */
 function pingPatch(p: WheelPatch<PingId>): Partial<Settings> {

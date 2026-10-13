@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   windows: [] as any[],
   handlers: new Map<string, (event: any, raw?: unknown) => unknown>(),
   load: vi.fn<() => Promise<void>>(),
+  isMac: false,
 }));
 
 vi.mock('electron', async () => {
@@ -19,8 +20,8 @@ vi.mock('electron', async () => {
     }
     isDestroyed() { return this.destroyed; }
     removeMenu() {}
-    setAlwaysOnTop() {}
-    setVisibleOnAllWorkspaces() {}
+    setAlwaysOnTop = vi.fn();
+    setVisibleOnAllWorkspaces = vi.fn();
     destroy() { this.destroyed = true; this.emit('closed'); }
   }
   const display = { id: 2, bounds: { x: -1280, y: 0, width: 1280, height: 1024 }, workArea: { x: -1280, y: 24, width: 1280, height: 1000 } };
@@ -32,7 +33,7 @@ vi.mock('electron', async () => {
 });
 
 vi.mock('../../src/main/paths', () => ({
-  IS_MAC: false, preloadPath: () => 'text.js',
+  get IS_MAC() { return h.isMac; }, preloadPath: () => 'text.js',
   pageUrl: () => 'lolping://app/text/index.html', loadPage: () => h.load(),
 }));
 
@@ -44,6 +45,7 @@ let typing: ReturnType<typeof vi.fn<(on: boolean) => void>>;
 beforeEach(async () => {
   h.windows.length = 0;
   h.handlers.clear();
+  h.isMac = false;
   h.load.mockReset().mockResolvedValue();
   vi.resetModules();
   send = vi.fn();
@@ -55,6 +57,23 @@ beforeEach(async () => {
 const call = (channel: string, sender: unknown, raw?: unknown) => h.handlers.get(channel)!({ sender, senderFrame: { parent: null } }, raw);
 
 describe('TextInputWindow', () => {
+  it('keeps the Mac input below IME candidate panels while visible across workspaces', () => {
+    h.isMac = true;
+    input.open();
+    const w = h.windows[0];
+    expect(w.setAlwaysOnTop).toHaveBeenCalledWith(true, 'floating');
+    expect(w.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: true });
+    w.emit('ready-to-show');
+    expect(w.show).toHaveBeenCalledOnce();
+    expect(w.focus).toHaveBeenCalledOnce();
+  });
+
+  it('uses the existing screen-saver level on Windows', () => {
+    input.open();
+    expect(h.windows[0].setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
+    expect(h.windows[0].setVisibleOnAllWorkspaces).not.toHaveBeenCalled();
+  });
+
   it('opens once within the display work area and saves the original cursor position', () => {
     input.open();
     input.open();

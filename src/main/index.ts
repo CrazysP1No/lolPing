@@ -138,7 +138,7 @@ function start(): void {
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
-    profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit }),
+    profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit, pingSizePx: settings.pingSizePx }),
     customEmotes: () => [...settings.emoteWheel, settings.clickEmoteId],
     readEmote: (h) => library.readStill(h),
     resolveTarget: (d) => {
@@ -270,6 +270,9 @@ function start(): void {
   room.on('state', pushRoom);
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
+  room.on('wards', (wards) => overlays.syncWards(wards));
+  room.on('wardCleared', (p) => overlays.clearWard(p));
+  overlays.on('displays', () => overlays.syncWards(room.wardsOnScreen(), true));
   overlays.on('shared', (p: SharedPing) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendPing(p.id, shared);

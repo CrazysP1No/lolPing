@@ -16,6 +16,8 @@ export interface RoomMember {
   /** Muted by us, for this session. */
   muted: boolean;
   self: boolean;
+  /** Successful ward clears since this member joined the room. */
+  points: number;
 }
 
 export interface RoomStateCore {

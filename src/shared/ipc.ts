@@ -17,6 +17,12 @@ export interface PingTag {
   color: number;
 }
 
+/** A persistent ward on one overlay, keyed by the sender's room peer and message sequence. */
+export interface WardSprite extends Point {
+  key: string;
+  tag: PingTag;
+}
+
 /** main → overlay renderer messages. Points are CSS pixels inside that overlay. */
 export interface OverlayEvents {
   'overlay:settings': OverlaySettings;
@@ -31,6 +37,8 @@ export interface OverlayEvents {
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
   'text:spawn': Point & { text: string; tag?: PingTag };
+  'ward:sync': { wards: WardSprite[]; silent?: boolean };
+  'ward:clear': { key: string; points: number };
   'toast:show': { title: string; body: string };
 }
 
@@ -38,7 +46,7 @@ export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
-  'text:spawn', 'toast:show',
+  'text:spawn', 'ward:sync', 'ward:clear', 'toast:show',
 ];
 
 /** overlay renderer → main: string[] of asset files that failed to load. */

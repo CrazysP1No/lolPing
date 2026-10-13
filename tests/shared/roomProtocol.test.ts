@@ -11,6 +11,18 @@ const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
 
+describe('wards and room points', () => {
+  it('accepts a ward ping and optional points while keeping old presences compatible', () => {
+    expect(validateMessage({ ...ping, ping: 'ward' })).toEqual({ ...ping, ping: 'ward' });
+    expect(validateMessage({ ...presence, points: 3 })).toEqual({ ...presence, points: 3 });
+    expect(validateMessage(presence)).toEqual(presence);
+  });
+
+  it.each([-1, 1.5, Number.NaN, Infinity, 2 ** 60, '3', null])('rejects invalid points %j', (points) => {
+    expect(validateMessage({ ...presence, points })).toBeNull();
+  });
+});
+
 describe('text messages', () => {
   const text = { ...base, t: 'text', text: '一起进攻 🎮', d: 2, x: 0.25, y: 1 };
 

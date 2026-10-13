@@ -67,7 +67,7 @@ On a Mac, use **⌥ Option** instead of Alt, **⌃ Control** instead of Ctrl for
 
 Text uses **⌃⌥T** on a Mac. Up to 120 characters appear near the cursor for 5 seconds. Chinese input and paste work; Enter while choosing an input-method candidate does not send. While the input is open, wheel gestures are suspended. Pausing lolPing also disables text input. Change the combination in **Settings → Toggle → Send text shortcut**.
 
-The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait or Vision Cleared in settings. The emote wheel has 8 slots too, and you pick its emotes in settings.
+The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait, Vision Cleared or Place Ward in settings. The emote wheel has 8 slots too, and you pick its emotes in settings.
 
 ## Settings
 
@@ -109,6 +109,7 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
 - **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images are shared as stills, encrypted like pings, and cached for the current room session. The first use may briefly show "?" while the image arrives. Both ends need a build with custom image sharing; older builds keep showing "?". Friends on v0.4 or older don't see emotes, and the Room page says so under their names.
 - **Text** is shared automatically while you are in a room, at the same relative screen position with your name. Both ends need a build with text sharing; older builds ignore text while still receiving pings and emotes.
+- **Wards & points:** in **Settings → Wheel**, add **Place Ward** to a slice and keep **Enemy Vision** (the eye icon) on another. Place Ward leaves a glowing, animated ward on the other room members’ screens with a placement sound. Wards have no timeout and normal clicks or other pings cannot remove them. Aim **Enemy Vision** at a ward on your screen to clear the nearest one, play its clear effect and sound, and earn **+1 point**. Each ward counts once. The Room page shows everyone’s points; leaving or changing rooms clears your wards and resets your points. Each receiver accepts up to 32 wards across its displays, without replacing existing ones. Wards use the usual display mapping, mute and incoming limit; both ends need a build with ward support.
 - **Mute room**, muting one person, and an **Incoming ping, emote and text limit** (up to Unlimited, counted together) keep the spam under control. Pausing lolPing pauses all three too.
 - A room holds up to 8 people. Leave and create a new room to get rid of someone.
 - **Privacy:** pings, emotes, text and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes, text or name. Turn **Allow internet connections** off to stay on your local network.
@@ -172,6 +173,8 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 ## Ping assets
 
 The icons in `assets/textures` and the sounds in `assets/sounds` come from a local League of Legends install. [`tools/extract-assets`](tools/extract-assets) explains how to extract them again after a patch. The emote animations, icons and sounds in `assets/emotes` are © Riot Games too, and `tools/extract-assets --emotes` bakes them from the same install.
+
+The exceptions are `assets/textures/ward.png` (an original generated sprite with an alpha channel) and `assets/sounds/ward_place.wav` / `ward_clear.wav` (original synthesized sounds). These ward assets are included under the project’s MIT license.
 
 ## License
 

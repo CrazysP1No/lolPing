@@ -4,9 +4,9 @@ import {
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
 import {
-  DEFAULT_CLICK_PING, TICK_SOUND, allSoundNames, allTextureNames, pingById, pingsFor, soundUrl, textureUrl, type PingDef,
+  DEFAULT_CLICK_PING, TICK_SOUND, WARD_CLEAR_SOUND, allSoundNames, allTextureNames, pingById, pingsFor, soundUrl, textureUrl, type PingDef,
 } from '../../shared/pings';
-import type { PingTag } from '../../shared/ipc';
+import type { PingTag, WardSprite } from '../../shared/ipc';
 import type { WheelKind } from '../../shared/protocol';
 import { DEFAULT_SETTINGS, overlaySettings, type OverlaySettings } from '../../shared/settings';
 import { EmoteStage } from './emoteFx';
@@ -15,8 +15,12 @@ import { SoundBank } from './soundBank';
 import { showToast } from './toast';
 import { spawnText } from './textFx';
 import { Wheel, type WheelItem } from './wheel';
+import { WardStage } from './wardFx';
 
 const pingLayer = document.getElementById('pings') as HTMLElement;
+const wardLayer = document.createElement('div');
+wardLayer.id = 'wards';
+pingLayer.before(wardLayer);
 const toastLayer = document.getElementById('toasts') as HTMLElement;
 const textLayer = document.createElement('div');
 textLayer.id = 'texts';
@@ -33,6 +37,8 @@ pingLayer.after(emoteLayer);
 
 const sounds = new SoundBank();
 const stage = new EmoteStage(emoteLayer);
+const wardStage = new WardStage(wardLayer);
+let wards: WardSprite[] = [];
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
 const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
@@ -65,6 +71,7 @@ function applySettings(s: OverlaySettings): void {
   settings = s;
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map(emoteItem));
+  wardStage.sync(wards, s.pingSizePx);
 }
 applySettings(settings);
 
@@ -103,6 +110,14 @@ window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x,
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('text:spawn', (p) => spawnText(textLayer, p.text, p.x, p.y, p.tag));
+window.overlay.on('ward:sync', (p) => {
+  wards = p.wards;
+  if (wardStage.sync(wards, settings.pingSizePx) > 0 && !p.silent) sounds.play('ward_place', volume());
+});
+window.overlay.on('ward:clear', (p) => {
+  wards = wards.filter((ward) => ward.key !== p.key);
+  if (wardStage.clear(p.key)) sounds.play(WARD_CLEAR_SOUND, volume());
+});
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
 
 /** Resolves with `label` when the image at `url` doesn't load. */

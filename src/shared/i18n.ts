@@ -162,6 +162,10 @@ const en = {
   roomCopied: 'Copied',
   roomLeave: 'Leave room',
   roomYou: 'you',
+  roomPoints: (n: number) => `${n} points`,
+  roomWards: 'Wards & points',
+  roomWardsDesc: 'Add Place Ward and Enemy Vision to your wheel. Place wards on friends’ screens; aim Enemy Vision at a ward on your screen to clear it and earn +1 point. Up to 32 wards stay until cleared or you leave. Points reset when you leave or change rooms.',
+  roomWardsSetup: 'Configure wheel',
   roomPath: { lan: 'LAN', internet: 'Internet', connecting: 'Connecting…', unreachable: 'Can’t reach' } as Record<MemberPath, string>,
   roomPaused: 'paused',
   roomMutedBadge: 'muted',
@@ -194,7 +198,7 @@ const en = {
   pingNames: {
     danger: 'Danger', push: 'Push', omw: 'On My Way', allin: 'All In', assist: 'Assist Me',
     needvision: 'Need Vision', missing: 'Enemy Missing', enemyvision: 'Enemy Vision', generic: 'Generic',
-    bait: 'Bait', visioncleared: 'Vision Cleared',
+    bait: 'Bait', visioncleared: 'Vision Cleared', ward: 'Place Ward',
   } as Record<PingId, string>,
 
   // main process
@@ -414,6 +418,10 @@ const zh: Strings = {
   roomCopied: '已复制',
   roomLeave: '离开房间',
   roomYou: '你',
+  roomPoints: (n) => `${n} 积分`,
+  roomWards: '插眼与积分',
+  roomWardsDesc: '把“插眼”和“敌方视野”加入轮盘。插眼会留在朋友的屏幕上；对准自己屏幕上的眼发送“敌方视野”，排眼成功 +1 积分。当前房间最多同时接收 32 个眼，排掉或退房才消失；退房或换房后积分清零。',
+  roomWardsSetup: '配置轮盘',
   roomPath: { lan: '局域网', internet: '互联网', connecting: '正在连接…', unreachable: '无法连接' },
   roomPaused: '已暂停',
   roomMutedBadge: '已静音',
@@ -446,7 +454,7 @@ const zh: Strings = {
   pingNames: {
     danger: '危险', push: '推进', omw: '正在赶来', allin: '全力进攻', assist: '请求协助',
     needvision: '需要视野', missing: '敌人消失', enemyvision: '敌方视野', generic: '普通信号',
-    bait: '诱饵', visioncleared: '视野已清除',
+    bait: '诱饵', visioncleared: '视野已清除', ward: '插眼',
   },
 
   limitations: [

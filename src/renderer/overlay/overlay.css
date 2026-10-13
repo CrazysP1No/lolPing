@@ -1,5 +1,5 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-#pings, #emotes, #texts, #toasts { position: fixed; inset: 0; pointer-events: none; }
+#pings, #wards, #emotes, #texts, #toasts { position: fixed; inset: 0; pointer-events: none; }
 
 .textBubble {
   position: absolute; max-width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
@@ -58,7 +58,7 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
   position: absolute; left: 25%; top: 25%; width: 50%; height: 50%; border-radius: 50%;
   background: radial-gradient(closest-side, #fff, var(--c) 40%, transparent); opacity: 0; animation: flash .35s ease-out .2s forwards;
 }
-.ping .tag, .emote .tag {
+.ping .tag, .emote .tag, .ward .tag {
   position: absolute; left: 0; top: calc(var(--size) * 0.5); transform: translateX(-50%); white-space: nowrap;
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
   padding: 1px 7px; border-radius: 4px; background: rgba(8, 12, 16, .62); color: var(--tag);
@@ -75,6 +75,41 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 @keyframes slide2 { 0% { transform: translate(calc(var(--size) * -.64), calc(var(--size) * -.64)); opacity: 0 } 100% { transform: none; opacity: 1 } }
 @keyframes shake { 0%, 100% { transform: none } 25% { transform: translate(-3px, 2px) } 50% { transform: translate(3px, -2px) } 75% { transform: translate(-2px, -1px) } }
 @keyframes flash { 0% { opacity: 0; transform: scale(.3) } 30% { opacity: 1 } 100% { opacity: 0; transform: scale(2.2) } }
+
+/* ---------- room wards (persist until cleared) ---------- */
+.ward { position: absolute; width: 0; height: 0; --size: 110px; }
+.ward-art {
+  position: absolute; left: calc(var(--size) * -.5); top: calc(var(--size) * -.5);
+  width: var(--size); height: var(--size); object-fit: contain;
+  filter: drop-shadow(0 0 8px #63eea099);
+  animation: pop .35s cubic-bezier(.2,1.6,.4,1) both, wardGlow 3s ease-in-out infinite;
+}
+.ward-aura, .ward-scan {
+  position: absolute; left: calc(var(--size) * -.5); top: calc(var(--size) * -.5);
+  width: var(--size); height: var(--size); box-sizing: border-box; border-radius: 50%;
+}
+.ward-aura { background: radial-gradient(closest-side, #63eea028, transparent); animation: wardGlow 3s ease-in-out infinite; }
+.ward-scan { border: 1px solid #63eea0; box-shadow: 0 0 12px #63eea044; animation: wardScan 3s ease-out infinite; }
+.ward .tag { animation: tagIn .25s ease-out both; }
+.ward.cleared .ward-art { animation: wardBreak .45s ease-in forwards; }
+.ward.cleared .ward-aura, .ward.cleared .ward-scan { animation: wardBurst .55s ease-out forwards; }
+.ward.cleared .tag { animation: none; opacity: 0; }
+.ward-point {
+  position: absolute; left: 0; top: calc(var(--size) * -.35); color: #f5d575; white-space: nowrap;
+  font: 800 28px/1 "Segoe UI", -apple-system, sans-serif; text-shadow: 0 0 12px #c99b42, 0 2px 3px #000;
+  animation: wardPoint .85s ease-out forwards;
+}
+@keyframes wardGlow { 0%, 100% { opacity: .8 } 50% { opacity: 1 } }
+@keyframes wardScan { 0% { transform: scale(.45); opacity: .6 } 65%, 100% { transform: scale(1.5); opacity: 0 } }
+@keyframes wardBreak { 25% { transform: scale(1.15); filter: brightness(2) drop-shadow(0 0 16px #f5d575) } 100% { transform: scale(.2); opacity: 0 } }
+@keyframes wardBurst { 0% { transform: scale(.7); opacity: 1 } 100% { transform: scale(1.8); opacity: 0 } }
+@keyframes wardPoint { 0% { transform: translate(-50%, 0) scale(.6); opacity: 0 } 20% { opacity: 1; transform: translate(-50%, -8px) scale(1.1) } 100% { transform: translate(-50%, -50px); opacity: 0 } }
+@media (prefers-reduced-motion: reduce) {
+  .ward-art, .ward-aura, .ward-scan { animation: none; }
+  .ward-scan { display: none; }
+  .ward.cleared .ward-art, .ward.cleared .ward-aura { animation: none; opacity: 0; }
+  .ward-point { animation: none; transform: translateX(-50%); }
+}
 
 /* ---------- emotes (--size is the art's width, --dur the 3 s they stay) ---------- */
 .emote { position: absolute; width: 0; height: 0; pointer-events: none; --size: 150px; --dur: 3s; }

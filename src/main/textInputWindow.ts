@@ -55,7 +55,8 @@ export class TextInputWindow {
     this.position = { displayId: display.id, x: cursor.x - display.bounds.x, y: cursor.y - display.bounds.y };
     this.deps.setTyping(true);
     if (!IS_MAC) w.removeMenu();
-    w.setAlwaysOnTop(true, 'screen-saver');
+    // macOS IME candidate panels must be able to appear above this input window.
+    w.setAlwaysOnTop(true, IS_MAC ? 'floating' : 'screen-saver');
     if (IS_MAC) w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     const cancel = () => { if (this.win === w) this.cancel(); };
     w.on('blur', cancel);

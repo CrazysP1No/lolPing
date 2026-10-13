@@ -62,6 +62,8 @@ beforeEach(async () => {
   h.windows.length = 0;
   h.handlers.clear();
   vi.resetModules();
+  const { screen } = await import('electron');
+  screen.removeAllListeners();
   const { OverlayManager } = await import('../../src/main/overlayManager');
   resolveArt = vi.fn(art);
   mgr = new OverlayManager(overlaySettings({ ...DEFAULT_SETTINGS, clickEmoteId: 'okay' }), resolveArt);
@@ -173,5 +175,33 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(sent(0)).toEqual([['emote:spawn', { owner: 'preview', art: art('nice', false), x: 960, y: 540 }]]);
     expect(sent(1)).toEqual([]);
     expect(shared).not.toHaveBeenCalled();
+  });
+});
+
+describe('OverlayManager wards', () => {
+  const ward = { key: 'peer:2', displayId: 2, x: 5, y: 6, tag: { name: 'Bob', color: 2 } };
+
+  it('sends a ward snapshot to its display and empty snapshots to the others', () => {
+    mgr.syncWards([ward]);
+    expect(sent(1)).toEqual([['ward:sync', { wards: [ward], silent: false }]]);
+    expect(sent(0)).toEqual([['ward:sync', { wards: [], silent: false }]]);
+  });
+
+  it('restores wards silently after an overlay reload', () => {
+    mgr.syncWards([ward]);
+    h.windows[1].webContents.send.mockClear();
+    (h.windows[1].webContents as unknown as { emit(event: string): void }).emit('did-finish-load');
+    expect(sent(1)).toEqual([['ward:sync', { wards: [ward], silent: true }]]);
+  });
+
+  it('plays the clear effect only on the target display and forgets the cleared ward on reload', () => {
+    mgr.syncWards([ward]);
+    h.windows.forEach((w) => w.webContents.send.mockClear());
+    mgr.clearWard({ ...ward, points: 1 });
+    expect(sent(1)).toEqual([['ward:clear', { key: ward.key, points: 1 }]]);
+    expect(sent(0)).toEqual([]);
+    h.windows[1].webContents.send.mockClear();
+    (h.windows[1].webContents as unknown as { emit(event: string): void }).emit('did-finish-load');
+    expect(sent(1)).toEqual([['ward:sync', { wards: [], silent: true }]]);
   });
 });

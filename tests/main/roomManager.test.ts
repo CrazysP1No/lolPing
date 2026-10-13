@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
-import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast, type RemoteText } from '../../src/main/roomManager';
+import { MAX_WARDS, RoomManager, type RemoteEmote, type RemotePing, type RoomToast, type RemoteText } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
@@ -32,7 +32,8 @@ class Remote {
 
 let lan: FakeTransport;
 let room: RoomManager;
-let profile: { name: string; color: number; limit: number };
+let profile: { name: string; color: number; limit: number; pingSizePx?: number };
+let resolveTarget: (d: number) => { displayId: number; width: number; height: number } | null;
 let pings: RemotePing[];
 let emotes: RemoteEmote[];
 let texts: RemoteText[];
@@ -54,6 +55,7 @@ beforeEach(() => {
   vi.useFakeTimers({ now: 1_780_000_000_000 });
   lan = new FakeTransport('lan');
   profile = { name: 'Me', color: 1, limit: 5 };
+  resolveTarget = (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null);
   pings = [];
   emotes = [];
   texts = [];
@@ -66,7 +68,7 @@ beforeEach(() => {
     deriveKeys: async () => KEYS,
     appVersion: '0.3.0',
     profile: () => profile,
-    resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
+    resolveTarget: (d) => resolveTarget(d),
   });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
   room.on('remoteEmote', (p: RemoteEmote) => emotes.push(p));
@@ -137,6 +139,164 @@ describe('room text', () => {
     lan.sent = [];
     room.sendText('进攻', { d: 1, x: 0.5, y: 0.25 });
     expect(lan.sent).toEqual([]);
+  });
+});
+
+describe('room wards and points', () => {
+  const here = { d: 1, x: 0.5, y: 0.25 };
+
+  it('keeps a received ward after ordinary pings expire and its sender leaves', async () => {
+    await joinActive();
+    const wards = vi.fn();
+    room.on('wards', wards);
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence({ name: 'Alex', color: 4 });
+    remote.ping({ ping: 'ward' });
+    expect(wards).toHaveBeenCalledExactlyOnceWith([
+      { key: `${remote.peer}:2`, displayId: 100, x: 960, y: 270, tag: { name: 'Alex', color: 4 } },
+    ]);
+    expect(pings).toEqual([]);
+    remote.bye();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(wards).toHaveBeenCalledTimes(1);
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(1);
+    expect(wards).toHaveBeenLastCalledWith([]);
+  });
+
+  it('only clears a nearby ward through our Enemy Vision ping and awards one point once', async () => {
+    await joinActive();
+    const cleared = vi.fn();
+    room.on('wardCleared', cleared);
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping({ ping: 'ward' });
+    for (const ping of ['danger', 'needvision', 'visioncleared'] as const) room.sendPing(ping, here);
+    room.sendPing('enemyvision', { ...here, x: 0.9 });
+    remote.ping({ ping: 'enemyvision' });
+    expect(room.state().members[0].points).toBe(0);
+    expect(cleared).not.toHaveBeenCalled();
+    room.sendPing('enemyvision', { ...here, x: 0.51 });
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(1);
+    expect(cleared).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ key: `${remote.peer}:2`, points: 1 }));
+    expect(sentMessages('*')).toContainEqual(expect.objectContaining({ t: 'presence', points: 1 }));
+  });
+
+  it('clears only the nearest ward when several overlap', async () => {
+    await joinActive();
+    profile.limit = 0;
+    const cleared = vi.fn();
+    room.on('wardCleared', cleared);
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping({ ping: 'ward', x: 0.51 });
+    remote.ping({ ping: 'ward' });
+    room.sendPing('enemyvision', here);
+    expect(cleared).toHaveBeenLastCalledWith(expect.objectContaining({ key: `${remote.peer}:3` }));
+    expect(room.state().members[0].points).toBe(1);
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(2);
+  });
+
+  it('rejects duplicate packets and caps wards without evicting existing ones', async () => {
+    await joinActive();
+    profile.limit = 0;
+    const wards = vi.fn();
+    room.on('wards', wards);
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    const packet = remote.packet({ t: 'ping', ping: 'ward', ...here });
+    lan.deliver(remote.key, packet);
+    lan.deliver(remote.key, packet);
+    expect(wards).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < MAX_WARDS; i++) remote.ping({ ping: 'ward', x: 0.75 });
+    expect(wards).toHaveBeenCalledTimes(MAX_WARDS);
+    expect(wards.mock.calls.at(-1)![0]).toHaveLength(MAX_WARDS);
+    expect(wards.mock.calls.at(-1)![0][0].key).toBe(`${remote.peer}:2`);
+    room.sendPing('enemyvision', here);
+    remote.ping({ ping: 'ward' });
+    expect(wards.mock.calls.at(-1)![0]).toHaveLength(MAX_WARDS);
+  });
+
+  it('remaps wards after a display is resized or removed and clears them only on their current display', async () => {
+    await joinActive();
+    resolveTarget = (d) => ({ displayId: d === 2 ? 200 : 100, width: 1920, height: 1080 });
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping({ ping: 'ward', d: 2 });
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(0);
+    resolveTarget = () => ({ displayId: 100, width: 1280, height: 720 }); // display 2 now falls back to the primary
+    expect(room.wardsOnScreen()).toEqual([expect.objectContaining({ displayId: 100, x: 640, y: 180 })]);
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(1);
+  });
+
+  it('uses the displayed ward size as the clear radius', async () => {
+    await joinActive();
+    profile.pingSizePx = 220;
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping({ ping: 'ward' });
+    room.sendPing('enemyvision', { ...here, x: 0.5 + 120 / 1920 });
+    expect(room.state().members[0].points).toBe(0);
+    room.sendPing('enemyvision', { ...here, x: 0.5 + 100 / 1920 });
+    expect(room.state().members[0].points).toBe(1);
+  });
+
+  it.each(['paused', 'roomMuted', 'memberMuted', 'incompatible', 'unknown'] as const)('ignores new wards when %s', async (flag) => {
+    await joinActive();
+    const wards = vi.fn();
+    room.on('wards', wards);
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    if (flag !== 'unknown') remote.presence({ proto: flag === 'incompatible' ? 2 : 1 });
+    if (flag === 'paused') room.setStatusFlags({ paused: true, roomMuted: false });
+    if (flag === 'roomMuted') room.setStatusFlags({ paused: false, roomMuted: true });
+    if (flag === 'memberMuted') room.muteMember(remote.peer, true);
+    remote.ping({ ping: 'ward' });
+    expect(wards).not.toHaveBeenCalled();
+  });
+
+  it('does not clear wards or earn points while paused', async () => {
+    await joinActive();
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping({ ping: 'ward' });
+    room.setStatusFlags({ paused: true, roomMuted: false });
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(0);
+    room.setStatusFlags({ paused: false, roomMuted: false });
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(1);
+  });
+
+  it('shares points with the room and ignores an older presence arriving later', async () => {
+    await joinActive();
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    const older = remote.packet({ t: 'presence', proto: 1, app: '0.5.2', name: 'Alex', color: 4, status: 'on', points: 1 });
+    remote.presence({ points: 3 });
+    lan.deliver(remote.key, older);
+    expect(room.state().members[1].points).toBe(3);
+  });
+
+  it('clears wards and resets points when leaving or joining another room', async () => {
+    await joinActive();
+    const wards = vi.fn();
+    room.on('wards', wards);
+    const remote = new Remote('1111111111111111', 'lan:a', lan);
+    remote.presence();
+    remote.ping({ ping: 'ward' });
+    room.sendPing('enemyvision', here);
+    remote.ping({ ping: 'ward' });
+    expect(room.state().members[0].points).toBe(1);
+    const other = makeRoomCode(Uint8Array.from([9, 9, 9, 9, 9, 9, 9, 9, 9]));
+    await room.join(other);
+    expect(wards).toHaveBeenLastCalledWith([]);
+    expect(room.state().members[0].points).toBe(0);
+    room.sendPing('enemyvision', here);
+    expect(room.state().members[0].points).toBe(0);
   });
 });
 
