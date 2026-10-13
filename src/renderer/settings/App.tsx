@@ -93,6 +93,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+  const [textHotkeyError, setTextHotkeyError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
   const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
@@ -179,6 +180,17 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         </SettingRow>
         <SwitchRow icon={<Power24Regular />} title={t.startEnabled} description={t.startEnabledDesc}
           checked={s.enabledOnStart} onChange={(v) => void update({ enabledOnStart: v })} />
+        <SettingRow icon={<Keyboard24Regular />} title={t.textShortcut} description={t.textShortcutDesc}>
+          <KeyCapture
+            parts={hotkeyParts(s.textHotkey, PLATFORM)}
+            requireModifier
+            error={textHotkeyError}
+            onCapture={async (c) => {
+              const result = await update({ textHotkey: c });
+              setTextHotkeyError(result.ok ? null : result.error);
+            }}
+          />
+        </SettingRow>
 
         <div className="section" id="pings">{t.navPings}</div>
         <SliderRow limit="pingSizePx" icon={<ResizeLarge24Regular />} title={t.pingSize} value={s.pingSizePx}

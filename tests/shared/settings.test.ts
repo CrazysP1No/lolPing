@@ -48,6 +48,23 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ toggleHotkey: { mods: 99, vk: 0x4b } }).toggleHotkey).toEqual(DEFAULT_SETTINGS.toggleHotkey);
   });
 
+  it('keeps a valid text shortcut and otherwise uses its own default', () => {
+    expect(normalizeSettings({ textHotkey: { mods: MOD.win, vk: 0x59 } }).textHotkey).toEqual({ mods: MOD.win, vk: 0x59 });
+    expect(normalizeSettings({ textHotkey: { mods: MOD.shift, vk: 0x59 } }).textHotkey).toEqual(DEFAULT_SETTINGS.textHotkey);
+    expect(normalizeSettings({ textHotkey: null }).textHotkey).toEqual(DEFAULT_SETTINGS.textHotkey);
+  });
+
+  it('keeps the enable shortcut and moves text to a safe fallback when they clash', () => {
+    expect(normalizeSettings({ toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 } })).toMatchObject({
+      toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 },
+      textHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x59 },
+    });
+    expect(normalizeSettings({
+      toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x58 },
+      textHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x58 },
+    }).textHotkey).toEqual(DEFAULT_SETTINGS.textHotkey);
+  });
+
   it('rejects a Shift-only toggle hotkey (it would swallow ordinary typing)', () => {
     expect(normalizeSettings({ toggleHotkey: { mods: MOD.shift, vk: 0x41 } }).toggleHotkey).toEqual(DEFAULT_SETTINGS.toggleHotkey);
     expect(normalizeSettings({ toggleHotkey: { mods: MOD.ctrl | MOD.shift, vk: 0x41 } }).toggleHotkey).toEqual({ mods: 5, vk: 0x41 });
@@ -81,6 +98,7 @@ describe('normalizeSettings', () => {
 
   it('does not share the default hotkey object', () => {
     expect(normalizeSettings(undefined).toggleHotkey).not.toBe(DEFAULT_SETTINGS.toggleHotkey);
+    expect(normalizeSettings(undefined).textHotkey).not.toBe(DEFAULT_SETTINGS.textHotkey);
   });
 });
 

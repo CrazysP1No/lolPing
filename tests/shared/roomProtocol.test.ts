@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type EmoteMsg, type PingMsg,
-  type PresenceMsg, type RoomMessage,
+  clampNameInput, decodeMessage, encodeMessage, isOlderThan, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
+  type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
 const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on' };
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
+const text: TextMsg = { ...base, t: 'text', text: 'Group mid', d: 2, x: 0.25, y: 1 };
 const CUSTOM_REF = `c:${'0123456789abcdef'.repeat(2)}`;
 
 describe('encode / decode', () => {
-  it.each<RoomMessage>([presence, ping, { ...base, t: 'bye' }])('round-trips $t', (m) => {
+  it.each<RoomMessage>([presence, ping, emote, text, { ...base, t: 'bye' }])('round-trips $t', (m) => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
@@ -24,8 +25,34 @@ describe('encode / decode', () => {
     expect(decodeMessage(encodeMessage({ ...emote, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
   });
 
+  it('rounds a text popup’s x and y to 4 decimals too', () => {
+    expect(decodeMessage(encodeMessage({ ...text, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
+  });
+
   it('rejects bytes that are not JSON', () => {
     expect(decodeMessage(new TextEncoder().encode('{nope'))).toBeNull();
+  });
+});
+
+describe('text messages', () => {
+  it('sanitises unsafe characters and limits text by code point', () => {
+    expect(sanitizeText('  Go\u202e mid\u0000  ')).toBe('Go mid');
+    expect([...sanitizeText('😀'.repeat(MAX_TEXT + 5))]).toHaveLength(MAX_TEXT);
+  });
+
+  it('validates and keeps known fields only', () => {
+    expect(validateMessage({ ...text, extra: 'ignored' })).toEqual(text);
+    expect(validateMessage({ ...text, text: '  Go\u202e mid\u0000  ' })).toEqual({ ...text, text: 'Go mid' });
+  });
+
+  it.each([
+    ['empty text', { ...text, text: '' }],
+    ['blank text', { ...text, text: '   ' }],
+    ['non-string text', { ...text, text: 7 }],
+    ['display 0', { ...text, d: 0 }],
+    ['x above 1', { ...text, x: 1.1 }],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateMessage(raw)).toBeNull();
   });
 });
 

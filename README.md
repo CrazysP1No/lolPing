@@ -59,6 +59,7 @@ Updating from v0.4 or earlier: download the new version by hand once. From v0.5 
 | Emote | Hold **Ctrl**, drag, and let go on an emote |
 | Cancel | Let go in the centre, right-click, or press **Esc** |
 | Pause or resume pinging | **Ctrl + Alt + P** |
+| Open the custom text popup | **Ctrl + Alt + T**, type, then press **Enter** |
 | Open settings | Click the tray icon |
 | Quit, or restart the input helper | Right-click the tray icon |
 
@@ -74,6 +75,7 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 - **Alt + click places a ping:** off by default, so ordinary Alt + click shortcuts keep working. The ping is the one in the centre of the wheel editor (Generic unless you change it).
 - **Pause in fullscreen apps:** on by default. A fullscreen game keeps every click — trigger + click does nothing there — and gestures resume on the desktop and on other monitors. Windowed games aren't detected, and with an auto-hiding taskbar only borderless fullscreen counts. Windows only for now.
 - **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
+- **Text popup shortcut:** opens a small dialog; send any custom text to pop it up at the pointer. Room members see it too.
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
 - **Wheel:** drag any ping onto any slice, including Bait and Vision Cleared, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
 - **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only.
@@ -103,10 +105,10 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - **Same network:** the first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
 - **Different networks:** with **Allow internet connections** on (the default), friends anywhere join with the same code. Their pings travel through free public [Nostr](https://nostr.com) relays and take a moment longer than on a local network, which is still used whenever it works. Virtual LANs such as ZeroTier or Radmin VPN work too, and Tailscale users simply connect over the internet.
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
-- **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images show as a "?" to friends for now. Friends on v0.4 or older don't see emotes, and the Room page says so under their names.
-- **Mute room**, muting one person, and an **Incoming ping and emote limit** (up to Unlimited, counted for both together) keep the spam under control. Pausing lolPing with the shortcut pauses room pings and emotes too.
+- **Emotes and custom text** travel like pings: friends see yours on their own screen with your name under it. Your own images show as a "?" to friends for now. Friends on older versions may not see newer message types.
+- **Mute room**, muting one person, and an **Incoming ping, emote and text limit** (up to Unlimited, counted together) keep the spam under control. Pausing lolPing with the shortcut pauses all room content too.
 - A room holds up to 8 people. Leave and create a new room to get rid of someone.
-- **Privacy:** pings, emotes and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes or name. Turn **Allow internet connections** off to stay on your local network.
+- **Privacy:** pings, emotes, custom text and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your content or name. Turn **Allow internet connections** off to stay on your local network.
 
 ## Known limitations
 

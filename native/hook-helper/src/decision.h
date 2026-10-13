@@ -43,11 +43,13 @@ struct Config {
   int dragThresholdPx = 8;
   uint32_t toggleMods = ModCtrl | ModAlt;
   uint32_t toggleVk = 0x50;  // 'P'
+  uint32_t textMods = ModCtrl | ModAlt;
+  uint32_t textVk = 0x54;  // 'T'
   bool enabled = true;
 };
 
 struct Emit {
-  enum class Kind { WheelOpen, WheelMove, WheelRelease, Click, Cancel, Toggled } kind;
+  enum class Kind { WheelOpen, WheelMove, WheelRelease, Click, Cancel, Toggled, TextRequested } kind;
   int x = 0;
   int y = 0;
   WheelKind wheel = WheelKind::Ping;  // point events only: the wheel whose trigger started the gesture

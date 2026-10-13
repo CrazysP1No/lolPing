@@ -1,5 +1,5 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
-#pings, #emotes, #toasts { position: fixed; inset: 0; pointer-events: none; }
+#pings, #emotes, #texts, #toasts { position: fixed; inset: 0; pointer-events: none; }
 
 /* ---------- wheel ---------- */
 #wheel, #emoteWheel {
@@ -92,6 +92,25 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 @keyframes emoteIn { 0% { transform: scale(0) } 60% { transform: scale(1.15) } 100% { transform: scale(1) } }
 @keyframes emoteBob { 0%, 100% { translate: 0 0 } 25% { translate: 0 -4px } 75% { translate: 0 4px } }
 @keyframes emoteOut { from { transform: scale(1); opacity: 1 } to { transform: scale(.85); opacity: 0 } }
+
+/* ---------- custom text ---------- */
+.text-pop {
+  --tag: #c8aa6e; position: absolute; max-width: min(420px, calc(100vw - 32px)); transform: translate(-50%, -100%);
+  color: #f0e6d2; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .5));
+  animation: textIn .2s cubic-bezier(.2, 1.5, .4, 1) both, textOut .35s ease-in 4.65s forwards;
+}
+.text-body {
+  position: relative; padding: 10px 14px; border: 1px solid #c8aa6e; border-radius: 8px;
+  background: rgba(10, 20, 28, .94); overflow-wrap: anywhere; white-space: pre-wrap;
+  font: 600 17px/1.35 "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif; text-shadow: 0 1px 2px #000;
+}
+.text-body::after {
+  content: ''; position: absolute; left: calc(50% - 6px); bottom: -7px; width: 12px; height: 12px;
+  background: rgba(10, 20, 28, .94); border: solid #c8aa6e; border-width: 0 1px 1px 0; transform: rotate(45deg);
+}
+.text-name { margin-top: 8px; color: var(--tag); text-align: center; font: 600 12px/16px "Segoe UI Variable Text", "Segoe UI", sans-serif; text-shadow: 0 1px 2px #000; }
+@keyframes textIn { from { transform: translate(-50%, calc(-100% + 8px)) scale(.85); opacity: 0 } }
+@keyframes textOut { to { transform: translate(-50%, calc(-100% - 8px)); opacity: 0 } }
 
 /* ---------- toast ---------- */
 .toast {

@@ -16,6 +16,7 @@ std::string formatEmit(const Emit& e) {
     case Emit::Kind::Click: return pt("click");
     case Emit::Kind::Cancel: return "{\"type\":\"cancel\"}";
     case Emit::Kind::Toggled: return std::string("{\"type\":\"toggled\",\"enabled\":") + (e.enabled ? "true" : "false") + "}";
+    case Emit::Kind::TextRequested: return "{\"type\":\"textRequested\"}";
   }
   return "{}";
 }
@@ -39,8 +40,8 @@ void Output::line(std::string s) {
 
 void Output::emit(const Emit& e) { line(formatEmit(e)); }
 
-// Version 2: point events say which wheel they belong to, and the config takes an emote trigger.
-void Output::ready() { line("{\"type\":\"ready\",\"version\":2}"); }
+// Version 3: the config takes a text shortcut and can emit textRequested.
+void Output::ready() { line("{\"type\":\"ready\",\"version\":3}"); }
 
 void Output::error(const std::string& message) { line("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}"); }
 

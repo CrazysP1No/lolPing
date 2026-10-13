@@ -55,6 +55,14 @@ export interface RemoteEmote {
   tag: { name: string; color: number };
 }
 
+export interface RemoteText {
+  displayId: number;
+  x: number;
+  y: number;
+  text: string;
+  tag: { name: string; color: number };
+}
+
 export type RoomToast =
   | { kind: 'joined' | 'left' | 'disconnected'; name: string }
   | { kind: 'joinedRoom'; code: string }
@@ -176,6 +184,10 @@ export class RoomManager extends EventEmitter {
 
   sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }): void {
     this.sendShared({ t: 'emote', e, ...shared });
+  }
+
+  sendText(text: string, shared: { d: number; x: number; y: number }): void {
+    this.sendShared({ t: 'text', text, ...shared });
   }
 
   /** A ping or an emote: each member gets it over its own route; shared transports get one send, within the relay cap. */
@@ -380,7 +392,7 @@ export class RoomManager extends EventEmitter {
     }
     if (!m) return;
     this.heard(m, t, key);
-    // Pings and emotes pass the same gates and share one budget per member.
+    // Pings, emotes and text pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
     if (!this.limiter.allow(m.peer, this.deps.profile().limit)) return;
     const target = this.deps.resolveTarget(msg.d);
@@ -388,7 +400,8 @@ export class RoomManager extends EventEmitter {
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag = { name: m.name, color: m.color };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
-    else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
+    else if (msg.t === 'emote') this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
+    else this.emit('remoteText', { displayId: target.displayId, x, y, text: msg.text, tag } satisfies RemoteText);
   }
 
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {

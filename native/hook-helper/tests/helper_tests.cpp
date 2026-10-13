@@ -378,6 +378,32 @@ static void test_hotkey_ignored_while_suspended() {
   CHECK(!d.onEvent(md(Btn::Left, 1, 1)).swallow);  // suspended: no gestures either
 }
 
+static void test_text_hotkey_requests_once() {
+  Config c;
+  c.trigger = Trigger::CustomVk;
+  c.triggerVk = KEY_T;  // the complete shortcut must win over this swallowed custom trigger
+  Decision d;
+  d.setConfig(c);
+  d.onEvent(kd(CTRL));
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::TextRequested) != nullptr);
+  Result repeat = d.onEvent(kd(KEY_T));
+  CHECK(repeat.swallow);
+  CHECK(findEmit(repeat, Emit::Kind::TextRequested) == nullptr);
+  CHECK(d.onEvent(ku(KEY_T)).swallow);
+}
+
+static void test_text_hotkey_ignored_while_suspended() {
+  Decision d;
+  d.setSuspended(true);
+  d.onEvent(kd(CTRL));
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+}
+
 static void test_disabling_mid_drag_cancels_and_swallows_up() {
   Decision d;
   openWheel(d);
@@ -763,6 +789,12 @@ static void test_parse_config_emote_fields() {
   CHECK(parseCommand(R"({"type":"config","trigger":"off"})", cur).kind == Command::Kind::Invalid);  // pings always have a trigger
 }
 
+static void test_parse_config_text_hotkey() {
+  const Config cur;
+  const Command c = parseCommand(R"({"type":"config","textMods":9,"textVk":89})", cur);
+  CHECK(c.kind == Command::Kind::Config && c.config.textMods == 9 && c.config.textVk == 89);
+}
+
 static void test_json_parses_flat_objects() {
   std::map<std::string, std::string> m;
   CHECK(parseFlatJson(R"({"type":"config","enabled":true,"dragThresholdPx":8,"trigger":"alt"})", m));
@@ -792,6 +824,7 @@ static void test_format_emit() {
   toggled.enabled = true;
   CHECK(formatEmit(toggled) == R"({"type":"toggled","enabled":true})");
   CHECK(formatEmit(Emit{Emit::Kind::Cancel}) == R"({"type":"cancel"})");
+  CHECK(formatEmit(Emit{Emit::Kind::TextRequested}) == R"({"type":"textRequested"})");
 }
 
 static void test_format_emit_includes_wheel() {
@@ -916,6 +949,7 @@ int main() {
   test_format_emit();
   test_format_emit_includes_wheel();
   test_parse_config_emote_fields();
+  test_parse_config_text_hotkey();
   test_output_never_blocks_producer();
   test_alt_drag_opens_wheel_and_releases();
   test_plain_click_passes_through();
@@ -938,6 +972,8 @@ int main() {
   test_toggle_hotkey_disables_and_enables();
   test_hotkey_autorepeat_toggles_once();
   test_hotkey_ignored_while_suspended();
+  test_text_hotkey_requests_once();
+  test_text_hotkey_ignored_while_suspended();
   test_disabling_mid_drag_cancels_and_swallows_up();
   test_config_change_mid_drag_cancels();
   test_lost_up_recovers_on_next_press();

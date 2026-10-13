@@ -11,6 +11,7 @@ describe('parseHelperLine', () => {
     expect(parseHelperLine('{"type":"click","x":5,"y":6}')).toEqual({ type: 'click', x: 5, y: 6, wheel: 'ping' });
     expect(parseHelperLine('{"type":"cancel"}')).toEqual({ type: 'cancel' });
     expect(parseHelperLine('{"type":"toggled","enabled":false}')).toEqual({ type: 'toggled', enabled: false });
+    expect(parseHelperLine('{"type":"textRequested"}')).toEqual({ type: 'textRequested' });
     expect(parseHelperLine('{"type":"error","message":"boom"}')).toEqual({ type: 'error', message: 'boom' });
     expect(parseHelperLine('{"type":"error","code":"noAccess","message":"x"}')).toEqual({ type: 'error', code: 'noAccess', message: 'x' });
     expect(parseHelperLine('{"type":"sim","swallow":true,"inject":"down:left"}')).toEqual({ type: 'sim', swallow: true, inject: 'down:left' });
@@ -39,7 +40,7 @@ describe('commands', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
       type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true,
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, dragThresholdPx: 8,
-      toggleMods: 3, toggleVk: 0x50, enabled: true,
+      toggleMods: 3, toggleVk: 0x50, textMods: 3, textVk: 0x54, enabled: true,
     });
   });
 
