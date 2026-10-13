@@ -9,12 +9,12 @@ const SIZE = 300;
 const C = SIZE / 2;
 const R_IN = 52;
 const R_OUT = 146;
-const R_ICON = 100;
+const R_ICON = 110;
 const GAP = 0.035;
 const pt = (r: number, a: number): string => `${C + r * Math.sin(a)},${C - r * Math.cos(a)}`;
-const wedgePath = (i: number): string => {
-  const a0 = ((i - 0.5) * Math.PI) / 4 + GAP;
-  const a1 = ((i + 0.5) * Math.PI) / 4 - GAP;
+const wedgePath = (i: number, slots: number): string => {
+  const a0 = ((i - 0.5) * Math.PI * 2) / slots + GAP;
+  const a1 = ((i + 0.5) * Math.PI * 2) / slots - GAP;
   return `M${pt(R_IN, a0)} A${R_IN},${R_IN} 0 0 1 ${pt(R_IN, a1)} L${pt(R_OUT, a1)} A${R_OUT},${R_OUT} 0 0 0 ${pt(R_OUT, a0)}Z`;
 };
 
@@ -33,6 +33,7 @@ interface Props<T extends string> {
   centerOn: boolean;
   trigger: string;
   pool: readonly PoolItem<T>[];
+  allowDuplicates?: boolean;
   defaults: { wheel: readonly T[]; center: T };
   labels: { title: string; desc: string; poolTitle: string; poolDesc: string };
   /** Rendered under the pool's tiles, outside their scroll box, so it stays in view however long the pool is. */
@@ -51,7 +52,7 @@ const activate = (fn: () => void) => (e: KeyboardEvent) => {
 };
 
 export function WheelEditor<T extends string>({
-  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onChange, onPreview,
+  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onChange, onPreview, allowDuplicates = false,
 }: Props<T>) {
   const t = useText();
   const [picked, setPicked] = useState<WheelSource<T> | null>(null);
@@ -68,7 +69,7 @@ export function WheelEditor<T extends string>({
   }, []);
 
   const apply = (src: WheelSource<T>, target: WheelTarget) => {
-    const patch = dropPatch(wheel, center, src, target);
+    const patch = dropPatch(wheel, center, src, target, allowDuplicates);
     if (patch) onChange(patch);
     setPicked(null);
   };
@@ -152,12 +153,12 @@ export function WheelEditor<T extends string>({
         <div className="weWheel" style={{ width: SIZE, height: SIZE }}>
           <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
             {wheel.map((id, i) => (
-              <path key={i} d={wedgePath(i)} className={`weWedge${hot === i ? ' hot' : ''}`} {...dropProps(i)}
+              <path key={i} d={wedgePath(i, wheel.length)} className={`weWedge${hot === i ? ' hot' : ''}`} {...dropProps(i)}
                 onClick={() => clickTarget(i, { from: 'slot', id, slot: i })} />
             ))}
           </svg>
           {wheel.map((id, i) => {
-            const a = (i * Math.PI) / 4;
+            const a = (i * Math.PI * 2) / wheel.length;
             const label = t.wheelSlotLabel(t.slotNames[i], name(id));
             return (
               <div key={i} role="button" tabIndex={0} aria-label={label} title={label}

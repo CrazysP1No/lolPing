@@ -67,7 +67,7 @@ On a Mac, use **⌥ Option** instead of Alt, **⌃ Control** instead of Ctrl for
 
 Text uses **⌃⌥T** on a Mac. Up to 120 characters appear near the cursor for 5 seconds. Chinese input and paste work; Enter while choosing an input-method candidate does not send. While the input is open, wheel gestures are suspended. Pausing lolPing also disables text input. Change the combination in **Settings → Toggle → Send text shortcut**.
 
-The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait, Vision Cleared or Place Ward in settings. The emote wheel has 8 slots too, and you pick its emotes in settings.
+Both the ping wheel and the emote wheel have 16 slots. The original eight pings retain their compass directions, with extra slots between them for Bait, Vision Cleared, Place Ward and five loot orb styles: gray, blue, gold, prismatic and void. Ping slots may repeat a signal. Customize either wheel in settings; existing eight-slot layouts expand automatically while preserving their directions. For a saved 16-slot layout, drag orbs from All pings onto the wheel, or reset it to the new defaults.
 
 ## Settings
 
@@ -79,8 +79,8 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 - **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
 - **Send text shortcut:** Ctrl + Alt + T by default, editable like the pause shortcut; the two combinations must differ.
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
-- **Wheel:** drag any ping onto any slice, including Bait and Vision Cleared, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
-- **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only.
+- **Wheel:** drag any ping onto any slice, including Bait, Vision Cleared and the five loot orb styles, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back the 16-slot default layout.
+- **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the 16-slot emote wheel. **Add image or video…**, or dropping files on the list, adds up to 100 custom images and videos in total. Images accept PNG, JPG, GIF or WebP (up to 8 MB, 8192 px); videos accept MP4 or WebM (up to 20 MB, 1920 px on the longest side, using a codec supported by Electron). Videos play muted from the start and disappear when playback finishes. Images and animated images retain their three-second display time. Friends in rooms receive a still; original animations and videos play locally only.
 - **Launch at Windows startup** (**Open at login** on a Mac): starts hidden in the tray or menu bar.
 - **Language:** follows the system display language, or pick English or 简体中文.
 
@@ -174,7 +174,7 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 
 The icons in `assets/textures` and the sounds in `assets/sounds` come from a local League of Legends install. [`tools/extract-assets`](tools/extract-assets) explains how to extract them again after a patch. The emote animations, icons and sounds in `assets/emotes` are © Riot Games too, and `tools/extract-assets --emotes` bakes them from the same install.
 
-The exceptions are `assets/textures/ward.png` (an original generated sprite with an alpha channel) and `assets/sounds/ward_place.wav` / `ward_clear.wav` (original synthesized sounds). These ward assets are included under the project’s MIT license.
+The exceptions are `assets/textures/ward.png` and `orb_*.png` (original generated sprites with alpha channels) and `assets/sounds/ward_place.wav` / `ward_clear.wav` (original synthesized sounds). These original assets are included under the project’s MIT license. The loot orb sprites are TFT-inspired originals; their prompts and production notes are in [docs/orb-assets.md](docs/orb-assets.md).
 
 ## License
 

@@ -11,7 +11,7 @@ import { isTagColor } from './roomColors';
 import { parseRoomCode } from './roomCode';
 import { sanitizeName } from './roomProtocol';
 import { isVersion } from './update';
-import { isValidWheel } from './wheelLayout';
+import { normalizePingWheel } from './wheelLayout';
 
 export type NamedTrigger = 'alt' | 'ctrl' | 'shift' | 'win' | 'capslock' | 'mouse4' | 'mouse5';
 export type TriggerKey = NamedTrigger | { vk: number };
@@ -59,7 +59,7 @@ export interface Settings {
   emoteTrigger: EmoteTriggerKey;
   /** The emote key + click places `clickEmoteId`, like clickPing does for pings. */
   emoteClick: boolean;
-  /** The emote wheel's slots, top (N) then clockwise: 8 distinct bundled slugs or imported emotes. */
+  /** The emote wheel's slots, top (N) then clockwise: 16 distinct bundled slugs or imported emotes. */
   emoteWheel: EmoteRef[];
   clickEmoteId: EmoteRef;
   emoteSizePx: number;
@@ -205,7 +205,8 @@ function customEmotes(raw: unknown): CustomEmote[] {
     const id = e.id;
     if (out.some((c) => c.id === id)) continue;
     // A name with nothing left shows the first characters of its id, which reads the same in every language.
-    out.push({ id, name: sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX), animated: e.animated });
+    out.push({ id, name: sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX), animated: e.animated,
+      ...(e.video === true && e.animated ? { video: true } : {}) });
   }
   return out;
 }
@@ -233,7 +234,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     clickPing: bool(r.clickPing, 'clickPing'),
     gameCheck: bool(r.gameCheck, 'gameCheck'),
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
-    wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
+    wheel: normalizePingWheel(r.wheel),
     toggleHotkey,
     textHotkey,
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),

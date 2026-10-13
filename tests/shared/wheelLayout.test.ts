@@ -2,15 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_WHEEL, type PingId } from '../../src/shared/pings';
 import { dropPatch, isValidWheel, placeOnSlot, swapSlots } from '../../src/shared/wheelLayout';
 
-const W = [...DEFAULT_WHEEL];
+const legacy: PingId[] = ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'];
+const W = [...legacy, ...legacy];
 
 describe('isValidWheel', () => {
   it('accepts the default layout', () => {
-    expect(isValidWheel(W)).toBe(true);
+    expect(isValidWheel(DEFAULT_WHEEL)).toBe(true);
+    expect(isValidWheel(W)).toBe(true); // 16 slots may repeat one of the 12 pings
   });
 
   it('accepts the new pings and the generic ping', () => {
-    expect(isValidWheel(['bait', 'visioncleared', 'generic', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'])).toBe(true);
+    expect(isValidWheel(['bait', 'visioncleared', 'generic', 'allin', 'assist', 'needvision', 'missing', 'enemyvision', ...legacy])).toBe(true);
   });
 
   it('rejects the wrong number of slots', () => {
@@ -18,9 +20,9 @@ describe('isValidWheel', () => {
     expect(isValidWheel([...W, 'bait'])).toBe(false);
   });
 
-  it('rejects unknown ids, duplicates and non-arrays', () => {
+  it('rejects unknown ids and non-arrays', () => {
     expect(isValidWheel(['nope', ...W.slice(1)])).toBe(false);
-    expect(isValidWheel(['push', ...W.slice(1)])).toBe(false);
+    expect(isValidWheel(['push', ...W.slice(1)])).toBe(true);
     expect(isValidWheel('danger')).toBe(false);
     expect(isValidWheel(undefined)).toBe(false);
   });
@@ -30,7 +32,7 @@ describe('placeOnSlot', () => {
   it('puts a ping that is not on the wheel into the slot', () => {
     const next = placeOnSlot(W, 'bait', 2);
     expect(next[2]).toBe('bait');
-    expect(next.filter((id) => id === 'omw')).toEqual([]);
+    expect(next.filter((id) => id === 'omw')).toHaveLength(1);
   });
 
   it('swaps when the ping is already on the wheel', () => {
@@ -74,6 +76,13 @@ describe('swapSlots', () => {
 });
 
 describe('dropPatch', () => {
+  it('can assign a repeated ping from the pool without moving its other slot', () => {
+    const next = dropPatch(W, 'generic', { from: 'pool', id: 'danger' }, 3, true)?.wheel;
+    expect(next?.[0]).toBe('danger');
+    expect(next?.[3]).toBe('danger');
+    expect(next?.[8]).toBe('danger');
+    expect(next).toHaveLength(16);
+  });
   it('assigns a pool ping to a slot', () => {
     expect(dropPatch(W, 'generic', { from: 'pool', id: 'bait' }, 2)).toEqual({ wheel: placeOnSlot(W, 'bait', 2) });
   });

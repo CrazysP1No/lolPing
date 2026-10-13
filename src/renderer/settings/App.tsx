@@ -42,7 +42,7 @@ const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[]
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
-const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'ward']);
+const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'ward', 'orb_gray', 'orb_blue', 'orb_gold', 'orb_prismatic', 'orb_void']);
 
 /** The settings change for a ping wheel edit: only the fields it touches, since an undefined field would reset that setting. */
 function pingPatch(p: WheelPatch<PingId>): Partial<Settings> {
@@ -200,7 +200,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
           checked={s.tickSound} onChange={(v) => void update({ tickSound: v })} />
 
         <div className="section" id="wheel">{t.navWheel}</div>
-        <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool}
+        <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool} allowDuplicates
           defaults={{ wheel: DEFAULT_WHEEL, center: DEFAULT_CLICK_PING }}
           labels={{ title: t.wheelTitle, desc: t.wheelDesc(trigger), poolTitle: t.allPings, poolDesc: t.allPingsDesc }}
           onChange={(patch) => void update(pingPatch(patch))} onPreview={(id) => void api.previewPing(id)} />

@@ -19,6 +19,11 @@ const MEANINGS: Record<PingId, string> = {
   bait: 'Act weak and lure them in.',
   visioncleared: 'Their ward here is gone.',
   ward: 'Place a persistent ward on friends’ screens.',
+  orb_gray: 'A silver-gray magical loot orb.',
+  orb_blue: 'A bright blue orb with an icy glow.',
+  orb_gold: 'A golden orb with sparkling light.',
+  orb_prismatic: 'A prismatic orb with rainbow colours.',
+  orb_void: 'A dark orb swirling with violet energy.',
 };
 
 const $ = <T extends HTMLElement>(sel: string): T => document.querySelector(sel) as T;

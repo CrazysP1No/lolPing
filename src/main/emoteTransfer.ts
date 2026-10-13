@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { customHash, isCustomRef, STILL_MAX_BYTES, type EmoteArt } from '../shared/emotes';
-import { EMOTE_CHUNK_BYTES, type ChunkMsg, type WantMsg } from '../shared/roomProtocol';
+import { EMOTE_CHUNK_BYTES, EMOTE_MAX_REFS, type ChunkMsg, type WantMsg } from '../shared/roomProtocol';
 import { checkStill } from './emoteLibrary';
 
 type TransferBody = Pick<WantMsg, 't' | 'to' | 'h' | 'need'> | Pick<ChunkMsg, 't' | 'h' | 'i' | 'n' | 'b'>;
@@ -55,7 +55,7 @@ export class EmoteTransfer {
     if (!this.announced.has(peer) && this.announced.size >= 8) return;
     const hashes = this.announced.get(peer) ?? new Set<string>();
     hashes.add(h);
-    if (hashes.size > 9) hashes.delete(hashes.values().next().value!);
+    if (hashes.size > EMOTE_MAX_REFS) hashes.delete(hashes.values().next().value!);
     this.announced.set(peer, hashes);
     const key = `${peer}:${h}`;
     if (this.cache.has(h) || this.incoming.has(key)) return;
@@ -64,8 +64,8 @@ export class EmoteTransfer {
       this.put(h, Buffer.from(local));
       return;
     }
-    // 16 assemblies × at most 12 KB stays below the 256 KB assembly budget.
-    if (this.incoming.size >= 16) return;
+    // One complete wheel plus centre (17 × 12 KB) fits under the 256 KB assembly budget.
+    if (this.incoming.size >= EMOTE_MAX_REFS) return;
     const now = this.deps.now();
     this.incoming.set(key, { peer, h, parts: [], n: 0, bytes: 0, started: now, last: now, retries: 0 });
     this.deps.send(peer, { t: 'want', to: peer, h, need: [] });
@@ -76,7 +76,7 @@ export class EmoteTransfer {
     const key = `${msg.peer}:${msg.h}`;
     let q = this.outgoing.get(key);
     if (!q) {
-      if (this.outgoing.size >= 72) return; // 8 members × 9 wheel slots
+      if (this.outgoing.size >= 8 * EMOTE_MAX_REFS) return;
       const bytes = this.deps.read(msg.h);
       if (!bytes || !this.valid(msg.h, bytes)) return;
       const chunks: string[] = [];
@@ -154,7 +154,7 @@ export class EmoteTransfer {
 
   private put(h: string, bytes: Buffer): void {
     for (const [key, a] of this.incoming) if (a.h === h) this.incoming.delete(key);
-    if (this.cache.size >= 64) this.cache.delete(this.cache.keys().next().value!);
+    if (this.cache.size >= 8 * EMOTE_MAX_REFS) this.cache.delete(this.cache.keys().next().value!);
     this.cache.set(h, bytes);
   }
 }

@@ -58,6 +58,15 @@ describe('custom image transfer messages', () => {
     expect(validateMessage(presence)).toEqual(presence);
   });
 
+  it('announces 17 stills using an additive field while keeping the legacy field at nine', () => {
+    const hashes = Array.from({ length: 17 }, (_, i) => i.toString(16).padStart(32, '0'));
+    const m = { ...presence, em: hashes.slice(0, 9), emMore: hashes.slice(9) };
+    expect(decodeMessage(encodeMessage(m))).toEqual(m);
+    for (const emMore of ['nope', [h.toUpperCase()], Array(9).fill(h)]) {
+      expect(validateMessage({ ...presence, emMore })).toBeNull();
+    }
+  });
+
   it.each([
     { ...presence, em: [h.toUpperCase()] }, { ...presence, em: Array(10).fill(h) },
     { ...want, h: '../image' }, { ...want, to: 'bad' }, { ...want, need: [17] },
@@ -68,6 +77,12 @@ describe('custom image transfer messages', () => {
 });
 
 describe('encode / decode', () => {
+  it('round-trips each loot orb as a normal shared ping', () => {
+    for (const id of ['orb_gray', 'orb_blue', 'orb_gold', 'orb_prismatic', 'orb_void']) {
+      const m = { ...ping, ping: id } as RoomMessage;
+      expect(decodeMessage(encodeMessage(m))).toEqual(m);
+    }
+  });
   it.each<RoomMessage>([presence, ping, { ...base, t: 'bye' }])('round-trips $t', (m) => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });

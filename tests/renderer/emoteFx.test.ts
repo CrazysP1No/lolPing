@@ -8,6 +8,16 @@ class FakeElement {
   src = '';
   alt = '';
   draggable = true;
+  muted = false;
+  loop = false;
+  playsInline = false;
+  poster = '';
+  play = vi.fn(() => Promise.resolve());
+  pause = vi.fn();
+  load = vi.fn();
+  removeAttribute(name: string): void {
+    if (name === 'src') this.src = '';
+  }
   parent: FakeElement | null = null;
   children: FakeElement[] = [];
   readonly style: Record<string, unknown> & { setProperty(k: string, v: string): void } = { setProperty: () => undefined };
@@ -53,10 +63,64 @@ beforeEach(() => {
   vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('EmoteStage', () => {
+  const videoArt = { kind: 'video' as const, url: 'lolping://emotes/clip.video', poster: 'lolping://emotes/clip.webp' };
+  it('keeps a video past three seconds and removes it only after playback ends', async () => {
+    vi.useFakeTimers();
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
+    const [video] = layer.find('fx')[0].children;
+    expect(video.tagName).toBe('video');
+    expect(video.src).toBe(videoArt.url);
+    expect(video.poster).toBe(videoArt.poster);
+    expect(video.muted).toBe(true);
+    expect(video.loop).toBe(false);
+    expect(video.play).toHaveBeenCalledOnce();
+    video.dispatch('playing');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(layer.find('emote')).toHaveLength(1);
+    video.dispatch('ended');
+    expect(layer.find('emote')).toHaveLength(0);
+    expect(video.pause).toHaveBeenCalled();
+    expect(video.src).toBe('');
+    expect(video.load).toHaveBeenCalled();
+  });
+
+  it('releases a replaced video and ignores its late playback events', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
+    const old = layer.find('fx')[0].children[0];
+    stage.spawn('self', videoArt, 30, 40, { sizePx: 150 });
+    expect(old.pause).toHaveBeenCalled();
+    old.dispatch('ended');
+    old.dispatch('error');
+    expect(layer.find('emote')).toHaveLength(1);
+    expect(layer.find('fx')[0].children[0]).not.toBe(old);
+    stage.clear('self');
+  });
+
+  it('shows a short-lived poster when video decoding fails', async () => {
+    vi.useFakeTimers();
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
+    const video = layer.find('fx')[0].children[0];
+    video.dispatch('error');
+    const poster = layer.find('fx')[0].children[0];
+    expect(poster.tagName).toBe('img');
+    expect(poster.src).toBe(videoArt.poster);
+    expect(video.pause).toHaveBeenCalled();
+    video.dispatch('ended'); // releasing the failed player must not remove its fallback
+    expect(layer.find('emote')).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(3200);
+    expect(layer.find('emote')).toHaveLength(0);
+  });
   it('shows the placeholder when a bundled emote’s animation arrives but cannot be decoded', async () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob(['not a webp'])));
@@ -74,6 +138,22 @@ describe('EmoteStage', () => {
     expect(emote.find('fx')).toHaveLength(1);
     expect(emote.find('bubble')).toHaveLength(1);
     stage.clear('self');
+    expect(layer.find('emote')).toHaveLength(0);
+  });
+
+  it('falls back after stalled loading, while an actively playing video has no lifetime timer', async () => {
+    vi.useFakeTimers();
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
+    const video = layer.find('fx')[0].children[0];
+    video.dispatch('playing');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(layer.find('fx')[0].children[0]).toBe(video);
+    video.dispatch('waiting');
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(layer.find('fx')[0].children[0].tagName).toBe('img');
+    await vi.advanceTimersByTimeAsync(3200);
     expect(layer.find('emote')).toHaveLength(0);
   });
 

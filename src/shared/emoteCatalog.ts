@@ -48,12 +48,20 @@ export const EMOTE_CATALOG: readonly CatalogEmote[] = [
 ];
 export const DEFAULT_EMOTE_WHEEL: readonly string[] = [
   'unworthy_cn',
+  'unworthy',
   'poro_snax',
+  'snoozy_poro',
   'sad_kitten',
+  'bee_sad',
   'cheeky_poro',
+  'wahaha',
   'angry_kitty',
+  'omg_love_it',
   'gg_heart',
+  'poro_ride',
   'bee_happy',
+  'dont_make_me_laugh',
   'bee_mad',
+  'woah_dizzy',
 ];
 export const DEFAULT_CLICK_EMOTE = 'facepalm';

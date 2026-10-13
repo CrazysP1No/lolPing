@@ -25,7 +25,7 @@ A personal desktop toy for Windows that recreates League of Legends' ping wheel 
 | Default trigger | Hold **Alt** and drag with the left mouse button to open the wheel. |
 | Trigger + click (no drag) | Configurable, **off** by default. Off: the click passes through untouched. On: it places a **generic** ping and the click is swallowed. |
 | Toggle | A global hotkey (default **Ctrl+Alt+P**) turns pinging on/off, mirrored in the tray. |
-| Wheel slots | 8 slices, top then clockwise. Default: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. The user can drag any of the 11 pings onto any slot, and pick the trigger+click ping (default Generic), in settings. |
+| Wheel slots | 16 slices, top then clockwise. The original eight pings retain their compass directions; intervening slots hold Bait, Vision Cleared, Ward and gray, blue, gold, prismatic and void loot orbs. Users can assign any signal, including repeats, and choose the trigger+click ping (default Generic). Saved 8-slot layouts migrate without changing their directions. |
 | Excluded pings | Defend/Hold, Target, the yellow "caution" circle: they need a target, so they wait until lolPing can pick one |
 | Textures | Only standard textures. **Never colourblind (`_cb`) variants.** |
 | Sound | Original League sounds, extracted from the user's local install |
@@ -184,22 +184,22 @@ All coordinates are **physical screen pixels**.
 
 ## 7. Overlay renderer
 
-### 7.1 Wheel (matches the in-game reference screenshot and `prototype/wheel-demo.html`)
+### 7.1 Wheel
 
 **Geometry:** SVG centered on the press point.
 
 | Part | Size / style |
 |---|---|
 | Center disc | radius 86 px, teal radial gradient, 3 px gold ring `#c8aa6e` |
-| Ring | 8 wedges from radius 86 to 188 |
+| Ring | 16 wedges from radius 86 to 188 |
 | Cardinal wedges (N/E/S/W) | extend to radius 288 with a fading gradient |
 | Wedge dividers | thin gold-tinted lines |
 
 - **Slots:** each slice shows the ping from the `wheel` setting; the overlay redraws the icons when it changes.
 - **Center content:** the generic-ping icon, a "PING" label in `#1fa9e0`, and a dim "BACK" hint with a right-click mouse glyph.
-- **Icons:** 48 px at radius 137. Idle icons are desaturated gold (`grayscale(1) sepia(.75) saturate(1.3) brightness(1.15)`). The hovered slice shows the full-colour icon at 1.18× scale and a brightened wedge.
+- **Icons:** 40 px at radius 137. Standard idle signal icons are desaturated gold; loot orb icons keep their original colours. The hovered slice enlarges its icon to 1.18× and brightens its wedge.
 - **Selection:**
-  - The slice is picked from the angle between the press point and the cursor, in 45° sectors centered on N, NE, …
+  - The slice is picked from the angle between the press point and the cursor, in 22.5° sectors clockwise from N.
   - A distance under 86 px means nothing is selected; releasing there cancels.
   - Moving onto a new slice plays `button.wav` at low volume, if the tick sound is enabled.
 - **Animation:** opens with fade + scale 0.85 → 1 over 120 ms, closes with a fade.
@@ -235,7 +235,7 @@ Several pings can be on screen at once, and each is independent.
 | `dragThresholdPx` | 2–40 | 8 |
 | `clickPing` | bool | false |
 | `clickPingId` | ping id | `generic` |
-| `wheel` | 8 distinct ping ids, top then clockwise | `DEFAULT_WHEEL` (an invalid list resets to it) |
+| `wheel` | 16 known ping ids, repeats allowed, top then clockwise | `DEFAULT_WHEEL` (valid legacy 8-slot lists expand; invalid lists reset) |
 | `toggleHotkey` | `{mods, vk}` | Ctrl+Alt+P |
 | `pingSizePx` | 60–220 | 110 |
 | `pingDurationS` | 1.0–8.0 | 3.2 |
@@ -253,9 +253,9 @@ Changes apply live, with no Save button. Writes are debounced (300 ms) and atomi
 - **Trigger key:** a Fluent `Dropdown`, *not* a native select, with Keyboard and Mouse option groups plus "Custom key…", which captures the next key press.
 - **Toggle shortcut:** a key-capture field showing keycaps. Click it, press a combination, and it rebinds; Esc cancels. A conflict reported by the helper shows inline and keeps the old binding.
 - **Sliders:** drag distance, ping size, ping duration, volume. **Switches:** trigger+click ping, start enabled, tick sound, launch at startup.
-- **Wheel** (matches `prototype/wheel-editor-demo.html`): a small wheel with the 8 slots and the trigger+click ping in the centre, beside a tile per ping (no `_cb` textures).
+- **Wheel:** a small wheel with 16 slots and the trigger+click ping in the centre, beside a tile per ping (no `_cb` textures). The prototype shows the original 8-slot design.
   - Clicking a tile previews it: plays its sound and spawns it at the center of the primary display.
-  - Drag a tile onto a slot to put it there; a ping already on the wheel swaps places instead, so no ping appears twice. Drag a slot onto another to swap them. Drop on the centre to set the click ping.
+  - Drag a tile onto a signal slot to assign it, allowing repeated signals. Drag a slot onto another to swap them. Emote refs stay unique, so placing an emote already on its wheel swaps those slots. Drop on the centre to set the click item.
   - Without dragging: click a tile or slot, then click where it goes. Esc cancels. "Reset to default" restores `DEFAULT_WHEEL` and Generic.
   - The rules live in `src/shared/wheelLayout.ts` as pure functions.
 - **About:** version, asset notice, known limitations, asset problems, and "Open settings folder".
@@ -287,7 +287,7 @@ Changes apply live, with no Save button. Writes are debounced (300 ms) and atomi
 ## 10. Testing
 
 - **Vitest (TypeScript):**
-  - slice picking (sector boundaries at ±22.5°, dead-zone at 86 px, angle wrap)
+  - slice picking (sector boundaries at ±11.25°, dead-zone at 86 px, angle wrap)
   - coordinate conversion across two displays with different scale factors
   - settings defaults, clamping, migration, and corrupt-file fallback
   - ping table integrity: every referenced asset file exists, no `_cb` file is referenced
@@ -333,14 +333,16 @@ Full design: [superpowers/specs/2026-10-04-room-ping-sharing-design.md](superpow
   - Status is `ok` while any relay echoes, `unavailable` after 15 s without one (the Room page then offers Retry). "Allow internet connections" off means no relay is contacted; turning it off mid-room sends no bye.
   - The relay list came from `tools/relay-probe`. Any later list must keep at least 3 of the previous one, or old and new versions can't meet. Development builds read `LOLPING_RELAYS` instead.
 
-## 13. Emotes (v0.5.0)
+## 13. Emotes and custom media (introduced in v0.5.0)
 
 Full design: [superpowers/specs/2026-10-06-emotes-design.md](superpowers/specs/2026-10-06-emotes-design.md). In short: a second wheel, opened by its own key, places a League emote (a short animation and a sound) the way a ping is placed, and rooms carry it like a ping.
 
 - **Helper, two triggers:** `config` gains `emoteTrigger` (a trigger name or `"off"`), `emoteTriggerVk` and `emoteClick`, and the helper's `ready` version becomes 2. Every `wheelOpen`, `wheelMove`, `wheelRelease` and `click` event carries `wheel`: `"ping"` or `"emote"` (a missing field means `"ping"`, so an older helper still works). A press that both triggers claim, such as Alt and Ctrl held together, is ambiguous and passes through untouched. The emote key defaults to Ctrl, so Ctrl + drag no longer reaches the app underneath while lolPing is on; that is listed under known limitations in the README. It can't be the ping trigger (Caps Lock counts as one key however it was picked) or the pause shortcut's key; a settings file edited by hand into a clash turns the emote key off and shows a problem in About.
-- **Settings:** `emoteTrigger` (default `ctrl`), `emoteClick` (false), `emoteWheel` (8 distinct emote refs, top then clockwise), `clickEmoteId`, `emoteSizePx` (80–300, default 150), `emoteSound` (true) and `customEmotes` (at most 24). An emote ref is a bundled slug or `c:` plus the 32 hex characters of an imported image's hash. The ping and emote wheels share one generic `WheelEditor` in the settings window.
-- **Overlay:** the emote wheel is a second copy of the wheel's SVG with its own centre label. `EmoteStage` (`src/renderer/overlay/emoteFx.ts`) shows the emotes: at most one per owner (`self`, `preview` or a room member's peer ID), each for 3 s. A bundled emote's animated WebP plays once and Chromium gives images with the same URL one shared clock, so the stage fetches each file as a Blob once and gives every spawn its own object URL, revoked when the emote ends. A new emote from an owner replaces their old one on every display: main sends `emote:clear` to the other overlays. Main works out what an emote looks like (`resolveEmoteArt`): bundled, a custom image, or the "?" placeholder for a custom emote whose files are missing here, and the overlay trusts that.
-- **`lolping://emotes/<hash>.webp` and `.anim`:** the custom protocol (`src/main/appProtocol.ts`) serves imported emotes from `<settings folder>/emotes`, in development too. It only answers those two names for a 32-hex hash, never caches (an image can be removed and imported again under the same name), and gives the still when the animation is gone.
-- **Imported emotes (`src/main/emoteLibrary.ts`):** the settings window turns a file into a still of at most 12,288 bytes and 160 px on its longest side (128 px as a fallback), and keeps the original GIF or WebP when it is at most 5 MB and 1024 px. Main checks it all again and names the emote by the first 32 hex characters of the SHA-256 of the still. Files are written through temporary names and renamed together, so a failed import leaves nothing behind.
-- **Rooms (`emote` message):** same fields as a ping with an emote ref in place of the ping ID. It follows a ping's routes and checks (paused, room and member mute, update needed, display number), the same incoming limit per member, and over relays the same 5/s, burst-of-10 cap, which pings and emotes share. An unknown but well-formed ref is accepted and shows the placeholder. Members whose presence says an app older than 0.5.0 are marked "Can't see emotes, needs an update". In this version friends see your own images as the placeholder.
+- **Settings:** `emoteTrigger` (default `ctrl`), `emoteClick` (false), `emoteWheel` (16 distinct emote refs, top then clockwise), `clickEmoteId`, `emoteSizePx` (80–300, default 150), `emoteSound` (true) and `customEmotes` (at most 100 images and videos in total). Valid legacy 8-slot layouts keep their directions and fill the intervening slots with unused bundled refs. An emote ref is a bundled slug or `c:` plus the 32 hex characters of the imported still's hash. The ping and emote wheels share one generic `WheelEditor` in the settings window.
+- **Overlay:** `EmoteStage` shows one emote per owner (`self`, `preview` or a room member). Images and animated images last 3 s; videos play muted from the beginning and disappear on `ended`, with no fixed duration limit. Replacement or removal releases the player; loading/decoding failure falls back to the poster. Bundled WebPs use a fresh object URL per spawn to restart their animation. `resolveEmoteArt` in `src/shared/emotes.ts` is shared by local wheel selection and main-process preview/remote rendering.
+- **`lolping://emotes/<hash>.webp`, `.anim` and `.video`:** the custom protocol serves only these hashed paths from `<settings folder>/emotes`, without caching. `.anim` falls back to the still when missing; `.video` resolves only `.video.mp4` or `.video.webm`. The scheme supports media streaming and forwards range request headers.
+- **Imported emotes:** the renderer makes a still of at most 12,288 bytes and 160 px (128 px fallback), retaining GIF/WebP animations up to 5 MB/1024 px or MP4/WebM videos up to 20 MB/1920 px. Main checks containers and byte bounds, and `src/main/videoValidation.ts` independently decodes a video frame in a fresh hidden sandboxed renderer before writing files. Hashes derive from the still; temporary writes and atomic renames leave no failed import behind. Videos and stills remain bounded even for forged IPC payloads.
+- **Rooms (`emote` message):** same fields as a ping with an emote ref in place of the ping ID. It follows a ping's routes and checks (paused, room and member mute, update needed, display number), the same incoming limit per member, and over relays the same 5/s, burst-of-10 cap, which pings and emotes share. An unknown but well-formed ref shows the placeholder until its still arrives. Members whose presence says an app older than 0.5.0 are marked "Can't see emotes, needs an update". Original animated media never travels; friends receive a validated small still through announce/want/chunk.
 - **Baker:** `tools/extract-assets/emote_bake.py` (run with `--emotes`) reads League's emote effect files and bakes each emote at 30 fps on a 320 × 320 canvas holding 256 px of art, as a 3 s animated WebP (quality 80, played once), with an icon PNG and an Opus `.ogg` sound at 96 kbps. It also writes `src/shared/emoteCatalog.ts`, the single list of bundled emotes, and the build leaves out any emote file that list doesn't name.
+
+Current room still sharing announces up to 17 refs across `em` (the original nine) and additive `emMore` (eight). It reserves the existing relay budget for pings, bounds concurrent assemblies to 17 × 12 KB and caches up to 136 stills. Original videos and animations remain local. The five loot orb sprites are original transparent assets described in [orb-assets.md](orb-assets.md).

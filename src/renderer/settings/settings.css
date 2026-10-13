@@ -43,8 +43,8 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .weWheel svg { position: absolute; inset: 0; }
 .weWedge { fill: rgba(10,14,22,.78); stroke: rgba(200,170,110,.35); stroke-width: 1; transition: fill .12s; }
 .weWedge.hot { fill: rgba(60,120,170,.55); }
-.weSlot { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; display: grid; place-items: center; border-radius: 50%; cursor: grab; }
-.weSlot img { width: 46px; height: 46px; pointer-events: none; transition: transform .12s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.weSlot { position: absolute; width: 40px; height: 40px; margin: -20px 0 0 -20px; display: grid; place-items: center; border-radius: 50%; cursor: grab; }
+.weSlot img { width: 34px; height: 34px; pointer-events: none; transition: transform .12s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
 .weSlot:hover img, .weSlot.hot img { transform: scale(1.15); }
 .weCenter { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%; display: grid; place-items: center; align-content: center;
   background: radial-gradient(circle, rgba(20,26,38,.95), rgba(10,14,22,.9)); border: 1px solid rgba(200,170,110,.35); cursor: grab; transition: box-shadow .12s; }
