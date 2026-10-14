@@ -3,6 +3,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <chrono>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -26,6 +27,8 @@ Decision* g_decision = nullptr;
 Output* g_out = nullptr;
 CFMachPortRef g_tap = nullptr;
 CGEventFlags g_flags = 0;  // the modifier state Decision last saw
+// Keep the press's click count until its replay, including replays caused by a trigger key-up.
+std::array<int64_t, 6> g_clickStates{1, 1, 1, 1, 1, 1};
 
 uint64_t nowMs() {
   using namespace std::chrono;
@@ -73,7 +76,7 @@ void postButton(Btn btn, bool down) {
   CGEventRef e = CGEventCreateMouseEvent(nullptr, type, cursorLocation(), button);
   if (e == nullptr) return;
   CGEventSetIntegerValueField(e, kCGMouseEventButtonNumber, static_cast<int64_t>(button));
-  CGEventSetIntegerValueField(e, kCGMouseEventClickState, 1);
+  CGEventSetIntegerValueField(e, kCGMouseEventClickState, g_clickStates[static_cast<size_t>(btn)]);
   CGEventSetFlags(e, g_flags);  // a replayed Option-click keeps its Option
   CGEventSetIntegerValueField(e, kCGEventSourceUserData, kSelfMarker);
   CGEventPost(kCGHIDEventTap, e);
@@ -181,7 +184,10 @@ CGEventRef tapCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void
     default:
       return event;
   }
-  if (e.kind == EvKind::MouseDown) g_decision->syncKeyStates(isKeyDown);
+  if (e.kind == EvKind::MouseDown) {
+    g_clickStates[static_cast<size_t>(e.btn)] = CGEventGetIntegerValueField(event, kCGMouseEventClickState);
+    g_decision->syncKeyStates(isKeyDown);
+  }
   return apply(g_decision->onEvent(e)) ? nullptr : event;
 }
 

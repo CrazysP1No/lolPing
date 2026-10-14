@@ -141,7 +141,7 @@ function num(raw: unknown, key: NumKey): number {
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
-  if (platform === 'mac' && raw === 'capslock') return fallback;
+  if (platform === 'mac' && (raw === 'capslock' || (isObj(raw) && raw.vk === 0x14))) return fallback;
   if (typeof raw === 'string' && (NAMED_TRIGGERS as readonly string[]).includes(raw)) return raw as NamedTrigger;
   if (isObj(raw) && isVk(raw.vk)) return { vk: raw.vk };
   return fallback;

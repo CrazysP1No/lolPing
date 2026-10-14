@@ -385,6 +385,12 @@ describe('helpers', () => {
     expect(normalizeSettings({ trigger: 'win' }, 'mac').trigger).toBe('win');
   });
 
+  it('repairs custom Caps Lock triggers on Mac when loading or updating settings', () => {
+    expect(normalizeSettings({ trigger: { vk: 0x14 }, emoteTrigger: { vk: 0x14 } }, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
+    expect(mergeSettings(DEFAULT_SETTINGS, { trigger: { vk: 0x14 }, emoteTrigger: { vk: 0x14 } }, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
+    expect(normalizeSettings({ trigger: { vk: 0x14 }, emoteTrigger: 'off' }, 'win').trigger).toEqual({ vk: 0x14 });
+  });
+
   it('extracts overlay settings', () => {
     expect(overlaySettings(DEFAULT_SETTINGS)).toEqual({
       pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,

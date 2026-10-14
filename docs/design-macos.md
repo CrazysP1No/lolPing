@@ -10,6 +10,7 @@ Bring lolPing to macOS with the same behaviour as on Windows: hold a key, drag, 
 | Topic | Decision |
 |---|---|
 | Hardware | Apple Silicon (arm64) only |
+| Minimum OS | macOS 13 (Ventura), required by Electron 44 |
 | Testing | No Mac available to the developer. CI on an Apple Silicon runner builds, unit-tests and packages it. A friend tries the published release. |
 | Signing | Ad-hoc (`codesign -s -`), no Apple Developer account, no notarization |
 | Codebase | One codebase. Developed on the `mac` branch, merged into `main`, released together with Windows as v0.2.0 |
@@ -76,7 +77,7 @@ Creating an active tap needs Accessibility. If `CGEventTapCreate` returns `NULL`
 - `PermissionCard` appears at the top while the status is `noAccess`.
 - `triggerLabel`, `hotkeyParts`, `hotkeyLabel` take the platform: Mac shows ⌥ Option / ⌃ Control / ⇧ Shift / ⌘ Command and hotkeys as `⌃⌥P`.
 - `strings(lang, platform)` overlays Mac wording in English and Chinese (Open at login, Follow macOS, menu bar instead of tray, Mac limitations, "Add ⌃, ⌥ or ⌘").
-- The trigger picker hides Caps Lock on Mac, and `normalizeSettings(raw, platform)` maps a stored Caps Lock trigger to Option.
+- Key capture rejects Caps Lock on Mac, including the custom-key and shortcut paths. `normalizeSettings(raw, platform)` repairs both named and custom Caps Lock triggers to Option (ping) or Control (emote).
 
 ## 5. Packaging, CI, release
 

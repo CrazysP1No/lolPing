@@ -63,6 +63,7 @@
       "include": "build/installer.nsh"
     },
     "mac": {
+      "minimumSystemVersion": "13.0",
       "target": [{ "target": "dmg", "arch": ["arm64"] }],
       "icon": "build/icon.png",
       "category": "public.app-category.utilities",
