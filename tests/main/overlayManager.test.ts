@@ -266,6 +266,19 @@ describe('OverlayManager window bounds', () => {
     ]);
   });
 
+  it('covers the whole display on Linux, where the taskbar workaround does not apply', async () => {
+    h.windows.length = 0;
+    h.isLinux = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    for (const w of h.windows) w.emit('ready-to-show');
+    expect(h.windows.map((w) => w.bounds)).toEqual([
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      { x: 1920, y: 0, width: 1280, height: 1024 },
+    ]);
+  });
+
   it('keeps every overlay out of Mission Control on macOS, and leaves Windows alone', async () => {
     expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([false, false]);
     h.windows.length = 0;
@@ -295,6 +308,18 @@ describe('OverlayManager z-order', () => {
     mgr.handle({ type: 'wheelRelease', x: 120, y: 220, wheel: 'ping' });
     mgr.updateSettings(overlaySettings(DEFAULT_SETTINGS));
     expect(raised()).toEqual([['screen-saver'], []]);
+  });
+
+  it('never touches it again on Linux, where the Windows 10 z-order fix does not apply', async () => {
+    h.windows.length = 0;
+    h.isLinux = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    const linux = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt);
+    linux.start();
+    linux.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    linux.previewPing('danger');
+    expect(raised()).toEqual([[], []]);
   });
 
   it('never touches it again on macOS, where the panel stays on top', async () => {

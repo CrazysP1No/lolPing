@@ -159,7 +159,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}
           description={t.clickPingDesc(trigger)}
           checked={s.clickPing} onChange={(v) => void update({ clickPing: v })} dim={off} />
-        {PLATFORM === 'win' && ( // the macOS helper has no fullscreen probe yet
+        {PLATFORM === 'win' && ( // only the Windows helper has a fullscreen probe
           <SwitchRow icon={<Games24Regular />} title={t.gameCheck}
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />

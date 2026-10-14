@@ -34,7 +34,7 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
  * the taskbar drops behind it and an auto-hidden one won't slide up. One DIP short of the bottom edge, it doesn't.
  */
 export const overlayBounds = (d: Display): Rectangle =>
-  IS_MAC ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
+  IS_MAC || IS_LINUX ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
 
 /** Messages that put something new on an overlay. */
 const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show']);
@@ -266,7 +266,7 @@ export class OverlayManager extends EventEmitter {
     if (!w || w.isDestroyed()) return;
     // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
     // Setting the level again puts it back on top of the topmost windows. Only when something new appears, not per move.
-    if (!IS_MAC && RAISING_CHANNELS.has(channel)) w.setAlwaysOnTop(true, 'screen-saver');
+    if (!IS_MAC && !IS_LINUX && RAISING_CHANNELS.has(channel)) w.setAlwaysOnTop(true, 'screen-saver');
     w.webContents.send(channel, payload);
   }
 }
