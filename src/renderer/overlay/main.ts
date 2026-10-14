@@ -59,6 +59,8 @@ function localArt(ref: EmoteRef): EmoteArt {
 
 function applySettings(s: OverlaySettings): void {
   settings = s;
+  pingWheel.setSize(s.wheelSizePx);
+  emoteWheel.setSize(s.wheelSizePx);
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
   emoteWheel.setItems(s.emoteWheel.map(emoteItem));
 }
