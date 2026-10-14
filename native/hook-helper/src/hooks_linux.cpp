@@ -44,6 +44,10 @@ unsigned int buttonNumber(Btn b) {
     case Btn::X1: return 8; case Btn::X2: return 9; default: return 0;
   }
 }
+// Modifiers are left out of key replays: their real events always pass, and a replayed key carries the live state.
+bool isModifierVk(uint32_t v) {
+  return v == 0x10 || v == 0x11 || v == 0x12 || (v >= 0xA0 && v <= 0xA5) || v == 0x5B || v == 0x5C;
+}
 class Hooks {
  public:
   Display* display;
@@ -52,6 +56,10 @@ class Hooks {
   Decision decision;
   std::array<uint32_t, 256> vk{};
   std::array<bool, 256> swallowed{};
+  std::array<int, 256> codeOfVk{};  // the keycode a VK was last seen on, so a replay uses the physical key
+  // Raw events the helper caused with XTest, per keycode: counted so rawKey() does not take them for real presses.
+  std::array<int, 256> selfRaw{};
+  std::array<uint64_t, 256> selfRawUntil{};
   bool suspended = false;
   bool quit = false;
   bool pointerActive = false;
@@ -79,8 +87,11 @@ class Hooks {
   }
   void configureGrabs() {
     XUngrabButton(display, AnyButton, AnyModifier, root);
-    XUngrabKey(display, AnyKey, AnyModifier, root);
     grabButtons();
+    grabKeys();
+  }
+  void grabKeys() {
+    XUngrabKey(display, AnyKey, AnyModifier, root);
     const Config& c = decision.config();
     const auto own = [&](uint32_t key, Trigger t, uint32_t custom) {
       return decision.enabled() && !suspended && t == Trigger::CustomVk && key == custom;
@@ -105,6 +116,10 @@ class Hooks {
   void apply(const Result& r) {
     for (const auto& e : r.emits) out.emit(e);
     if (r.injects.empty()) return;
+    injectKeys(r);
+    bool buttons = false;
+    for (const auto& i : r.injects) buttons = buttons || i.kind == InjectKind::ButtonDown || i.kind == InjectKind::ButtonUp;
+    if (!buttons) return;
     // Temporarily remove our passive grabs under a server grab so replay never triggers another wheel.
     XGrabServer(display);
     // Release any physical-down state while OUR grab still receives the synthetic up.
@@ -129,8 +144,43 @@ class Hooks {
     XUngrabServer(display);
     XFlush(display);
   }
+  int keyCodeFor(uint32_t v) const {
+    if (v < codeOfVk.size() && codeOfVk[v] >= 8) return codeOfVk[v];
+    for (int code = 8; code < 256; ++code) if (vk[code] == v) return code;
+    return -1;
+  }
+  // Types swallowed keys (a tapped trigger key, and the key that follows it) with XTest. The key grabs are lifted
+  // meanwhile, so a replayed trigger key is not grabbed again, and the raw events it causes are marked as ours.
+  void injectKeys(const Result& r) {
+    bool any = false;
+    for (const auto& i : r.injects) any = any || i.kind == InjectKind::KeyDown || i.kind == InjectKind::KeyUp;
+    if (!any) return;
+    XGrabServer(display);
+    XUngrabKeyboard(display, CurrentTime);  // ends the grab a held trigger key started, or replays would go to us
+    XUngrabKey(display, AnyKey, AnyModifier, root);
+    for (const auto& i : r.injects) {
+      if ((i.kind != InjectKind::KeyDown && i.kind != InjectKind::KeyUp) || isModifierVk(i.vk)) continue;
+      const int code = keyCodeFor(i.vk);
+      if (code < 0) continue;
+      XTestFakeKeyEvent(display, code, i.kind == InjectKind::KeyDown, CurrentTime);
+      ++selfRaw[code];
+      selfRawUntil[code] = nowMs() + 500;  // raw events arrive within milliseconds; never hold a count longer
+    }
+    XSync(display, False);
+    grabKeys();
+    XUngrabServer(display);
+    XFlush(display);
+  }
+  bool isSelfRaw(int code) {
+    if (selfRaw[code] <= 0) return false;
+    if (nowMs() > selfRawUntil[code]) { selfRaw[code] = 0; return false; }
+    --selfRaw[code];
+    return true;
+  }
   void rawKey(int code, bool down) {
     if (code < 8 || code > 255 || !vk[code]) return;
+    if (isSelfRaw(code)) return;
+    if (vk[code] < codeOfVk.size()) codeOfVk[vk[code]] = code;
     InputEvent e; e.kind = down ? EvKind::KeyDown : EvKind::KeyUp; e.vk = vk[code]; e.timeMs = nowMs();
     const bool before = decision.enabled();
     Result r = decision.onEvent(e);

@@ -109,6 +109,12 @@ try:
     key(0x67,True); button(1,True); move(450,200); button(1,False); key(0x67,False)
     events=emitted(); assert [e['type'] for e in events]==['wheelOpen','wheelMove','wheelRelease'], events
     assert received()==[], 'custom trigger must not type into the application'
+    # A lone tap of a custom trigger is replayed when the key comes up, so it still types.
+    key(0x67,True); key(0x67,False)
+    assert not emitted(); assert received()==[2,3], 'a tapped custom trigger must type once'
+    # Another key pressed while it is held sends it first; both keys then type, and nothing is left held.
+    key(0x67,True); key(0x61,True); key(0x61,False); key(0x67,False)
+    assert not emitted(); assert received()==[2,2,3,3], 'a held custom trigger must be typed before the next key'
     # Releasing the modifier before the mouse must replay down, then pass the real up.
     command(type='config',trigger='alt',emoteTrigger='off',enabled=True)
     key(ALT,True); received(); button(1,True); key(ALT,False); button(1,False)

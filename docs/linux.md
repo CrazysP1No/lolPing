@@ -43,6 +43,7 @@ On Ubuntu versions that restrict unprivileged user namespaces, prefer the instal
 ## Behavior and limits
 
 - Alt + left drag opens the ping wheel; Ctrl + left drag opens emotes. Ctrl + Alt + P pauses/resumes. Side buttons and custom keyboard triggers are supported. Escape and right click cancel an active wheel.
+- A custom keyboard trigger still types when tapped: its key is held back and typed when it comes up, unless a drag used it. Pressing another key while it is held types it first.
 - A short trigger + click is replayed to the underlying application unless click-to-ping is enabled. Normal clicks are replayed by the X server itself.
 - Window managers may already own a chord, particularly Alt + drag or Super. The helper logs conflicting grabs. Choose a different trigger, such as Ctrl, Shift or a side button, or change the conflicting desktop shortcut.
 - Caps Lock is not offered: passive X11 grabs cannot reliably prevent its lock state from changing. Automatic fullscreen-game detection is Windows-only; pause manually before games.
