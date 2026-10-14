@@ -97,6 +97,8 @@ jobs:
           retention-days: 14
 
   test-linux:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
