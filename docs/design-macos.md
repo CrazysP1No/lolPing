@@ -60,7 +60,7 @@ Creating an active tap needs Accessibility. If `CGEventTapCreate` returns `NULL`
 - **Platform:** `src/shared/platform.ts` (`'win' | 'mac'`), detected in main and passed to the settings page by its preload.
 - **Helper path:** `hook-helper.exe` on Windows, `hook-helper` on Mac.
 - **Coordinates:** on Mac each display map uses `phys = dip` and `scale = 1`, so `physicalToLocal` needs no change and `screen.dipToScreenRect` (Windows-only) is never called.
-- **Overlays:** `type: 'panel'`, `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`, level `screen-saver`, click-through.
+- **Overlays:** `type: 'panel'`, `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`, hidden in Mission Control, level `screen-saver`, click-through.
 - **App shell:** Dock icon hidden except while the settings window is open; a minimal application menu (app, Edit, Window) so ⌘Q, ⌘W and clipboard shortcuts work.
 - **Menu bar icon:** a template image (`build/trayTemplate.png`, `@2x`). Off = half alpha. Failed or no access = a non-template orange icon. A click opens the menu, which includes Settings….
 - **Startup:** start in the menu bar with a toast pointing at the menu bar icon. The settings window opens on first run (no settings file yet), when Accessibility is missing, and on `activate`/`second-instance`. Open at login uses `setLoginItemSettings({ openAtLogin })`.

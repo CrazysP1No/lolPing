@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
     emit: (event: string) => boolean;
     webContents: { send: ReturnType<typeof vi.fn> };
     onTop: string[];
+    hiddenInMissionControl: boolean;
   }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
   isMac: false,
@@ -39,6 +40,10 @@ vi.mock('electron', async () => {
       this.onTop.push(level);
     }
     setVisibleOnAllWorkspaces(): void {}
+    hiddenInMissionControl = false;
+    setHiddenInMissionControl(hidden: boolean): void {
+      this.hiddenInMissionControl = hidden;
+    }
     setBounds(r: Rect): void {
       this.bounds = r;
     }
@@ -218,6 +223,16 @@ describe('OverlayManager window bounds', () => {
       { x: 0, y: 0, width: 1920, height: 1080 },
       { x: 1920, y: 0, width: 1280, height: 1024 },
     ]);
+  });
+
+  it('keeps every overlay out of Mission Control on macOS, and leaves Windows alone', async () => {
+    expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([false, false]);
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([true, true]);
   });
 });
 
