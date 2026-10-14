@@ -16,6 +16,8 @@
 #include <iostream>
 #include <string>
 #include <set>
+#include <utility>
+#include <vector>
 // Xlib macros collide with scoped enum members in the shared logic.
 #undef None
 
@@ -56,6 +58,9 @@ class Hooks {
   Decision decision;
   std::array<uint32_t, 256> vk{};
   std::array<bool, 256> swallowed{};
+  std::array<int, 256> selfCore{};  // fake releases our own keyboard grab delivers back to us
+  int grabKey = 0;  // the key whose grab is active: later keys are delivered to us instead of the application
+  std::array<bool, 256> rawDown{};  // keys whose raw press was seen and whose release is still due
   std::array<int, 256> codeOfVk{};  // the keycode a VK was last seen on, so a replay uses the physical key
   // Raw events the helper caused with XTest, per keycode: counted so rawKey() does not take them for real presses.
   std::array<int, 256> selfRaw{};
@@ -149,20 +154,36 @@ class Hooks {
     for (int code = 8; code < 256; ++code) if (vk[code] == v) return code;
     return -1;
   }
-  // Types swallowed keys (a tapped trigger key, and the key that follows it) with XTest. The key grabs are lifted
-  // meanwhile, so a replayed trigger key is not grabbed again, and the raw events it causes are marked as ours.
+  // Types the swallowed keys the decision hands back (a tapped trigger key, and the key that follows it).
   void injectKeys(const Result& r) {
-    bool any = false;
-    for (const auto& i : r.injects) any = any || i.kind == InjectKind::KeyDown || i.kind == InjectKind::KeyUp;
-    if (!any) return;
-    XGrabServer(display);
-    XUngrabKeyboard(display, CurrentTime);  // ends the grab a held trigger key started, or replays would go to us
-    XUngrabKey(display, AnyKey, AnyModifier, root);
+    std::vector<std::pair<int, bool>> keys;
     for (const auto& i : r.injects) {
       if ((i.kind != InjectKind::KeyDown && i.kind != InjectKind::KeyUp) || isModifierVk(i.vk)) continue;
       const int code = keyCodeFor(i.vk);
-      if (code < 0) continue;
-      XTestFakeKeyEvent(display, code, i.kind == InjectKind::KeyDown, CurrentTime);
+      if (code >= 0) keys.emplace_back(code, i.kind == InjectKind::KeyDown);
+    }
+    fakeKeys(keys);
+  }
+  // Types keys with XTest while the key grabs are lifted, so they reach the application and are not grabbed again.
+  void fakeKeys(const std::vector<std::pair<int, bool>>& keys) {
+    if (keys.empty()) return;
+    XGrabServer(display);
+    // A key that is still physically down would make a fake press look like a repeat, and X drops it. Release it
+    // while only we receive events, so the application never sees the extra release.
+    bool released = false;
+    for (const auto& [code, down] : keys) {
+      if (!down || !rawDown[code]) continue;
+      if (!released) XGrabKeyboard(display, root, False, GrabModeAsync, GrabModeAsync, CurrentTime);
+      released = true;
+      XTestFakeKeyEvent(display, code, False, CurrentTime);
+      ++selfCore[code];
+    }
+    XSync(display, False);
+    XUngrabKeyboard(display, CurrentTime);  // ends the grab a held trigger key started, or replays would go to us
+    grabKey = 0;
+    XUngrabKey(display, AnyKey, AnyModifier, root);
+    for (const auto& [code, down] : keys) {
+      XTestFakeKeyEvent(display, code, down, CurrentTime);
       ++selfRaw[code];
       selfRawUntil[code] = nowMs() + 500;  // raw events arrive within milliseconds; never hold a count longer
     }
@@ -180,6 +201,9 @@ class Hooks {
   void rawKey(int code, bool down) {
     if (code < 8 || code > 255 || !vk[code]) return;
     if (isSelfRaw(code)) return;
+    // The grab's core events call this too, so a repeated release is ignored.
+    if (!down && !rawDown[code]) return;
+    rawDown[code] = down;
     if (vk[code] < codeOfVk.size()) codeOfVk[vk[code]] = code;
     InputEvent e; e.kind = down ? EvKind::KeyDown : EvKind::KeyUp; e.vk = vk[code]; e.timeMs = nowMs();
     const bool before = decision.enabled();
@@ -261,6 +285,16 @@ int runHooks(Output& out) {
         }
         XFreeEventData(display, &e.xcookie);
       } else if (e.type == KeyPress || e.type == KeyRelease) {
+        const int code = e.xkey.keycode;
+        const bool down = e.type == KeyPress;
+        if (!down && h.selfCore[code] > 0) { --h.selfCore[code]; continue; }
+        const bool outsider = h.grabKey != 0 && code != h.grabKey;
+        // While our grab is active X does not always send the raw event, so the core event drives the decision too.
+        // A key that reaches us this way was meant for the application and is typed again.
+        if (h.rawDown[code] != down) h.rawKey(code, down);
+        if (outsider && !h.swallowed[code]) h.fakeKeys({{code, down}});
+        else if (down && h.swallowed[code] && h.grabKey == 0) h.grabKey = code;
+        else if (!down && code == h.grabKey) h.grabKey = 0;
         XAllowEvents(display, h.swallowed[e.xkey.keycode] ? AsyncKeyboard : ReplayKeyboard, e.xkey.time);
       } else if (e.type == ButtonPress || e.type == ButtonRelease || e.type == MotionNotify) h.mouse(e);
       else if (e.type == MappingNotify) { XRefreshKeyboardMapping(&e.xmapping); h.refreshKeys(); h.configureGrabs(); }
