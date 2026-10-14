@@ -57,8 +57,17 @@ function localArt(ref: EmoteRef): EmoteArt {
   return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated };
 }
 
+/** Our newest ping on this display while "Keep my last ping on screen" is on. */
+let keptPing: HTMLElement | null = null;
+
+function dropKeptPing(): void {
+  keptPing?.remove();
+  keptPing = null;
+}
+
 function applySettings(s: OverlaySettings): void {
   settings = s;
+  if (!s.keepLastPing) dropKeptPing();
   pingWheel.setSize(s.wheelSizePx);
   emoteWheel.setSize(s.wheelSizePx);
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
@@ -66,8 +75,10 @@ function applySettings(s: OverlaySettings): void {
 }
 applySettings(settings);
 
-function ping(def: PingDef, x: number, y: number, tag?: PingTag): void {
-  spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag });
+function ping(def: PingDef, x: number, y: number, tag?: PingTag, keep = false): void {
+  if (keep) dropKeptPing();
+  const el = spawnPing(pingLayer, def, x, y, { sizePx: settings.pingSizePx, durationS: settings.pingDurationS, tag, keep });
+  if (keep) keptPing = el;
   sounds.play(def.sound, volume());
 }
 
@@ -89,7 +100,7 @@ window.overlay.on('wheel:release', (p) => {
     window.overlay.reportEmote(chosen.key, chosen.x, chosen.y);
   } else {
     const def = pingById(chosen.key) ?? fallbackPing;
-    ping(def, chosen.x, chosen.y);
+    ping(def, chosen.x, chosen.y, undefined, settings.keepLastPing);
     window.overlay.reportPing(def.id, chosen.x, chosen.y);
   }
 });
@@ -97,7 +108,8 @@ window.overlay.on('wheel:cancel', () => {
   pingWheel.cancel();
   emoteWheel.cancel();
 });
-window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag));
+window.overlay.on('ping:spawn', (p) => ping(pingById(p.id) ?? fallbackPing, p.x, p.y, p.tag, p.keep === true));
+window.overlay.on('ping:unkeep', dropKeptPing);
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));

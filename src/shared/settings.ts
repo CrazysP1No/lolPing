@@ -41,6 +41,8 @@ export interface Settings {
   toggleHotkey: Hotkey;
   pingSizePx: number;
   pingDurationS: number;
+  /** Your newest ping stays on screen until your next one or a pause (pings from the room still fade). */
+  keepLastPing: boolean;
   volume: number;
   muted: boolean;
   tickSound: boolean;
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
   pingSizePx: 110,
   pingDurationS: 3.2,
+  keepLastPing: false,
   volume: 70,
   muted: false,
   tickSound: true,
@@ -130,7 +133,7 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'gameCheck' | 'keepLastPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
   | 'emoteClick' | 'emoteSound' | 'friendEmotes' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -236,6 +239,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     toggleHotkey,
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),
     pingDurationS: num(r.pingDurationS, 'pingDurationS'),
+    keepLastPing: bool(r.keepLastPing, 'keepLastPing'),
     volume: num(r.volume, 'volume'),
     muted: bool(r.muted, 'muted'),
     tickSound: bool(r.tickSound, 'tickSound'),
@@ -290,12 +294,12 @@ export function triggerLabel(t: TriggerKey, lang: Lang = 'en', platform: Platfor
 
 export type OverlaySettings = Pick<
   Settings,
-  'pingSizePx' | 'pingDurationS' | 'volume' | 'muted' | 'tickSound' | 'wheelSizePx' | 'wheel' | 'clickPingId'
+  'pingSizePx' | 'pingDurationS' | 'keepLastPing' | 'volume' | 'muted' | 'tickSound' | 'wheelSizePx' | 'wheel' | 'clickPingId'
   | 'emoteWheel' | 'clickEmoteId' | 'emoteSizePx' | 'emoteSound' | 'customEmotes'
 >;
 
 export const overlaySettings = (s: Settings): OverlaySettings => ({
-  pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
+  pingSizePx: s.pingSizePx, pingDurationS: s.pingDurationS, keepLastPing: s.keepLastPing, volume: s.volume, muted: s.muted, tickSound: s.tickSound,
   wheelSizePx: s.wheelSizePx, wheel: [...s.wheel], clickPingId: s.clickPingId,
   emoteWheel: [...s.emoteWheel], clickEmoteId: s.clickEmoteId, emoteSizePx: s.emoteSizePx, emoteSound: s.emoteSound,
   customEmotes: s.customEmotes.map((c) => ({ ...c })),

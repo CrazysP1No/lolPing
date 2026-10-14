@@ -10,6 +10,8 @@ export interface PingFxOptions {
   durationS: number;
   /** A room member's name under the ping. */
   tag?: PingTag;
+  /** Stays after its animation, until the caller removes it. */
+  keep?: boolean;
 }
 
 function img(name: string, cls = ''): HTMLImageElement {
@@ -29,9 +31,9 @@ const div = (cls: string): HTMLDivElement => {
   return d;
 };
 
-/** Adds one animated ping at (x, y) and removes it when its animation ends. */
-export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number, opts: PingFxOptions): void {
-  const root = div('ping');
+/** Adds one animated ping at (x, y) and removes it when its animation ends, unless `opts.keep`. Returns its element. */
+export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number, opts: PingFxOptions): HTMLElement {
+  const root = div(opts.keep ? 'ping kept' : 'ping');
   root.style.left = `${x}px`;
   root.style.top = `${y}px`;
   root.style.setProperty('--c', def.color);
@@ -58,5 +60,6 @@ export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number
   }
   while (layer.childElementCount >= MAX_PINGS) layer.firstElementChild?.remove();
   layer.append(root);
-  setTimeout(() => root.remove(), opts.durationS * 1000 + 150);
+  if (!opts.keep) setTimeout(() => root.remove(), opts.durationS * 1000 + 150);
+  return root;
 }

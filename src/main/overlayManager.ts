@@ -66,7 +66,9 @@ export class OverlayManager extends EventEmitter {
       const p = raw as { id?: unknown; x?: unknown; y?: unknown } | null;
       if (!p || !isPingId(p.id) || !isNum(p.x) || !isNum(p.y)) return;
       const displayId = this.displayOf(event.sender);
-      if (displayId !== undefined) this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
+      if (displayId === undefined) return;
+      this.emit('shared', { id: p.id, displayId, x: p.x, y: p.y } satisfies SharedPing);
+      this.unkeepElsewhere(displayId); // the wheel's own overlay already swapped its kept ping for this one
     });
     ipcMain.on(OVERLAY_EMOTED, (event, raw: unknown) => {
       const p = raw as { ref?: unknown; x?: unknown; y?: unknown } | null;
@@ -117,7 +119,9 @@ export class OverlayManager extends EventEmitter {
           this.emit('sharedEmote', { ref, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedEmote);
           break;
         }
-        this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y });
+        const keep = this.settings.keepLastPing ? { keep: true } : {};
+        this.send(p.displayId, 'ping:spawn', { id: this.settings.clickPingId, x: p.x, y: p.y, ...keep });
+        this.unkeepElsewhere(p.displayId);
         this.emit('shared', { id: this.settings.clickPingId, displayId: p.displayId, x: p.x, y: p.y } satisfies SharedPing);
         break;
       }
@@ -165,6 +169,12 @@ export class OverlayManager extends EventEmitter {
     this.windows.clear();
   }
 
+  /** Removes our kept ping, whichever display it is on (lolPing was paused). */
+  dropKeptPings(): void {
+    if (!this.settings.keepLastPing) return;
+    for (const id of this.windows.keys()) this.send(id, 'ping:unkeep', null);
+  }
+
   /** Dismisses a wheel that is on screen, if any. Also used when the helper stops: its cancel would never arrive. */
   cancelWheel(): void {
     if (this.wheelDisplay === null) return;
@@ -175,6 +185,12 @@ export class OverlayManager extends EventEmitter {
   private displayOf(sender: WebContents): number | undefined {
     const win = BrowserWindow.fromWebContents(sender);
     return [...this.windows].find(([, w]) => w === win)?.[0];
+  }
+
+  /** We keep one ping on screen: drop it on every display but the one that just showed our new one. */
+  private unkeepElsewhere(displayId: number): void {
+    if (!this.settings.keepLastPing) return;
+    for (const id of this.windows.keys()) if (id !== displayId) this.send(id, 'ping:unkeep', null);
   }
 
   /** Each owner has one emote on screen: clear theirs on every display but the one that just showed their new one. */

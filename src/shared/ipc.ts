@@ -25,8 +25,10 @@ export interface OverlayEvents {
   'wheel:move': Point & { wheel?: WheelKind };
   'wheel:release': Point & { wheel?: WheelKind };
   'wheel:cancel': null;
-  /** `tag` marks a ping from another room member. */
-  'ping:spawn': Point & { id: PingId; tag?: PingTag };
+  /** `tag` marks a ping from another room member. `keep`: our own ping that stays until 'ping:unkeep' or our next one. */
+  'ping:spawn': Point & { id: PingId; tag?: PingTag; keep?: boolean };
+  /** Removes the ping kept on this display, if any: we pinged on another display, or paused. */
+  'ping:unkeep': null;
   /** `owner` is 'self', 'preview' or a room member: each owner has at most one emote on screen. */
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
@@ -36,7 +38,7 @@ export interface OverlayEvents {
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
-  'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
+  'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'ping:unkeep', 'emote:spawn', 'emote:clear',
   'toast:show',
 ];
 

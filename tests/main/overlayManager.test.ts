@@ -179,6 +179,42 @@ describe('OverlayManager emote reports from the overlay', () => {
   });
 });
 
+describe('OverlayManager kept ping', () => {
+  const keepOn = () => mgr.updateSettings(overlaySettings({ ...DEFAULT_SETTINGS, keepLastPing: true }));
+
+  it('keeps a click ping and drops the one kept on the other display', () => {
+    keepOn();
+    mgr.handle({ type: 'click', x: 1920 + 300, y: 400, wheel: 'ping' });
+    expect(sent(1)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 300, y: 400, keep: true }]]);
+    expect(sent(0)).toEqual([['ping:unkeep', null]]);
+  });
+
+  it('drops the kept ping on the other displays when a wheel ping is reported', () => {
+    keepOn();
+    h.handlers.get(OVERLAY_PINGED)!({ sender: h.windows[1].webContents }, { id: 'danger', x: 1, y: 2 });
+    expect(sent(0)).toEqual([['ping:unkeep', null]]);
+    expect(sent(1)).toEqual([]);
+  });
+
+  it('drops it everywhere on pause, and sends nothing while the setting is off', () => {
+    mgr.dropKeptPings();
+    mgr.handle({ type: 'click', x: 50, y: 60, wheel: 'ping' });
+    expect(sent(0)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 50, y: 60 }]]);
+    expect(sent(1)).toEqual([]);
+    keepOn();
+    mgr.dropKeptPings();
+    expect(sent(1)).toEqual([['ping:unkeep', null]]);
+  });
+
+  it('never keeps a room member’s ping or a preview', () => {
+    keepOn();
+    mgr.spawnRemote({ displayId: 2, x: 1, y: 1, id: 'danger', tag: { name: 'Bot', color: 0 } });
+    mgr.previewPing('danger');
+    expect(sent(1)).toEqual([['ping:spawn', { id: 'danger', x: 1, y: 1, tag: { name: 'Bot', color: 0 } }]]);
+    expect(sent(0)).toEqual([['ping:spawn', { id: 'danger', x: 960, y: 540 }]]);
+  });
+});
+
 describe('OverlayManager remote and preview emotes', () => {
   it('shows a room member\'s emote on the target display with their tag, and clears theirs on the others', () => {
     mgr.spawnRemoteEmote({ displayId: 2, x: 5, y: 6, ref: 'gg_heart', peer: 'peer-1', tag: { name: 'Bob', color: 2 } });

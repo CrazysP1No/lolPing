@@ -243,6 +243,7 @@ Several pings can be on screen at once, and each is independent.
 | `wheelSizePx` | 300–900, step 10 (both wheels) | 600 |
 | `pingSizePx` | 60–220 | 110 |
 | `pingDurationS` | 1.0–8.0 | 3.2 |
+| `keepLastPing` | bool: our newest ping (wheel or click) stays after its animation until our next ping on any display (`ping:unkeep` to the others), a pause, or the switch going off. Room pings and previews still fade. | false |
 | `volume` | 0–100 | 70 |
 | `muted` | bool | false |
 | `tickSound` | bool | true |

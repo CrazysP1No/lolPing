@@ -331,6 +331,7 @@ function start(): void {
     if (on === enabled) return;
     enabled = on;
     bridge.send(configCommand(store.get(), enabled)); // also refreshes the config re-sent after restarts
+    if (!on) overlays.dropKeptPings();
     const t = text();
     overlays.toast(on ? t.toastOn : t.toastOff, t.toastToggleHint(hotkeyLabel(store.get().toggleHotkey, PLATFORM)));
     syncRoomFlags();
