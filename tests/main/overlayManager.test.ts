@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
     bounds: Rect;
     emit: (event: string) => boolean;
     webContents: { send: ReturnType<typeof vi.fn> };
+    onTop: string[];
   }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
   isMac: false,
@@ -31,8 +32,12 @@ vi.mock('electron', async () => {
       this.bounds = { x: opts.x, y: opts.y, width: opts.width, height: opts.height };
       h.windows.push(this);
     }
+    /** Every always-on-top level set on it, in order. */
+    onTop: string[] = [];
     setIgnoreMouseEvents(): void {}
-    setAlwaysOnTop(): void {}
+    setAlwaysOnTop(_flag: boolean, level: string): void {
+      this.onTop.push(level);
+    }
     setVisibleOnAllWorkspaces(): void {}
     setBounds(r: Rect): void {
       this.bounds = r;
@@ -213,5 +218,38 @@ describe('OverlayManager window bounds', () => {
       { x: 0, y: 0, width: 1920, height: 1080 },
       { x: 1920, y: 0, width: 1280, height: 1024 },
     ]);
+  });
+});
+
+describe('OverlayManager z-order', () => {
+  /** Levels set on each window after it was created. */
+  const raised = (): string[][] => h.windows.map((w) => w.onTop.slice(1));
+
+  it('puts the overlay back on top on Windows before it shows a wheel, a ping, an emote or a toast', () => {
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.spawnRemote({ displayId: 2, x: 1, y: 1, id: 'danger', tag: { name: 'Bot', color: 0 } });
+    mgr.previewEmote('okay');
+    mgr.toast('t', 'b');
+    expect(raised()).toEqual([['screen-saver', 'screen-saver', 'screen-saver'], ['screen-saver']]);
+  });
+
+  it('leaves the z-order alone while a wheel moves, ends, or settings change', () => {
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.handle({ type: 'wheelMove', x: 110, y: 210, wheel: 'ping' });
+    mgr.handle({ type: 'wheelRelease', x: 120, y: 220, wheel: 'ping' });
+    mgr.updateSettings(overlaySettings(DEFAULT_SETTINGS));
+    expect(raised()).toEqual([['screen-saver'], []]);
+  });
+
+  it('never touches it again on macOS, where the panel stays on top', async () => {
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    const mac = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt);
+    mac.start();
+    mac.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mac.previewPing('danger');
+    expect(raised()).toEqual([[], []]);
   });
 });

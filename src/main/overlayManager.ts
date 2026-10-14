@@ -36,6 +36,9 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 export const overlayBounds = (d: Display): Rectangle =>
   IS_MAC ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
 
+/** Messages that put something new on an overlay. */
+const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show']);
+
 /**
  * One transparent, click-through, always-on-top window per display.
  * Emits 'shared' (SharedPing) for every wheel or trigger+click ping and 'sharedEmote' (SharedEmote) for every wheel or
@@ -240,6 +243,10 @@ export class OverlayManager extends EventEmitter {
 
   private send<C extends OverlayChannel>(displayId: number, channel: C, payload: OverlayEvents[C]): void {
     const w = this.windows.get(displayId);
-    if (w && !w.isDestroyed()) w.webContents.send(channel, payload);
+    if (!w || w.isDestroyed()) return;
+    // Windows 10 can drop the overlay behind normal windows after a while (#70), and only a restart brought it back.
+    // Setting the level again puts it back on top of the topmost windows. Only when something new appears, not per move.
+    if (!IS_MAC && RAISING_CHANNELS.has(channel)) w.setAlwaysOnTop(true, 'screen-saver');
+    w.webContents.send(channel, payload);
   }
 }
