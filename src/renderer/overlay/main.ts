@@ -1,6 +1,7 @@
 import { DEFAULT_CLICK_EMOTE, EMOTE_CATALOG } from '../../shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteIconUrl, emoteSoundUrl, isBundledEmote,
+  CUSTOM_EMOTE_URL, allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customSoundUrl, customStillUrl, emoteIconUrl, emoteSoundUrl,
+  isBundledEmote,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
 import {
@@ -48,13 +49,14 @@ function emoteItem(ref: EmoteRef): WheelItem {
   return { key: ref, icon: textureUrl('generic_ping') };
 }
 
-/** This machine's own emotes: the settings know what an imported one looks like, and whether it moves. */
+/** This machine's own emotes: the settings know what an imported one looks like, whether it moves and has a sound. */
 function localArt(ref: EmoteRef): EmoteArt {
   if (isBundledEmote(ref)) return { kind: 'bundled', slug: ref };
   const custom = settings.customEmotes.find((c) => c.id === ref);
   if (!custom) return { kind: 'placeholder' };
   const hash = customHash(ref);
-  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated };
+  const sound = custom.sound ? { sound: customSoundUrl(hash) } : {};
+  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound };
 }
 
 /** Our newest ping on this display while "Keep my last ping on screen" is on. */
@@ -67,6 +69,7 @@ function dropKeptPing(): void {
 
 function applySettings(s: OverlaySettings): void {
   settings = s;
+  sounds.forget(CUSTOM_EMOTE_URL); // an imported emote's sound may have been replaced: load it again when it next plays
   if (!s.keepLastPing) dropKeptPing();
   pingWheel.setSize(s.wheelSizePx);
   emoteWheel.setSize(s.wheelSizePx);
@@ -84,7 +87,9 @@ function ping(def: PingDef, x: number, y: number, tag?: PingTag, keep = false): 
 
 function emote(owner: string, art: EmoteArt, x: number, y: number, tag?: PingTag): void {
   stage.spawn(owner, art, x, y, { sizePx: settings.emoteSizePx, tag });
-  if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound && settings.emoteSound) sounds.play(`emote:${art.slug}`, volume());
+  if (!settings.emoteSound) return;
+  if (art.kind === 'bundled' && catalogEmote(art.slug)?.hasSound) sounds.play(`emote:${art.slug}`, volume());
+  if (art.kind === 'custom' && art.sound) void sounds.playUrl(art.sound, volume());
 }
 
 const wheelOf = (p: { wheel?: WheelKind }): Wheel => (p.wheel === 'emote' ? emoteWheel : pingWheel);

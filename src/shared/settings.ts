@@ -201,7 +201,7 @@ function roomCode(raw: unknown): string | null {
   return parsed.ok ? parsed.code : null;
 }
 
-/** Valid entries only, rebuilt field by field: well-formed unique ids, a boolean flag, a safe name; the first MAX_CUSTOM_EMOTES. */
+/** Valid entries only, rebuilt field by field: well-formed unique ids, boolean flags, a safe name; the first MAX_CUSTOM_EMOTES. */
 function customEmotes(raw: unknown): CustomEmote[] {
   if (!Array.isArray(raw)) return [];
   const out: CustomEmote[] = [];
@@ -211,7 +211,8 @@ function customEmotes(raw: unknown): CustomEmote[] {
     const id = e.id;
     if (out.some((c) => c.id === id)) continue;
     // A name with nothing left shows the first characters of its id, which reads the same in every language.
-    out.push({ id, name: sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX), animated: e.animated });
+    const name = sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX);
+    out.push({ id, name, animated: e.animated, ...(e.sound === true ? { sound: true } : {}) });
   }
   return out;
 }

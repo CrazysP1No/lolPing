@@ -223,6 +223,11 @@ describe('emote settings', () => {
     expect(normalizeSettings({ customEmotes: 'nope' }).customEmotes).toEqual([]);
   });
 
+  it('custom emotes keep a sound flag only when it is true', () => {
+    const list = normalizeSettings({ customEmotes: [{ ...entry('a'), sound: true }, { ...entry('b'), sound: 'yes' }] }).customEmotes;
+    expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
+  });
+
   it('custom emotes keep the first 24', () => {
     const many = Array.from({ length: 30 }, (_, i) => ({ id: `c:${i.toString(16).padStart(32, '0')}`, name: `E${i}`, animated: false }));
     const kept = normalizeSettings({ customEmotes: many }).customEmotes;
