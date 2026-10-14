@@ -239,6 +239,7 @@ Several pings can be on screen at once, and each is independent.
 | `clickPingId` | ping id | `generic` |
 | `wheel` | 8 distinct ping ids, top then clockwise | `DEFAULT_WHEEL` (an invalid list resets to it) |
 | `toggleHotkey` | `{mods, vk}` | Ctrl+Alt+P |
+| `wheelSizePx` | 300–900, step 10 (both wheels) | 600 |
 | `pingSizePx` | 60–220 | 110 |
 | `pingDurationS` | 1.0–8.0 | 3.2 |
 | `volume` | 0–100 | 70 |
