@@ -386,8 +386,9 @@ describe('helpers', () => {
   });
 
   it('repairs custom Caps Lock triggers on Mac when loading or updating settings', () => {
-    expect(normalizeSettings({ trigger: { vk: 0x14 }, emoteTrigger: { vk: 0x14 } }, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
-    expect(mergeSettings(DEFAULT_SETTINGS, { trigger: { vk: 0x14 }, emoteTrigger: { vk: 0x14 } }, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
+    const caps = { trigger: { vk: 0x14 }, emoteTrigger: { vk: 0x14 } };
+    expect(normalizeSettings(caps, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
+    expect(mergeSettings(DEFAULT_SETTINGS, caps, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
     expect(normalizeSettings({ trigger: { vk: 0x14 }, emoteTrigger: 'off' }, 'win').trigger).toEqual({ vk: 0x14 });
   });
 

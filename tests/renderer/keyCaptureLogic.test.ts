@@ -59,8 +59,9 @@ describe('evaluateKeyDown: toggle hotkey (requireModifier)', () => {
 
 describe('evaluateKeyDown: custom trigger (forbiddenVks)', () => {
   it('rejects Caps Lock for Mac triggers and shortcuts, while preserving Windows capture', () => {
-    expect(evaluateKeyDown(press('CapsLock'), { ...trigger, platform: 'mac' })).toEqual({ kind: 'hint', hint: 'hintUnusable' });
-    expect(evaluateKeyDown(press('CapsLock', { ctrlKey: true }), { ...toggle, platform: 'mac' })).toEqual({ kind: 'hint', hint: 'hintUnusable' });
+    const unusable = { kind: 'hint', hint: 'hintUnusable' };
+    expect(evaluateKeyDown(press('CapsLock'), { ...trigger, platform: 'mac' })).toEqual(unusable);
+    expect(evaluateKeyDown(press('CapsLock', { ctrlKey: true }), { ...toggle, platform: 'mac' })).toEqual(unusable);
     expect(evaluateKeyDown(press('CapsLock'), { ...trigger, platform: 'win' })).toEqual({ kind: 'capture', mods: 0, vk: 0x14 });
   });
 

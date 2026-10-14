@@ -2,8 +2,8 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreFoundation/CoreFoundation.h>
 
-#include <chrono>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <string>
