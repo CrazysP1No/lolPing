@@ -1,6 +1,6 @@
 import { app, BrowserWindow, nativeImage, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
 import { SETTINGS_CH } from '../shared/settingsChannels';
-import { assetPath, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
+import { assetPath, IS_LINUX, IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
 let win: BrowserWindow | null = null;
 const goneListeners: Array<() => void> = [];
@@ -33,7 +33,10 @@ const chromeOptions = (): BrowserWindowConstructorOptions => (IS_MAC
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 19 },
   }
-  : {
+  : IS_LINUX ? {
+    frame: true, // use the desktop's native close/minimize/maximize controls
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3',
+  } : {
     backgroundMaterial: 'mica',
     backgroundColor: '#00000000',
     titleBarStyle: 'hidden',
@@ -145,7 +148,10 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     w.on('minimize', () => paintMinimizedSidebar(w));
   }
   const onTheme = () => {
-    if (!w.isDestroyed() && !IS_MAC) w.setTitleBarOverlay(captionColors());
+    if (!w.isDestroyed() && !IS_MAC) {
+      if (IS_LINUX) w.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3');
+      else w.setTitleBarOverlay(captionColors());
+    }
   };
   nativeTheme.on('updated', onTheme);
   w.on('closed', () => {

@@ -123,3 +123,8 @@ main.content { overflow: auto; padding: 4px 28px 28px 20px; }
 .card.update.failed { border-color: #ff9c48; }
 .card.update.failed .icon { color: #ff9c48; }
 .updateBar { margin-top: 4px; }
+
+/* Linux uses native window decorations and the desktop font. */
+[data-platform="linux"] .app { grid-template-rows: 1fr; }
+[data-platform="linux"] .titlebar { display: none; }
+[data-platform="linux"] body { font-family: system-ui, sans-serif; }

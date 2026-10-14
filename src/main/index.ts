@@ -23,7 +23,7 @@ import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
-import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
+import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
@@ -34,8 +34,15 @@ import { trayUpdateHandlers } from './trayUpdate';
 import { MacBackend, RELEASES_API } from './updateMac';
 import { WinBackend } from './updateWin';
 import { Updater } from './updater';
+import { setLinuxAutostart } from './linuxAutostart';
 
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
+
+// X11 uses root-window pixels. Keep Electron in the same coordinate space on every monitor.
+if (IS_LINUX) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+  app.commandLine.appendSwitch('force-device-scale-factor', '1');
+}
 
 registerAppScheme();
 app.setAppUserModelId('com.lolping.app');
@@ -109,7 +116,8 @@ function start(): void {
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
-  const updater = app.isPackaged || testUrl ? createUpdater() : null;
+  // Linux packages are updated manually until a Linux release feed is published.
+  const updater = !IS_LINUX && (app.isPackaged || testUrl) ? createUpdater() : null;
   function createUpdater(): Updater {
     const backend = IS_MAC
       ? new MacBackend({
@@ -349,7 +357,7 @@ function start(): void {
   bridge.on('status', (s: HelperStatus) => {
     // A helper that is starting or has stopped can no longer send the cancel that dismisses a wheel left on screen.
     if (s !== 'running') overlays.cancelWheel();
-    if (s === 'noAccess') {
+    if (s === 'noAccess' && IS_MAC) {
       // Allowed but still refused is an entry left over from an earlier build. Otherwise wait for the user to allow it.
       if (trusted()) staleAccess = true;
       else waitForAccess();
@@ -379,7 +387,14 @@ function start(): void {
     }
     if (app.isPackaged && s.launchAtStartup !== previous.launchAtStartup) {
       // macOS ignores args, and a Mac launch starts in the menu bar anyway.
-      app.setLoginItemSettings(IS_MAC ? { openAtLogin: s.launchAtStartup } : { openAtLogin: s.launchAtStartup, args: ['--hidden'] });
+      if (IS_LINUX) {
+        try { setLinuxAutostart(s.launchAtStartup); }
+        catch (err) {
+          console.error('[autostart]', err);
+          void dialog.showMessageBox({ type: 'error', message: String(err) });
+        }
+      }
+      else app.setLoginItemSettings(IS_MAC ? { openAtLogin: s.launchAtStartup } : { openAtLogin: s.launchAtStartup, args: ['--hidden'] });
     }
   });
 
@@ -397,6 +412,7 @@ function start(): void {
       bridge.send({ type: 'suspend', on });
     },
     openAccessibility: () => {
+      if (!IS_MAC) return;
       systemPreferences.isTrustedAccessibilityClient(true); // adds lolPing to the list and shows the system prompt
       void shell.openExternal(ACCESSIBILITY_PANE);
       if (!trusted()) waitForAccess();

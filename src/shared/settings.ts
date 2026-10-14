@@ -20,9 +20,9 @@ export type TriggerKey = NamedTrigger | { vk: number };
 export type EmoteTriggerKey = TriggerKey | 'off';
 export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 'win', 'capslock', 'mouse4', 'mouse5'];
 
-/** Keyboard triggers offered on each platform. macOS can't reliably stop Caps Lock from toggling, so it isn't offered. */
+/** Keyboard triggers offered on each platform. macOS and X11 can't reliably stop Caps Lock from toggling, so only Windows offers it. */
 export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
-  platform === 'mac' ? ['alt', 'ctrl', 'shift', 'win'] : ['alt', 'ctrl', 'shift', 'win', 'capslock'];
+  platform !== 'win' ? ['alt', 'ctrl', 'shift', 'win'] : ['alt', 'ctrl', 'shift', 'win', 'capslock'];
 
 export interface Settings {
   version: 1;
@@ -149,7 +149,7 @@ function num(raw: unknown, key: NumKey): number {
 const bool = (raw: unknown, key: BoolKey): boolean => (typeof raw === 'boolean' ? raw : DEFAULT_SETTINGS[key]);
 
 function triggerKey(raw: unknown, platform: Platform, fallback: TriggerKey): TriggerKey {
-  if (platform === 'mac' && (raw === 'capslock' || (isObj(raw) && raw.vk === CAPS_LOCK_VK))) return fallback;
+  if (platform !== 'win' && (raw === 'capslock' || (isObj(raw) && raw.vk === CAPS_LOCK_VK))) return fallback;
   if (typeof raw === 'string' && (NAMED_TRIGGERS as readonly string[]).includes(raw)) return raw as NamedTrigger;
   if (isObj(raw) && isVk(raw.vk)) return { vk: raw.vk };
   return fallback;
@@ -283,6 +283,7 @@ export function rendererPatch(raw: unknown): Partial<Settings> {
 
 type KeyTrigger = Exclude<NamedTrigger, 'mouse4' | 'mouse5'>;
 const KEY_LABELS: Record<Platform, Record<KeyTrigger, string>> = {
+  linux: { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', win: 'Super', capslock: 'Caps Lock' },
   win: { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', win: 'Win', capslock: 'Caps Lock' },
   mac: { alt: '⌥ Option', ctrl: '⌃ Control', shift: '⇧ Shift', win: '⌘ Command', capslock: '⇪ Caps Lock' },
 };

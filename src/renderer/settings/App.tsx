@@ -140,7 +140,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
       </nav>
       <main className="content" ref={mainRef} onScroll={onScroll}>
         <h1 className="pageTitle">{t.pageTitle}</h1>
-        {status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
+        {MAC && status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
         <StatusCard settings={s} status={status} />
 
         <div className="section" id="trigger">{t.navTrigger}</div>
@@ -159,7 +159,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}
           description={t.clickPingDesc(trigger)}
           checked={s.clickPing} onChange={(v) => void update({ clickPing: v })} dim={off} />
-        {!MAC && ( // the macOS helper has no fullscreen probe yet
+        {PLATFORM === 'win' && ( // the macOS helper has no fullscreen probe yet
           <SwitchRow icon={<Games24Regular />} title={t.gameCheck}
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />

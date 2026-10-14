@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
   isMac: false,
+  isLinux: false,
 }));
 
 vi.mock('electron', async () => {
@@ -71,6 +72,9 @@ vi.mock('../../src/main/paths', () => ({
   get IS_MAC() {
     return h.isMac;
   },
+  get IS_LINUX() {
+    return h.isLinux;
+  },
   loadPage: () => Promise.resolve(),
   preloadPath: () => 'preload.js',
 }));
@@ -88,6 +92,7 @@ beforeEach(async () => {
   h.windows.length = 0;
   h.handlers.clear();
   h.isMac = false;
+  h.isLinux = false;
   vi.resetModules();
   const { OverlayManager } = await import('../../src/main/overlayManager');
   resolveArt = vi.fn(art);

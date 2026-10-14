@@ -566,8 +566,48 @@ const MAC: Record<Lang, Partial<Strings>> = {
   },
 };
 
+const LINUX: Record<Lang, Partial<Strings>> = {
+  en: {
+    launchAtStartup: 'Open at login',
+    languageDesc: 'Follow the system, or pick one',
+    languageAuto: 'Follow the system',
+    openSettingsFolder: 'Open settings folder',
+    hintNeedModifier: 'Add Ctrl, Alt or Super',
+    statusNoAccess: 'X11 input unavailable',
+    trayTipNoAccess: 'lolPing: requires an X11 desktop session',
+    statusNoAccessHint: 'Use an X11 desktop session with XInput 2.1 and XTest. Wayland sessions are not supported yet.',
+    roomNetworkHint: 'Allow lolPing through your firewall on trusted local networks to discover other room members.',
+    limitations: [
+      'Linux currently requires an X11 session with a compositor. Native Wayland and XWayland sessions are not supported.',
+      'Desktop shortcuts (for example Alt + drag or Super) can reserve a gesture. Select Ctrl, Shift or a mouse side button if it conflicts.',
+      'Caps Lock and automatic fullscreen-game detection are unavailable on Linux. Pause lolPing before playing a game.',
+      'Linux uses 1:1 screen pixels for accurate overlay placement. Automatic updates are unavailable; install new Linux packages manually.',
+      'GNOME needs an AppIndicator extension to display the tray icon.',
+    ],
+  },
+  'zh-CN': {
+    launchAtStartup: '登录时启动',
+    languageDesc: '跟随系统，或手动选择',
+    languageAuto: '跟随系统',
+    openSettingsFolder: '打开设置文件夹',
+    hintNeedModifier: '请加上 Ctrl、Alt 或 Super',
+    statusNoAccess: '无法使用 X11 输入',
+    trayTipNoAccess: 'lolPing：需要 X11 桌面会话',
+    statusNoAccessHint: '请登录支持 XInput 2.1 和 XTest 的 X11 桌面。目前不支持 Wayland 会话。',
+    roomNetworkHint: '请在受信任的局域网中允许 lolPing 通过防火墙，以发现房间中的其他成员。',
+    limitations: [
+      'Linux 目前需要带合成器的 X11 桌面，不支持原生 Wayland 或 Wayland 会话内的 XWayland。',
+      '桌面快捷键可能占用 Alt + 拖动或 Super 等操作。发生冲突时，请改用 Ctrl、Shift 或鼠标侧键。',
+      'Linux 暂不提供 Caps Lock 触发键和全屏游戏自动检测，玩游戏前请暂停 lolPing。',
+      'Linux 使用 1:1 屏幕像素以确保覆盖层位置准确。暂不自动更新，请手动安装新版 Linux 包。',
+      'GNOME 桌面需要 AppIndicator 扩展才能显示托盘图标。',
+    ],
+  },
+};
+
 const TABLES: Record<Platform, Record<Lang, Strings>> = {
   win: { en, 'zh-CN': zh },
+  linux: { en: { ...en, ...LINUX.en }, 'zh-CN': { ...zh, ...LINUX['zh-CN'] } },
   mac: { en: { ...en, ...MAC.en }, 'zh-CN': { ...zh, ...MAC['zh-CN'] } },
 };
 

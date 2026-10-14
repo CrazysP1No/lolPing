@@ -9,7 +9,7 @@ import type { HelperEvent, WheelKind } from '../shared/protocol';
 import type { OverlaySettings } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
-import { IS_MAC, loadPage, preloadPath } from './paths';
+import { IS_LINUX, IS_MAC, loadPage, preloadPath } from './paths';
 
 /** A ping the user just placed, in overlay-local CSS px: the room shares these. */
 export interface SharedPing {
@@ -201,8 +201,8 @@ export class OverlayManager extends EventEmitter {
   private rebuild(): void {
     this.cancelWheel();
     const displays = screen.getAllDisplays();
-    // The macOS helper already reports points in Electron's DIP space; dipToScreenRect only exists on Windows.
-    this.maps = displays.map((d) => IS_MAC
+    // macOS reports DIPs; Linux is forced to scale 1 at startup. dipToScreenRect exists only on Windows.
+    this.maps = displays.map((d) => IS_MAC || IS_LINUX
       ? { id: d.id, dip: d.bounds, phys: d.bounds, scale: 1 }
       : { id: d.id, dip: d.bounds, phys: screen.dipToScreenRect(null, d.bounds), scale: d.scaleFactor });
     this.numberedList = numberDisplays(displays, screen.getPrimaryDisplay().id);
@@ -247,6 +247,7 @@ export class OverlayManager extends EventEmitter {
     });
     win.setIgnoreMouseEvents(true);
     win.setAlwaysOnTop(true, 'screen-saver');
+    if (IS_LINUX) win.setVisibleOnAllWorkspaces(true);
     if (IS_MAC) {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
       win.setHiddenInMissionControl(true); // the overlay isn't a window to the user: keep it out of Mission Control

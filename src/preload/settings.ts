@@ -10,7 +10,7 @@ function subscribe<T>(channel: string, cb: (v: T) => void): () => void {
 
 const api: SettingsApi = {
   // Inlined rather than imported: a sandboxed preload can't require a shared chunk.
-  platform: process.platform === 'darwin' ? 'mac' : 'win',
+  platform: process.platform === 'darwin' ? 'mac' : process.platform === 'linux' ? 'linux' : 'win',
   getSettings: () => ipcRenderer.invoke(SETTINGS_CH.get),
   setSettings: (patch) => ipcRenderer.invoke(SETTINGS_CH.set, patch),
   onSettings: (cb) => subscribe(SETTINGS_CH.changed, cb),
