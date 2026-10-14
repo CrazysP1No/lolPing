@@ -190,7 +190,7 @@ const en = {
   pingNames: {
     danger: 'Danger', push: 'Push', omw: 'On My Way', allin: 'All In', assist: 'Assist Me',
     needvision: 'Need Vision', missing: 'Enemy Missing', enemyvision: 'Enemy Vision', generic: 'Generic',
-    bait: 'Bait', visioncleared: 'Vision Cleared',
+    bait: 'Bait', visioncleared: 'Vision Cleared', missingflip: 'Upside-down Missing',
   } as Record<PingId, string>,
 
   // main process
@@ -438,7 +438,7 @@ const zh: Strings = {
   pingNames: {
     danger: '危险', push: '推进', omw: '正在赶来', allin: '全力进攻', assist: '请求协助',
     needvision: '需要视野', missing: '敌人消失', enemyvision: '敌方视野', generic: '普通信号',
-    bait: '诱饵', visioncleared: '视野已清除',
+    bait: '诱饵', visioncleared: '视野已清除', missingflip: '反向问号',
   },
 
   limitations: [

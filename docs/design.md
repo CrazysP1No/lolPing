@@ -51,6 +51,7 @@ Slot is the default layout (`DEFAULT_WHEEL`); the user can rearrange it.
 | `generic` | (trigger+click) | `generic_ping.png` | `pingwheel_basicpingrender.png` | `Base.wav` | `#2e8bff` |
 | `bait` | — | `pingwheel_baitrender.png` | `pingwheel_baitrender.png` (the hook; also used as the icon) | `SRP_11.wav` | `#efbc12` |
 | `visioncleared` | — | `vision_cleared.png` | `pingwheel_visionclearedrender.png` | `SRP_6.wav` | `#2b80ff` |
+| `missingflip` | — | `enemy_missing_flipped.png` | `enemy_missing_flipped.png` (`enemy_missing` turned 180°, made by `--derived`; not a League ping) | `MIA.wav` | `#f2c518` |
 | wheel tick | — | — | — | `button.wav` | — |
 
 Unused extracted files stay in `assets/` but are never referenced: the `_cb` textures, `enemy_vision` (magenta, like the colourblind set; the wheel uses the red render), `caution`, `hold`, `target`, the `pingwheel_*` renders not listed above, and the other sounds (`SRP_13.wav` is the structure-defend ping).
