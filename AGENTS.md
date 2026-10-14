@@ -6,14 +6,14 @@ This file is for everyone who changes code here: maintainers, contributors, and 
 
 A League of Legends ping wheel for the Windows and macOS desktop. Hold a key, drag, release on a slice, and a League ping appears with its sound. Emotes and rooms (pinging with friends over the local network or public Nostr relays) are built on the same wheel. It starts with the system, sits in the tray, and stays out of the way of normal mouse and keyboard use.
 
-Supported today: Windows 11 x64, and macOS 13+ on Apple Silicon.
+Supported today: Windows 11 x64, macOS 13+ on Apple Silicon, and Linux x64 on X11 (experimental, no Wayland).
 
 ## Guarantees to keep
 
 Whatever a change adds, the app keeps doing these:
 
 1. **Input passes through.** With lolPing on, every click, key and drag that isn't a wheel gesture reaches the app underneath exactly as it would without lolPing. With lolPing paused, nothing is swallowed. Input must never freeze, lag, drop or reorder.
-2. **Both platforms.** A change for one OS doesn't change behaviour on the other. Gate it with `src/shared/platform.ts` in TypeScript, or put it in the platform's own file in `native/hook-helper/src` (`hooks_win.cpp`, `hooks_mac.cpp`).
+2. **Both platforms.** A change for one OS doesn't change behaviour on the other. Gate it with `src/shared/platform.ts` in TypeScript, or put it in the platform's own file in `native/hook-helper/src` (`hooks_win.cpp`, `hooks_mac.cpp`, `hooks_linux.cpp`). Linux code is gated the same way.
 3. **Both languages.** Every user-facing string lives in `src/shared/i18n.ts` with an English and a Simplified Chinese entry. No hard-coded UI text. A README change goes into both `README.md` and `README.zh-CN.md`.
 4. **Old settings and old peers keep working.** `normalizeSettings` in `src/shared/settings.ts` turns any old or broken settings file into valid settings, so new fields need a default there. Room messages (`src/shared/roomProtocol.ts`) stay readable by older apps; when that can't be done, bump `PROTOCOL_VERSION` so older peers show "needs update". A new relay list keeps at least 3 relays from the old one (see `src/main/relays.ts`).
 5. **Network use is visible.** The app talks to GitHub for update checks, and to the relays and the local network while the user is in a room. Say so in the pull request when a change adds a new host, and describe it in the README's privacy notes.
@@ -23,7 +23,7 @@ Whatever a change adds, the app keeps doing these:
 
 | Path | What lives there |
 | --- | --- |
-| `native/hook-helper/` | C++ input helper: global hooks (Windows) or event tap (macOS). The gesture state machine is `decision.cpp`, tested by `tests/helper_tests.cpp`. Talks to Electron in JSON lines (`src/shared/protocol.ts`). |
+| `native/hook-helper/` | C++ input helper: global hooks (Windows), event tap (macOS), or XInput2/XTest (Linux X11). The gesture state machine is `decision.cpp`, tested by `tests/helper_tests.cpp`. Talks to Electron in JSON lines (`src/shared/protocol.ts`). |
 | `src/main/` | Electron main process: helper bridge, overlays, settings store, rooms, updater, tray |
 | `src/preload/` | The bridge each window gets. Expose only what that window needs. |
 | `src/renderer/overlay/` | The wheel and pings, plain TypeScript and DOM, no framework |

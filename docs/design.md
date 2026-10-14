@@ -322,6 +322,16 @@ Multiplayer/sync (rooms arrived in v0.3.0, §12), rebinding wheel slots, colourb
 
 macOS support was added in v0.2.0; see [design-macos.md](design-macos.md).
 
+### Linux (X11, experimental)
+
+The Linux port is an X11 backend. Setup, limits and testing are in [linux.md](linux.md). In short:
+
+- XInput 2.1 raw events watch the keyboard. The helper does not read `/dev/input` and does not take keyboard focus.
+- Passive grabs catch the wheel trigger. Normal clicks are passed on with `ReplayPointer`.
+- XTest replays short trigger clicks and tapped trigger keys to the application underneath.
+- Wayland sessions, including XWayland, are refused at start with a `noAccess` error.
+- Electron is forced to scale factor 1 to match X11 root coordinates. There is no updater; updates are manual. Autostart uses an XDG `.desktop` file.
+
 ## 12. Rooms (v0.3.0, internet in v0.4.0)
 
 - **Model:** a room is a code, `PING-XXXXX-XXXXX` (Crockford base32, 9 random characters + a Luhn mod 32 check character, `src/shared/roomCode.ts`). Parsing ranks candidates and never glues neighbouring words onto a code; clipboard reads are strict. Every finished ping (wheel or trigger+click, never a settings preview) goes to every member; up to 8 members.
