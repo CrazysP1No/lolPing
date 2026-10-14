@@ -96,7 +96,10 @@ let minimizedCssKey: string | null = null;
 
 function paintMinimizedSidebar(w: BrowserWindow): void {
   void w.webContents.insertCSS(MINIMIZED_SIDEBAR_CSS).then((key) => {
-    minimizedCssKey = key;
+    if (w.isDestroyed()) return;
+    // A restore can beat the insert; the fill would then stay over the live vibrancy.
+    if (w.isMinimized()) minimizedCssKey = key;
+    else void w.webContents.removeInsertedCSS(key).catch(() => undefined);
   });
 }
 
@@ -131,11 +134,14 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     icon: nativeImage.createFromPath(assetPath('textures', 'generic_ping.png')),
     show: false,
     ...chromeOptions(),
-    webPreferences: { preload: preloadPath('settings'), spellcheck: false, backgroundThrottling: false },
+    webPreferences: { preload: preloadPath('settings'), spellcheck: false, backgroundThrottling: !IS_MAC },
   });
   if (!IS_MAC) w.removeMenu(); // no menu bar, so pressing Alt in the window does nothing (macOS keeps the app menu)
   if (IS_MAC) {
-    w.on('restore', () => reviveVibrancy(w));
+    w.on('restore', () => {
+      clearMinimizedSidebar(w); // a click on the window in the Dock restores it without the reopen path
+      reviveVibrancy(w);
+    });
     w.on('minimize', () => paintMinimizedSidebar(w));
   }
   const onTheme = () => {

@@ -74,6 +74,7 @@ Creating an active tap needs Accessibility. If `CGEventTapCreate` returns `NULL`
 
 - `<html data-platform="mac">`. A Fluent theme made with `createLightTheme`/`createDarkTheme` from macOS-blue brand ramps, the system font and Mac radii.
 - `mac.css`, scoped to `[data-platform="mac"]`: translucent sidebar on `vibrancy: 'sidebar'`, 52 px drag bar leaving room for the traffic lights (`titleBarStyle: 'hiddenInset'`), grouped inset rows with separators and no per-row icons, iOS-style green switches without On/Off text, Mac keycaps.
+- The Dock animation warps the page's last frame, where the sidebar is transparent (the vibrancy sits behind the page). While the window is minimized, the main process inserts a plain sidebar fill and keeps the renderer painting; on restore it removes the fill and rebuilds the vibrancy.
 - `PermissionCard` appears at the top while the status is `noAccess`.
 - `triggerLabel`, `hotkeyParts`, `hotkeyLabel` take the platform: Mac shows ⌥ Option / ⌃ Control / ⇧ Shift / ⌘ Command and hotkeys as `⌃⌥P`.
 - `strings(lang, platform)` overlays Mac wording in English and Chinese (Open at login, Follow macOS, menu bar instead of tray, Mac limitations, "Add ⌃, ⌥ or ⌘").
