@@ -6,17 +6,18 @@ import type { HistoryLine, RoomHistory } from './roomHistory';
 export interface RoomTextDeps {
   room: Pick<RoomManager, 'on' | 'off' | 'state'>;
   /** Draws a line on the overlay of display `displayId`; the caller adds the text style. */
-  show(p: { displayId: number; x: number; y: number; text: string; owner: string; tag: PingTag }): void;
+  show(p: { displayId: number; x: number; y: number; text: string; owner: string; tag?: PingTag }): void;
   history: RoomHistory;
   text(): Strings;
   now(): number;
 }
 
 export interface RoomLine {
-  kind: Extract<HistoryLine['kind'], 'text' | 'alive'>;
-  /** 'self' or the member's peer ID: the overlay keeps at most 3 lines per owner. */
+  kind: HistoryLine['kind'];
+  /** 'self', 'vote' or the member's peer ID: the overlay keeps at most 3 lines per owner. */
   owner: string;
-  tag: MemberTag;
+  /** Null for a vote result: nobody said it. */
+  tag: MemberTag | null;
   displayId: number;
   x: number;
   y: number;
@@ -26,8 +27,8 @@ export interface RoomLine {
 /** Shows a line and keeps it in the history: the one path for a member's lines and for ours. */
 export function postLine(deps: Pick<RoomTextDeps, 'show' | 'history' | 'now'>, line: RoomLine): void {
   const { kind, tag, text } = line;
-  deps.show({ displayId: line.displayId, x: line.x, y: line.y, text, owner: line.owner, tag });
-  deps.history.push({ at: deps.now(), kind, tag: { name: tag.name, color: tag.color, rgb: tag.rgb }, text });
+  deps.show({ displayId: line.displayId, x: line.x, y: line.y, text, owner: line.owner, ...(tag ? { tag } : {}) });
+  deps.history.push({ at: deps.now(), kind, tag: tag && { name: tag.name, color: tag.color, rgb: tag.rgb }, text });
 }
 
 /** Draws the text and alive lines other members send. Returns a function that stops it. */

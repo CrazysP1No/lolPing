@@ -31,6 +31,7 @@ import { deriveRoomKeys } from './roomCrypto';
 import { RoomHistory } from './roomHistory';
 import { RoomManager, type RoomToast } from './roomManager';
 import { postLine, startRoomText, type RoomTextDeps } from './roomText';
+import { RoomVotes, voteResultLine } from './roomVotes';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
@@ -345,9 +346,44 @@ function start(): void {
     }
   };
   syncRoomText();
+  // Names are kept for the session: a result may name a member who has just left.
+  const memberNames = new Map<string, string>();
   room.on('state', () => {
-    if (room.state().phase === 'idle') history.clear();
+    const s = room.state();
+    if (s.phase === 'idle') {
+      history.clear();
+      memberNames.clear();
+    }
+    for (const m of s.members) memberNames.set(m.peer, m.name);
   });
+  // Votes run while the feature is on; with it off, members' votes and ballots are ignored here.
+  let roomVotes: RoomVotes | null = null;
+  const syncRoomVotes = (): void => {
+    const on = featureOn(settings, 'roomVotes');
+    if (on && !roomVotes) {
+      roomVotes = new RoomVotes({
+        room,
+        now: Date.now,
+        randomId: () => randomBytes(4).toString('hex'),
+        onView: () => {}, // the vote widget is drawn by a later change
+        onResult: (o) => {
+          const display = screen.getPrimaryDisplay();
+          postLine(lineDeps, {
+            kind: 'vote', owner: 'vote', tag: null, displayId: display.id, x: display.bounds.width / 2, y: display.bounds.height * 0.2,
+            text: voteResultLine(o, (peer) => memberNames.get(peer) ?? '?', text()),
+          });
+        },
+        onKicked: () => {
+          room.leave(); // also forgets the room code, so it isn't rejoined at the next start
+          overlays.toast(text().kickedYou, '');
+        },
+      });
+    } else if (!on && roomVotes) {
+      roomVotes.stop();
+      roomVotes = null;
+    }
+  };
+  syncRoomVotes();
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
     const t = text();
@@ -412,9 +448,16 @@ function start(): void {
       case 'unknown':
         return 'unknown';
       case 'ff':
-      case 'noff':
       case 'ready':
-        return 'votesOff'; // the votes themselves come later
+        if (!roomVotes) return 'votesOff';
+        // Typing the command of the vote that is open means yes.
+        if (roomVotes.current()?.kind === input.kind) roomVotes.answer(true);
+        else if (roomVotes.start(input.kind) === 'busy') overlays.toast(text().voteBusy, '');
+        return 'sent';
+      case 'noff':
+        if (!roomVotes) return 'votesOff';
+        if (roomVotes.current()?.kind === 'ff') roomVotes.answer(false);
+        return 'sent';
       default:
         return 'sent'; // nothing usable was typed: just close
     }
@@ -467,6 +510,7 @@ function start(): void {
     settings = s;
     sendConfig();
     syncRoomText();
+    syncRoomVotes();
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());

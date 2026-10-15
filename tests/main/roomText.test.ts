@@ -56,7 +56,7 @@ describe('startRoomText', () => {
     room.emit('remoteText', spoken({ kind: 'alive', text: undefined, who: 'kim' }));
     expect(shown).toHaveLength(1);
     expect(shown[0].text).toBe('Kim - Alive');
-    expect(shown[0].tag.name).toBe('Alex');
+    expect(shown[0].tag?.name).toBe('Alex');
     expect(history.lines()[0]).toMatchObject({ kind: 'alive', text: 'Kim - Alive', tag: { name: 'Alex' } });
   });
 
@@ -103,5 +103,12 @@ describe('postLine', () => {
     });
     expect(shown).toEqual([{ displayId: 3, x: 5, y: 6, text: 'gg', owner: 'self', tag: { name: 'Sam', color: 0, rgb: null } }]);
     expect(history.lines()).toEqual([{ at: 1234, kind: 'text', tag: { name: 'Sam', color: 0, rgb: null }, text: 'gg' }]);
+  });
+
+  it('shows a vote result with no name tag and keeps it in the history', () => {
+    const { deps, shown, history } = setup();
+    postLine(deps, { kind: 'vote', owner: 'vote', tag: null, displayId: 3, x: 5, y: 6, text: 'Everyone is ready' });
+    expect(shown).toEqual([{ displayId: 3, x: 5, y: 6, text: 'Everyone is ready', owner: 'vote' }]);
+    expect(history.lines()).toEqual([{ at: 1234, kind: 'vote', tag: null, text: 'Everyone is ready' }]);
   });
 });

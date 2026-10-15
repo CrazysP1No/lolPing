@@ -273,6 +273,20 @@ const en = {
   textBoxUnknown: 'Unknown command',
   textBoxVotesOff: 'Votes are off',
 
+  // room votes
+  votesOff: 'Votes are off',
+  voteTitleFf: 'Surrender?',
+  voteTitleReady: 'Ready check',
+  voteTitleKick: (name: string) => `Remove ${name}?`,
+  voteBusy: 'A vote is already running',
+  voteResultFf: (passed: boolean, yes: number, voters: number) =>
+    `Surrender vote ${passed ? 'passed' : 'failed'} (${yes} / ${voters})`,
+  voteResultKick: (passed: boolean, name: string, yes: number, voters: number) =>
+    `Vote to remove ${name} ${passed ? 'passed' : 'failed'} (${yes} / ${voters})`,
+  readyAll: 'Everyone is ready',
+  readyMissing: (names: string[]) => `Not ready: ${names.join(', ')}`,
+  kickedYou: 'You were removed from the room',
+
   // updates
   updateAvailable: (v: string) => `lolPing ${v} is available`,
   updateNow: 'Update',
@@ -554,6 +568,17 @@ const zh: Strings = {
   textBoxHint: '指令：/ff /noff /ready',
   textBoxUnknown: '未知指令',
   textBoxVotesOff: '投票已关闭',
+
+  votesOff: '投票已关闭',
+  voteTitleFf: '投降？',
+  voteTitleReady: '准备确认',
+  voteTitleKick: (name) => `移出 ${name}？`,
+  voteBusy: '已有投票在进行',
+  voteResultFf: (passed, yes, voters) => `投降投票${passed ? '通过' : '失败'}（${yes} / ${voters}）`,
+  voteResultKick: (passed, name, yes, voters) => `移出 ${name} 的投票${passed ? '通过' : '失败'}（${yes} / ${voters}）`,
+  readyAll: '所有人都准备好了',
+  readyMissing: (names) => `未准备：${names.join('、')}`,
+  kickedYou: '你被移出了房间',
 
   updateAvailable: (v) => `有新版本 lolPing ${v}`,
   updateNow: '更新',
