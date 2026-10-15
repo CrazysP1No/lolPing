@@ -27,7 +27,9 @@ import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
-import { RoomManager, type RemoteText, type RoomToast } from './roomManager';
+import { RoomHistory } from './roomHistory';
+import { RoomManager, type RoomToast } from './roomManager';
+import { postLine, startRoomText, type RoomTextDeps } from './roomText';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
@@ -325,13 +327,25 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
   });
-  // Alive lines are shown by a later change; only text is drawn for now.
-  room.on('remoteText', (p: RemoteText) => {
-    if (p.kind === 'text' && p.text !== undefined && featureOn(settings, 'roomText')) {
-      overlays.spawnText({
-        displayId: p.displayId, x: p.x, y: p.y, text: p.text, owner: p.peer, style: settings.roomTextStyle, tag: p.tag,
-      });
+  // This session's room lines: members' text and alive lines while the text feature is on, and our own.
+  const history = new RoomHistory();
+  const lineDeps: Pick<RoomTextDeps, 'show' | 'history' | 'now'> = {
+    show: (p) => overlays.spawnText({ ...p, style: settings.roomTextStyle }),
+    history,
+    now: Date.now,
+  };
+  let stopRoomText: (() => void) | null = null;
+  const syncRoomText = (): void => {
+    const on = featureOn(settings, 'roomText');
+    if (on && !stopRoomText) stopRoomText = startRoomText({ room, ...lineDeps, text });
+    else if (!on && stopRoomText) {
+      stopRoomText();
+      stopRoomText = null;
     }
+  };
+  syncRoomText();
+  room.on('state', () => {
+    if (room.state().phase === 'idle') history.clear();
   });
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
@@ -381,7 +395,10 @@ function start(): void {
     const display = screen.getDisplayNearestPoint(point);
     const x = point.x - display.bounds.x;
     const y = point.y - display.bounds.y;
-    overlays.spawnText({ displayId: display.id, x, y, text: message, owner: 'self', style: settings.roomTextStyle });
+    postLine(lineDeps, {
+      kind: 'text', owner: 'self', tag: { name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom) },
+      displayId: display.id, x, y, text: message,
+    });
     const shared = toShared(overlays.numbered(), display.id, x, y);
     if (shared) room.sendText(message, shared);
   });
@@ -422,6 +439,7 @@ function start(): void {
     const previous = settings;
     settings = s;
     sendConfig();
+    syncRoomText();
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());

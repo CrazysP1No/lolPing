@@ -266,6 +266,9 @@ const en = {
   toastNoCode: 'No room code on the clipboard',
   toastNoCodeBody: 'Copy a code like PING-XXXXX-XXXXX first',
 
+  // room text
+  aliveLine: (name: string) => `${name} - Alive`,
+
   // updates
   updateAvailable: (v: string) => `lolPing ${v} is available`,
   updateNow: 'Update',
@@ -541,6 +544,8 @@ const zh: Strings = {
   toastRoomFullBody: '一个房间最多 16 人',
   toastNoCode: '剪贴板中没有房间码',
   toastNoCodeBody: '请先复制形如 PING-XXXXX-XXXXX 的房间码',
+
+  aliveLine: (name) => `${name} - 存活`,
 
   updateAvailable: (v) => `有新版本 lolPing ${v}`,
   updateNow: '更新',
