@@ -199,12 +199,8 @@ export function triggersClash(ping: TriggerKey, emote: EmoteTriggerKey, toggle: 
 const pickKey = <K extends keyof Settings>(current: Settings, patch: Partial<Settings>, k: K): unknown =>
   (k in patch ? patch[k] : current[k]);
 
-/**
- * Whether applying `patch` leaves the panel key on the key of the ping trigger, emote key or a shortcut, judged as
- * normalizeSettings will read them. Only judged when the patch touches one of those keys.
- */
-export function panelKeyClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  if (!(['trigger', 'emoteTrigger', 'toggleHotkey', 'textHotkey', 'panelKey'] as const).some((k) => k in patch)) return false;
+/** Whether `settings` (as a partial patch merged over `current`) puts the panel key on a ping, emote or shortcut key. */
+function panelKeyTaken(current: Settings, patch: Partial<Settings>, platform: Platform): boolean {
   const pick = <K extends keyof Settings>(k: K): unknown => pickKey(current, patch, k);
   const ping = trigger(pick('trigger'), platform);
   const emote = emoteKey(pick('emoteTrigger'), platform);
@@ -212,6 +208,15 @@ export function panelKeyClashes(current: Settings, patch: Partial<Settings>, pla
     triggerVk(ping), triggerVk(emote), hotkey(pick('toggleHotkey')).vk, hotkey(pick('textHotkey'), DEFAULT_SETTINGS.textHotkey).vk,
   ];
   return taken.includes(panelKey(pick('panelKey'), []));
+}
+
+/**
+ * Whether applying `patch` newly puts the panel key on the key of the ping trigger, emote key or a shortcut, judged
+ * as normalizeSettings will read them. A setup that already clashes can still save a patch that doesn't make it worse.
+ */
+export function panelKeyClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
+  if (!(['trigger', 'emoteTrigger', 'toggleHotkey', 'textHotkey', 'panelKey'] as const).some((k) => k in patch)) return false;
+  return panelKeyTaken(current, patch, platform) && !panelKeyTaken(current, {}, platform);
 }
 
 /** Whether applying `patch` to `current` leaves those keys clashing, judged as normalizeSettings will read them. */
@@ -242,9 +247,14 @@ function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey):
 const hotkeysEqual = (a: Hotkey, b: Hotkey): boolean => a.mods === b.mods && a.vk === b.vk;
 const MODIFIER_VKS: readonly number[] = [0x10, 0x11, 0x12, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0x5b, 0x5c];
 
-/** A plain key that is not Esc, a modifier, or the key of another shortcut or custom trigger; else Tab. */
+/** Tab, then backquote and F2-F4: the first of these that isn't taken stands in for a rejected panel key. */
+const PANEL_KEY_FALLBACKS: readonly number[] = [DEFAULT_SETTINGS.panelKey, 0xc0, 0x71, 0x72, 0x73];
+
+/** A plain key that is not Esc, a modifier, or the key of another shortcut or custom trigger; else a free fallback. */
 function panelKey(raw: unknown, taken: readonly (number | null)[]): number {
-  return isVk(raw) && raw !== 0x1b && !MODIFIER_VKS.includes(raw) && !taken.includes(raw) ? raw : DEFAULT_SETTINGS.panelKey;
+  if (isVk(raw) && raw !== 0x1b && !MODIFIER_VKS.includes(raw) && !taken.includes(raw)) return raw;
+  // At most four keys are taken, so one of the five fallbacks is always free.
+  return PANEL_KEY_FALLBACKS.find((k) => !taken.includes(k)) ?? DEFAULT_SETTINGS.panelKey;
 }
 
 const TEXT_HOTKEY_FALLBACK: Hotkey = { mods: MOD.alt, vk: 0x59 }; // Alt+Y when Alt+T is taken

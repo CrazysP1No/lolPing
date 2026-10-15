@@ -82,6 +82,21 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ panelKey: 0x59, textHotkey: { mods: MOD.win, vk: 0x59 } }).panelKey).toBe(0x09);
   });
 
+  it('falls back to a free key when Tab is taken by a custom ping or emote key', () => {
+    expect(normalizeSettings({ trigger: { vk: 0x09 } }).panelKey).toBe(0xc0);
+    expect(normalizeSettings({ trigger: { vk: 0x09 }, panelKey: 0x1b }).panelKey).toBe(0xc0);
+    expect(normalizeSettings({ trigger: { vk: 0x09 }, emoteTrigger: { vk: 0xc0 } }).panelKey).toBe(0x71);
+  });
+
+  it('lets a shortcut change after a custom Tab trigger moved the panel key', () => {
+    const loaded = normalizeSettings({ trigger: { vk: 0x09 } });
+    expect(patchClashes(loaded, { toggleHotkey: { mods: MOD.ctrl, vk: 0x4b } })).toBe(false);
+    expect(patchClashes(loaded, { emoteTrigger: { vk: 0x4b } })).toBe(false);
+    // A store that already clashes on the panel key can still save a patch that doesn't make it worse.
+    const stuck = { ...loaded, panelKey: 0x09 };
+    expect(patchClashes(stuck, { toggleHotkey: { mods: MOD.ctrl, vk: 0x4b } })).toBe(false);
+  });
+
   it('moves the text shortcut off the pause shortcut', () => {
     expect(normalizeSettings({ toggleHotkey: { mods: MOD.alt, vk: 0x54 } })).toMatchObject({
       toggleHotkey: { mods: MOD.alt, vk: 0x54 },
