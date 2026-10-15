@@ -1,4 +1,4 @@
-import type { TextBoxText } from '../../shared/ipc';
+import type { TextAnswer, TextBoxText } from '../../shared/ipc';
 import { MAX_TEXT } from '../../shared/roomProtocol';
 
 const input = document.getElementById('message') as HTMLInputElement;
@@ -29,13 +29,18 @@ let sending = false;
 async function send(): Promise<void> {
   if (sending) return;
   sending = true;
+  let answer: TextAnswer;
   try {
-    const answer = await window.textApi.submit(input.value);
-    if (answer === 'unknown') showHint(words?.unknown ?? '', true);
-    else if (answer === 'votesOff') showHint(words?.votesOff ?? '', true);
-  } finally {
+    answer = await window.textApi.submit(input.value);
+  } catch (error) {
     sending = false;
+    throw error;
   }
+  // 'sent' closes the box: staying locked keeps a held Enter from sending the text again before the window is gone.
+  if (answer === 'sent') return;
+  sending = false;
+  if (answer === 'unknown') showHint(words?.unknown ?? '', true);
+  else if (answer === 'votesOff') showHint(words?.votesOff ?? '', true);
 }
 
 // While an input method is composing, the box holds a draft: cutting it would break the composition, and Enter confirms it.
@@ -52,6 +57,8 @@ input.addEventListener('keydown', (event) => {
   } else if (event.key === 'Escape') {
     event.preventDefault();
     window.textApi.cancel();
+  } else if (event.key === 'Tab') {
+    event.preventDefault(); // focus leaving the box would leave Enter and Esc with nothing to hear them
   }
 });
 

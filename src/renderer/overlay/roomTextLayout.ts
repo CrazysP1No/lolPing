@@ -9,6 +9,21 @@ export function textDurationMs(text: string): number {
   return Math.min(MAX_MS, BASE_MS + PER_POINT_MS * [...text].length);
 }
 
+/**
+ * The anchor for a spot bubble that is centred on x and sits above y, moved so the whole bubble stays on screen.
+ * A bubble bigger than the screen keeps its top left corner visible.
+ */
+export function keepOnScreen(
+  anchor: { x: number; y: number }, size: { width: number; height: number }, screen: { width: number; height: number },
+  margin: number,
+): { x: number; y: number } {
+  const half = size.width / 2;
+  return {
+    x: Math.max(half + margin, Math.min(anchor.x, screen.width - half - margin)),
+    y: Math.max(size.height + margin, Math.min(anchor.y, screen.height - margin)),
+  };
+}
+
 /** At most `max` lines per owner on screen: adding past it names the oldest ones to take down. */
 export class OwnerLimit {
   private readonly ids = new Map<string, number[]>();

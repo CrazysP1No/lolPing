@@ -5,6 +5,7 @@ import { TextStage, type TextLine } from '../../src/renderer/overlay/textFx';
 class FakeElement {
   textContent = '';
   offsetWidth = 296;
+  offsetHeight = 60;
   parent: FakeElement | null = null;
   children: FakeElement[] = [];
   classes = new Set<string>();
@@ -56,6 +57,12 @@ describe('TextStage', () => {
     expect(layer.children).toHaveLength(1);
     vi.advanceTimersByTime(1);
     expect(layer.children).toHaveLength(0);
+  });
+
+  it('moves a spot bubble in when its point is near the top left corner', () => {
+    stage.spawn(line({ x: 10, y: 20 }));
+    expect(layer.children[0].style.left).toBe('156px'); // half the 296 px bubble plus the margin
+    expect(layer.children[0].style.top).toBe('68px'); // the 60 px bubble sits above the point
   });
 
   it('keeps three lines per owner and drops the oldest of a fourth', () => {

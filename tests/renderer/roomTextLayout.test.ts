@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DanmakuLanes, OwnerLimit, textDurationMs } from '../../src/renderer/overlay/roomTextLayout';
+import { DanmakuLanes, OwnerLimit, keepOnScreen, textDurationMs } from '../../src/renderer/overlay/roomTextLayout';
 
 describe('roomTextLayout', () => {
   describe('textDurationMs', () => {
@@ -13,6 +13,27 @@ describe('roomTextLayout', () => {
 
     it('counts an emoji once', () => {
       expect(textDurationMs('😀')).toBe(4060);
+    });
+  });
+
+  describe('keepOnScreen', () => {
+    const size = { width: 200, height: 60 };
+    const screen = { width: 1000, height: 600 };
+
+    it('leaves a bubble that fits where it is', () => {
+      expect(keepOnScreen({ x: 500, y: 300 }, size, screen, 8)).toEqual({ x: 500, y: 300 });
+    });
+
+    it('moves a bubble in from the top and left edges', () => {
+      expect(keepOnScreen({ x: 10, y: 20 }, size, screen, 8)).toEqual({ x: 108, y: 68 });
+    });
+
+    it('moves a bubble in from the right and bottom edges', () => {
+      expect(keepOnScreen({ x: 990, y: 700 }, size, screen, 8)).toEqual({ x: 892, y: 592 });
+    });
+
+    it('keeps the top left corner of a bubble that is bigger than the screen', () => {
+      expect(keepOnScreen({ x: 0, y: 0 }, { width: 1200, height: 800 }, screen, 8)).toEqual({ x: 608, y: 808 });
     });
   });
 

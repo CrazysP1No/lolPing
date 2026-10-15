@@ -1,12 +1,14 @@
 import type { PingTag } from '../../shared/ipc';
 import { tagColorCss } from '../../shared/roomColors';
 import type { RoomTextStyle } from '../../shared/settings';
-import { DanmakuLanes, OwnerLimit, textDurationMs } from './roomTextLayout';
+import { DanmakuLanes, OwnerLimit, keepOnScreen, textDurationMs } from './roomTextLayout';
 
 const MAX_LINES_PER_OWNER = 3;
 /** 弹幕 lines all move at this speed, so a lane stays clear behind the line in front of it. */
 const DANMAKU_SPEED_PX_S = 160;
 const DANMAKU_LINE_PX = 34;
+/** Space kept between a spot bubble and the display's edge. */
+const SPOT_MARGIN_PX = 8;
 
 export interface TextLine {
   text: string;
@@ -54,12 +56,17 @@ export class TextStage {
   private spawnSpot(id: number, line: TextLine): void {
     const ms = textDurationMs(line.text);
     const root = el('text-pop');
-    root.style.left = `${line.x}px`;
-    root.style.top = `${line.y}px`;
     root.style.setProperty('--dur', `${ms}ms`);
     if (line.tag) root.append(this.nameOf('text-name', line.tag));
     root.append(el('text-body', line.text));
     this.layer.append(root);
+    // The bubble is centred above the point, so near an edge it would be cut off: measure it, then move it in.
+    const at = keepOnScreen(
+      line, { width: root.offsetWidth, height: root.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight }, SPOT_MARGIN_PX,
+    );
+    root.style.left = `${at.x}px`;
+    root.style.top = `${at.y}px`;
     this.shown.set(id, { owner: line.owner, root, timer: setTimeout(() => this.drop(id), ms) });
   }
 
