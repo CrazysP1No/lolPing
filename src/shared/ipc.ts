@@ -46,10 +46,27 @@ export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'toast:show', 'text:spawn',
 ];
 
-export const TEXT_CH = { submit: 'text:submit' } as const;
+export const TEXT_CH = { submit: 'text:submit', cancel: 'text:cancel', strings: 'text:strings' } as const;
+
+/** The text box's words, in the language the app uses. */
+export interface TextBoxText {
+  placeholder: string;
+  /** The commands the box understands, shown under the input. */
+  hint: string;
+  /** Shown instead of the hint when the text was a command that doesn't exist. */
+  unknown: string;
+  /** Shown instead of the hint for a vote command while votes are switched off. */
+  votesOff: string;
+}
+
+/** What the app made of a submit: 'sent' closes the box, the others keep it open with a hint. */
+export type TextAnswer = 'sent' | 'unknown' | 'votesOff';
 
 export interface TextApi {
-  submit(text: string): void;
+  /** Resolves with the app's answer; on 'sent' the window closes. */
+  submit(text: string): Promise<TextAnswer>;
+  cancel(): void;
+  strings(): Promise<TextBoxText | null>;
 }
 
 /** overlay renderer → main: string[] of asset files that failed to load. */

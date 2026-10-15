@@ -13,6 +13,7 @@ import type { RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { sameTagRgb, tagWire } from '../shared/roomColors';
 import { overlaySettings, type Settings } from '../shared/settings';
+import { parseTextInput } from '../shared/textCommands';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { resolveTarget, toShared } from './displayNumbers';
@@ -390,27 +391,48 @@ function start(): void {
   }
 
   const syncSuspended = (): void => bridge.send({ type: 'suspend', on: capturing || textOpen });
-  registerTextWindow((message) => {
-    const point = screen.getCursorScreenPoint();
-    const display = screen.getDisplayNearestPoint(point);
-    const x = point.x - display.bounds.x;
-    const y = point.y - display.bounds.y;
+  /** Shows our own text where the box was opened, and sends it to the room. */
+  const sendOwnText = (message: string, at: { x: number; y: number }): void => {
+    const display = screen.getDisplayNearestPoint(at);
+    const x = at.x - display.bounds.x;
+    const y = at.y - display.bounds.y;
     postLine(lineDeps, {
       kind: 'text', owner: 'self', tag: { name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom) },
       displayId: display.id, x, y, text: message,
     });
     const shared = toShared(overlays.numbered(), display.id, x, y);
     if (shared) room.sendText(message, shared);
+  };
+  registerTextWindow((raw, at) => {
+    const input = parseTextInput(raw);
+    switch (input.kind) {
+      case 'text':
+        sendOwnText(input.text, at);
+        return 'sent';
+      case 'unknown':
+        return 'unknown';
+      case 'ff':
+      case 'noff':
+      case 'ready':
+        return 'votesOff'; // the votes themselves come later
+      default:
+        return 'sent'; // nothing usable was typed: just close
+    }
   });
   onTextWindowGone(() => {
     textOpen = false;
     syncSuspended();
+    // Hiding the app hands focus back to the app the box was opened over. Not while settings is open: it would vanish too.
+    if (IS_MAC && !settingsWindow()?.isVisible()) app.hide();
   });
   const openText = (): void => {
     if (!live.text || textOpen || capturing) return;
     textOpen = true;
     syncSuspended();
-    openTextWindow();
+    const t = text();
+    openTextWindow(screen.getCursorScreenPoint(), {
+      placeholder: t.textBoxPlaceholder, hint: t.textBoxHint, unknown: t.textBoxUnknown, votesOff: t.textBoxVotesOff,
+    });
   };
   bridge.on('event', (ev) => {
     if (ev.type === 'toggled') setEnabled(ev.enabled);

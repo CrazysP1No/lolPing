@@ -1,15 +1,13 @@
-:root { color-scheme: light dark; font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif; }
+:root { color-scheme: dark; font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif; }
 * { box-sizing: border-box; }
-body { margin: 0; background: #202020; color: #fff; }
-main { padding: 34px 24px 20px; }
-label { display: block; margin-bottom: 10px; font-size: 15px; font-weight: 600; }
-.row { display: flex; gap: 10px; }
-input { flex: 1; min-width: 0; height: 36px; border: 1px solid #777; border-radius: 5px; padding: 0 10px; background: #292929; color: inherit; font: inherit; outline: none; }
-input:focus { border-color: #60cdff; box-shadow: 0 0 0 1px #60cdff; }
-button { height: 36px; min-width: 76px; border: 0; border-radius: 5px; background: #60cdff; color: #08202b; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-small { display: block; margin-top: 9px; color: #aaa; }
-@media (prefers-color-scheme: light) {
-  body { background: #f6f6f6; color: #1a1a1a; }
-  input { background: #fff; border-color: #aaa; }
-  small { color: #666; }
-}
+html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+/* The League chat look: a dark translucent fill with a thin gold edge. */
+main { height: 100%; padding: 6px 10px 4px; border: 1px solid #c8aa6e; border-radius: 6px; background: rgba(10, 20, 28, .94); color: #f0e6d2; }
+.row { display: flex; align-items: center; gap: 8px; height: 34px; }
+input { flex: 1; min-width: 0; height: 100%; border: 0; border-bottom: 1px solid rgba(200, 170, 110, .35); padding: 0 2px; background: transparent; color: inherit; font: 600 15px/1 inherit; outline: none; }
+input::placeholder { color: rgba(240, 230, 210, .45); font-weight: 400; }
+input:focus { border-bottom-color: #c8aa6e; }
+#count { flex: none; color: rgba(240, 230, 210, .6); font-size: 12px; font-variant-numeric: tabular-nums; }
+#count.full { color: #ff8a65; }
+small { display: block; height: 18px; margin-top: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: rgba(240, 230, 210, .5); font-size: 11px; line-height: 18px; }
+small.warn { color: #ff8a65; }

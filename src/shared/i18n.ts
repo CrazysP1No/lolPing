@@ -268,6 +268,10 @@ const en = {
 
   // room text
   aliveLine: (name: string) => `${name} - Alive`,
+  textBoxPlaceholder: 'Say something to the room, Enter to send',
+  textBoxHint: 'Commands: /ff /noff /ready',
+  textBoxUnknown: 'Unknown command',
+  textBoxVotesOff: 'Votes are off',
 
   // updates
   updateAvailable: (v: string) => `lolPing ${v} is available`,
@@ -546,6 +550,10 @@ const zh: Strings = {
   toastNoCodeBody: '请先复制形如 PING-XXXXX-XXXXX 的房间码',
 
   aliveLine: (name) => `${name} - 存活`,
+  textBoxPlaceholder: '对房间说点什么，Enter 发送',
+  textBoxHint: '指令：/ff /noff /ready',
+  textBoxUnknown: '未知指令',
+  textBoxVotesOff: '投票已关闭',
 
   updateAvailable: (v) => `有新版本 lolPing ${v}`,
   updateNow: '更新',
