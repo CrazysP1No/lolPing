@@ -107,8 +107,12 @@ class Hooks {
         const unsigned int chord = ((c.toggleMods & ModCtrl) ? ControlMask : 0) |
           ((c.toggleMods & ModAlt) ? Mod1Mask : 0) | ((c.toggleMods & ModShift) ? ShiftMask : 0) |
           ((c.toggleMods & ModWin) ? Mod4Mask : 0);
+        // The panel key is grabbed with no modifier held (Ctrl+Tab, Alt+Tab... stay with the application),
+        // and only while it is on: an off panel key (0) grabs nothing.
+        const bool panel = decision.enabled() && !suspended && c.panelVk != 0 && vk[code] == c.panelVk &&
+          (mods & ~(LockMask | Mod2Mask)) == 0;
         if ((pointerActive && vk[code] == 0x1B) || own(vk[code], c.trigger, c.triggerVk) || own(vk[code], c.emoteTrigger, c.emoteTriggerVk) ||
-            (!suspended && vk[code] == c.toggleVk && (mods & ~(LockMask | Mod2Mask)) == chord))
+            panel || (!suspended && vk[code] == c.toggleVk && (mods & ~(LockMask | Mod2Mask)) == chord))
           XGrabKey(display, code, mods, root, False, GrabModeAsync, GrabModeSync);
       }
     }

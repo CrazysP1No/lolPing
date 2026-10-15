@@ -399,6 +399,7 @@ static void test_text_hotkey_requests_once() {
   Config c;
   c.trigger = Trigger::CustomVk;
   c.triggerVk = KEY_T;  // the complete shortcut must win over this swallowed custom trigger
+  c.textVk = KEY_T;
   Decision d;
   d.setConfig(c);
   d.onEvent(kd(CTRL));
@@ -413,7 +414,10 @@ static void test_text_hotkey_requests_once() {
 }
 
 static void test_text_hotkey_ignored_while_suspended() {
+  Config c;
+  c.textVk = KEY_T;
   Decision d;
+  d.setConfig(c);
   d.setSuspended(true);
   d.onEvent(kd(CTRL));
   d.onEvent(kd(ALT));
@@ -473,6 +477,177 @@ static void test_text_hotkey_off_when_vk_zero() {
   Result r = d.onEvent(kd(KEY_T));
   CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
   CHECK(!d.onEvent(ku(KEY_T)).swallow);
+  // vk 0 is "off", not "any key": key code 0 with Alt held must not match the shortcut either.
+  r = d.onEvent(kd(0));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+}
+
+static void test_text_hotkey_needs_its_modifier() {
+  Decision d = withAltText();
+  Result r = d.onEvent(kd(KEY_T));  // plain T is ordinary typing
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+  CHECK(!d.onEvent(ku(KEY_T)).swallow);
+}
+
+static void test_nothing_is_live_before_the_first_config() {
+  Decision d;
+  d.onEvent(kd(CTRL));
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+  d.onEvent(ku(ALT));
+  d.onEvent(ku(CTRL));
+  r = d.onEvent(kd(TAB));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+}
+
+static Decision withPanel(uint32_t panelVk = TAB) {
+  Config c;
+  c.panelVk = panelVk;
+  Decision d;
+  d.setConfig(c);
+  return d;
+}
+
+static bool panelShows(const Result& r, bool show) {
+  const Emit* e = findEmit(r, Emit::Kind::Panel);
+  return e != nullptr && e->show == show;
+}
+
+static void test_panel_key_shows_on_press_and_hides_on_release() {
+  Decision d = withPanel();
+  Result r = d.onEvent(kd(TAB));
+  CHECK(r.swallow && panelShows(r, true) && r.injects.empty());
+  r = d.onEvent(kd(TAB));  // auto-repeat
+  CHECK(r.swallow && r.emits.empty() && r.injects.empty());
+  r = d.onEvent(kd(TAB));
+  CHECK(r.swallow && r.emits.empty());
+  r = d.onEvent(ku(TAB));
+  CHECK(r.swallow && panelShows(r, false) && r.injects.empty());
+  r = d.onEvent(kd(TAB));  // the next press shows it again
+  CHECK(r.swallow && panelShows(r, true));
+}
+
+static void test_panel_key_with_modifier_passes() {
+  for (const uint32_t mod : {ALT, CTRL, uint32_t{0xA0}, uint32_t{0x5B}}) {
+    Decision d = withPanel();
+    d.onEvent(kd(mod));
+    Result r = d.onEvent(kd(TAB));
+    CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+    r = d.onEvent(ku(TAB));
+    CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+  }
+}
+
+static void test_panel_key_passes_over_fullscreen_game() {
+  Config c;
+  c.panelVk = TAB;
+  c.gameCheck = true;
+  Decision d;
+  d.setConfig(c);
+  int probedX = -1, probedY = -1;
+  bool fullscreen = true;
+  d.setFullscreenProbe([&](int x, int y) {
+    probedX = x;
+    probedY = y;
+    return fullscreen;
+  });
+  d.onEvent(mv(321, 654));
+  Result r = d.onEvent(kd(TAB));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+  CHECK(probedX == 321 && probedY == 654);  // asked about the screen under the last mouse position
+  CHECK(!d.onEvent(ku(TAB)).swallow);
+  fullscreen = false;
+  r = d.onEvent(kd(TAB));
+  CHECK(r.swallow && panelShows(r, true));
+  d.onEvent(ku(TAB));
+  c.gameCheck = false;  // gameCheck off: the probe is not asked
+  d.setConfig(c);
+  fullscreen = true;
+  r = d.onEvent(kd(TAB));
+  CHECK(r.swallow && panelShows(r, true));
+}
+
+static void test_panel_key_passes_when_off_or_paused() {
+  Decision off = withPanel(0);
+  Result r = off.onEvent(kd(TAB));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+  CHECK(!off.onEvent(ku(TAB)).swallow);
+
+  Decision paused = withPanel();
+  paused.setSuspended(true);
+  r = paused.onEvent(kd(TAB));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+  CHECK(!paused.onEvent(ku(TAB)).swallow);
+
+  Decision disabled = withPanel();
+  disabled.setEnabled(false);
+  r = disabled.onEvent(kd(TAB));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+  CHECK(!disabled.onEvent(ku(TAB)).swallow);
+}
+
+static void test_panel_key_passes_when_it_is_a_wheel_trigger() {
+  Config c;
+  c.panelVk = TAB;
+  c.trigger = Trigger::CustomVk;
+  c.triggerVk = TAB;
+  Decision d;
+  d.setConfig(c);
+  Result r = d.onEvent(kd(TAB));
+  CHECK(findEmit(r, Emit::Kind::Panel) == nullptr);  // the wheel trigger keeps its key
+  CHECK(r.swallow);
+}
+
+static void test_panel_key_up_after_config_change_is_swallowed() {
+  Decision d = withPanel();
+  CHECK(d.onEvent(kd(TAB)).swallow);
+  Config off = d.config();
+  off.panelVk = 0;  // left the room, or the feature went off, with Tab still held
+  d.setConfig(off);
+  Result r = d.onEvent(kd(TAB));  // repeats were never seen by the OS either
+  CHECK(r.swallow && r.emits.empty());
+  r = d.onEvent(ku(TAB));
+  CHECK(r.swallow && panelShows(r, false));
+  r = d.onEvent(kd(TAB));  // and the next Tab is ordinary again
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::Panel) == nullptr);
+  CHECK(!d.onEvent(ku(TAB)).swallow);
+}
+
+static void test_panel_key_up_while_paused_is_swallowed() {
+  Decision d = withPanel();
+  d.onEvent(kd(TAB));
+  d.setSuspended(true);
+  Result r = d.onEvent(ku(TAB));
+  CHECK(r.swallow && panelShows(r, false));
+}
+
+static void test_panel_hides_when_repeats_stop() {
+  Decision d = withPanel();
+  InputEvent down = kd(TAB);
+  down.timeMs = 0;
+  d.onEvent(down);
+  CHECK(d.tick(1400).emits.empty());
+  Result r = d.tick(1600);
+  CHECK(panelShows(r, false));
+  CHECK(d.tick(3000).emits.empty());  // hidden once
+  r = d.onEvent(ku(TAB));  // the real up still never reaches the OS
+  CHECK(r.swallow && r.emits.empty());
+  r = d.onEvent(kd(TAB));
+  CHECK(r.swallow && panelShows(r, true));
+}
+
+static void test_panel_repeats_keep_it_shown() {
+  Decision d = withPanel();
+  InputEvent down = kd(TAB);
+  down.timeMs = 0;
+  d.onEvent(down);
+  down.timeMs = 1000;
+  d.onEvent(down);
+  down.timeMs = 2000;
+  d.onEvent(down);
+  CHECK(d.tick(3000).emits.empty());
+  CHECK(panelShows(d.tick(3600), false));
 }
 
 static void test_text_hotkey_ignored_while_paused() {
@@ -943,6 +1118,15 @@ static void test_parse_config_text_hotkey() {
   CHECK(c.kind == Command::Kind::Config && c.config.textMods == 9 && c.config.textVk == 89);
 }
 
+static void test_parse_config_panel_key() {
+  const Config cur;
+  CHECK(cur.panelVk == 0 && cur.textVk == 0);
+  const Command c = parseCommand(R"({"type":"config","panelVk":9})", cur);
+  CHECK(c.kind == Command::Kind::Config && c.config.panelVk == 9);
+  const Command keep = parseCommand(R"({"type":"config"})", c.config);
+  CHECK(keep.config.panelVk == 9);
+}
+
 static void test_json_parses_flat_objects() {
   std::map<std::string, std::string> m;
   CHECK(parseFlatJson(R"({"type":"config","enabled":true,"dragThresholdPx":8,"trigger":"alt"})", m));
@@ -973,6 +1157,11 @@ static void test_format_emit() {
   CHECK(formatEmit(toggled) == R"({"type":"toggled","enabled":true})");
   CHECK(formatEmit(Emit{Emit::Kind::Cancel}) == R"({"type":"cancel"})");
   CHECK(formatEmit(Emit{Emit::Kind::TextRequested}) == R"({"type":"textRequested"})");
+  Emit panel{Emit::Kind::Panel};
+  panel.show = true;
+  CHECK(formatEmit(panel) == R"({"type":"panel","show":true})");
+  panel.show = false;
+  CHECK(formatEmit(panel) == R"({"type":"panel","show":false})");
 }
 
 static void test_format_emit_includes_wheel() {
@@ -1098,6 +1287,7 @@ int main() {
   test_format_emit_includes_wheel();
   test_parse_config_emote_fields();
   test_parse_config_text_hotkey();
+  test_parse_config_panel_key();
   test_output_never_blocks_producer();
   test_alt_drag_opens_wheel_and_releases();
   test_plain_click_passes_through();
@@ -1126,6 +1316,17 @@ int main() {
   test_text_hotkey_masks_alt_menu();
   test_alt_drag_still_opens_wheel_with_text_hotkey();
   test_text_hotkey_off_when_vk_zero();
+  test_text_hotkey_needs_its_modifier();
+  test_nothing_is_live_before_the_first_config();
+  test_panel_key_shows_on_press_and_hides_on_release();
+  test_panel_key_with_modifier_passes();
+  test_panel_key_passes_over_fullscreen_game();
+  test_panel_key_passes_when_off_or_paused();
+  test_panel_key_passes_when_it_is_a_wheel_trigger();
+  test_panel_key_up_after_config_change_is_swallowed();
+  test_panel_key_up_while_paused_is_swallowed();
+  test_panel_hides_when_repeats_stop();
+  test_panel_repeats_keep_it_shown();
   test_text_hotkey_ignored_while_paused();
   test_disabling_mid_drag_cancels_and_swallows_up();
   test_config_change_mid_drag_cancels();

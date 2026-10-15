@@ -39,6 +39,12 @@ Emit point(Emit::Kind k, int x, int y, WheelKind w) {
   return e;
 }
 
+Emit panelEmit(bool show) {
+  Emit e{Emit::Kind::Panel};
+  e.show = show;
+  return e;
+}
+
 }  // namespace
 
 uint32_t Decision::mods() const {
@@ -157,6 +163,13 @@ void Decision::setFullscreenProbe(std::function<bool(int x, int y)> probe) { ful
 
 Result Decision::tick(uint64_t nowMs) {
   Result r;
+  // A captured panel key whose repeats stopped lost its key-up: hide the panel. The real up, if it still
+  // comes, stays swallowed through swallowKeyUps_, and the key counts as up for the next press.
+  if (panelDown_ != 0 && nowMs > lastPanelMs_ && nowMs - lastPanelMs_ > kPanelRepeatGapMs) {
+    keyDown_[panelDown_] = false;
+    panelDown_ = 0;
+    r.emits.push_back(panelEmit(false));
+  }
   const bool busy = state_ == State::Pending || state_ == State::Wheel;
   if (busy && nowMs > lastMouseMs_ && nowMs - lastMouseMs_ > kWatchdogMs) {
     r.emits.push_back(Emit{Emit::Kind::Cancel});
@@ -195,14 +208,20 @@ Result Decision::onEvent(const InputEvent& e) {
       onKeyUp(e, r);
       break;
     case EvKind::MouseDown:
+      lastX_ = e.x;
+      lastY_ = e.y;
       lastMouseMs_ = e.timeMs;
       onMouseDown(e, r);
       break;
     case EvKind::MouseUp:
+      lastX_ = e.x;
+      lastY_ = e.y;
       lastMouseMs_ = e.timeMs;
       onMouseUp(e, r);
       break;
     case EvKind::MouseMove:
+      lastX_ = e.x;
+      lastY_ = e.y;
       lastMouseMs_ = e.timeMs;
       onMouseMove(e, r);
       break;
@@ -258,6 +277,23 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     }
     return;
   }
+  // The room panel key: a deliberate exception to "input passes through" (spec 5.3). Plain key, captured at
+  // once and never replayed. Its repeats stay swallowed even if the config changed since, because the OS never saw the down.
+  if (panelDown_ != 0 && vk == panelDown_) {
+    r.swallow = true;
+    lastPanelMs_ = e.timeMs;
+    return;
+  }
+  if (active() && !repeat && cfg_.panelVk != 0 && vk == cfg_.panelVk && mods() == 0 &&
+      !isTriggerVk(WheelKind::Ping, vk) && !isTriggerVk(WheelKind::Emote, vk) &&
+      !(cfg_.gameCheck && fullscreenProbe_ && fullscreenProbe_(lastX_, lastY_))) {
+    r.swallow = true;
+    swallowKeyUps_.insert(vk);
+    panelDown_ = vk;
+    lastPanelMs_ = e.timeMs;
+    r.emits.push_back(panelEmit(true));
+    return;
+  }
   if (active()) {
     if (vk == kVkEsc && (state_ == State::Pending || state_ == State::Wheel)) {
       r.swallow = true;
@@ -296,6 +332,10 @@ void Decision::onKeyUp(const InputEvent& e, Result& r) {
   const bool triggerReleased = heldBefore && !held(owner_) && isTriggerVk(owner_, vk);
 
   if (swallowKeyUps_.erase(vk) > 0) r.swallow = true;
+  if (vk == panelDown_) {
+    panelDown_ = 0;
+    r.emits.push_back(panelEmit(false));
+  }
   // Tap-through: a flushed key's real up passes (its swallow was dropped at the flush), ending typing mode.
   if (vk == typedVk_) typedVk_ = 0;
   // Tap-through: the key was pressed and released with nothing in between: type it now (down + up).

@@ -17,6 +17,7 @@ std::string formatEmit(const Emit& e) {
     case Emit::Kind::Cancel: return "{\"type\":\"cancel\"}";
     case Emit::Kind::Toggled: return std::string("{\"type\":\"toggled\",\"enabled\":") + (e.enabled ? "true" : "false") + "}";
     case Emit::Kind::TextRequested: return "{\"type\":\"textRequested\"}";
+    case Emit::Kind::Panel: return std::string("{\"type\":\"panel\",\"show\":") + (e.show ? "true" : "false") + "}";
   }
   return "{}";
 }
@@ -40,8 +41,8 @@ void Output::line(std::string s) {
 
 void Output::emit(const Emit& e) { line(formatEmit(e)); }
 
-// Version 3: the config takes a text shortcut and can emit textRequested.
-void Output::ready() { line("{\"type\":\"ready\",\"version\":3}"); }
+// Version 4: the config takes a panel key and can emit panel.
+void Output::ready() { line("{\"type\":\"ready\",\"version\":4}"); }
 
 void Output::error(const std::string& message) { line("{\"type\":\"error\",\"message\":\"" + jsonEscape(message) + "\"}"); }
 

@@ -307,10 +307,12 @@ function start(): void {
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
-  // The room keys (Alt+T now, the panel key later) are the helper's only while a room is active, so they reach other apps otherwise.
+  // The room keys (Alt+T and the panel key) are the helper's only while a room is active, so they reach other apps otherwise.
   let live = liveKeys(settings, { active: false }, enabled);
   const sendConfig = (): void => {
     live = liveKeys(settings, { active: room.state().phase === 'active' }, enabled);
+    // The helper stops reporting a held panel key once it is off, so the roster would stay up: hide it here.
+    if (!live.panel) panels.hideRoster();
     bridge.send(configCommand(settings, enabled, live));
   };
   room.on('state', () => {
@@ -357,7 +359,7 @@ function start(): void {
     }
     for (const m of s.members) memberNames.set(m.peer, m.name);
   });
-  // The vote widget (and, later, the roster) live in their own windows that never take focus.
+  // The vote widget and the roster live in their own windows that never take focus.
   const panels = new PanelWindows();
   const panelState = (view: PanelState['view'], vote: PanelState['vote'], voteOver = false): PanelState => ({
     view, lang: resolveLang(settings.language, app.getLocale()), max: MAX_MEMBERS, room: room.state(), history: history.lines(),
@@ -495,6 +497,10 @@ function start(): void {
   bridge.on('event', (ev) => {
     if (ev.type === 'toggled') setEnabled(ev.enabled);
     else if (ev.type === 'textRequested') openText();
+    else if (ev.type === 'panel') {
+      if (!ev.show) panels.hideRoster();
+      else if (live.panel) panels.showRoster(screen.getCursorScreenPoint(), panelState('roster', null));
+    }
     else if (ev.type === 'ready') {
       // A restarted helper starts unsuspended: re-apply an active key capture.
       if (capturing || textOpen) syncSuspended();

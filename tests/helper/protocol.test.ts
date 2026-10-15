@@ -33,7 +33,7 @@ const sim = (ev: string, extra: Record<string, unknown> = {}) => ({ type: 'sim',
 describe('hook-helper --simulate', () => {
   it('announces itself first', async () => {
     const events = await simulate([]);
-    expect(events[0]).toEqual({ type: 'ready', version: 3 });
+    expect(events[0]).toEqual({ type: 'ready', version: 4 });
   });
 
   it('opens and releases the wheel on Alt+drag', async () => {
@@ -108,6 +108,22 @@ describe('hook-helper --simulate', () => {
     expect(events).toContainEqual({ type: 'textRequested' });
     const keyLines = events.filter((e) => e.type === 'sim').slice(-2);
     expect(keyLines.every((e) => e.type === 'sim' && e.swallow)).toBe(true);
+  });
+
+  it('shows the panel on Tab down, hides it on Tab up, and swallows both', async () => {
+    const events = await simulate([
+      { ...config, panelVk: 9 }, sim('kdown', { vk: 9 }), sim('kup', { vk: 9 }),
+    ]);
+    const protocol = events.filter((e) => e.type !== 'ready');
+    expect(protocol).toEqual([
+      { type: 'panel', show: true }, { type: 'sim', swallow: true, inject: '' },
+      { type: 'panel', show: false }, { type: 'sim', swallow: true, inject: '' },
+    ]);
+  });
+
+  it('leaves Tab alone while the panel key is off', async () => {
+    const events = await simulate([{ ...config, panelVk: 0 }, sim('kdown', { vk: 9 })]);
+    expect(events.filter((e) => e.type !== 'ready')).toEqual([{ type: 'sim', swallow: false, inject: '' }]);
   });
 
   it('reports invalid commands as errors', async () => {

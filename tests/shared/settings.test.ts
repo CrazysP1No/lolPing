@@ -59,6 +59,29 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({}).textHotkey).toEqual({ mods: MOD.alt, vk: 0x54 });
   });
 
+  it('defaults the panel key to Tab', () => {
+    expect(DEFAULT_SETTINGS.panelKey).toBe(0x09);
+    expect(normalizeSettings({}).panelKey).toBe(0x09);
+    expect(normalizeSettings({ version: 1, volume: 50 }).panelKey).toBe(0x09);
+  });
+
+  it('keeps a plain key as the panel key', () => {
+    expect(normalizeSettings({ panelKey: 0xc0 }).panelKey).toBe(0xc0);
+    expect(normalizeSettings({ panelKey: 0x71 }).panelKey).toBe(0x71);
+  });
+
+  it('moves the panel key off a key another shortcut uses', () => {
+    for (const panelKey of [0x10, 0x11, 0x12, 0xa0, 0xa5, 0x5b, 0x1b, 0, 255, 9.5, '9', null]) {
+      expect(normalizeSettings({ panelKey }).panelKey, String(panelKey)).toBe(0x09);
+    }
+    expect(normalizeSettings({ panelKey: 0x56, trigger: { vk: 0x56 } }).panelKey).toBe(0x09);
+    expect(normalizeSettings({ panelKey: 0x56, emoteTrigger: { vk: 0x56 } }).panelKey).toBe(0x09);
+    expect(normalizeSettings({ panelKey: 0x56, emoteTrigger: { vk: 0x56 }, trigger: 'ctrl' }).panelKey).toBe(0x09);
+    expect(normalizeSettings({ panelKey: 0x14, trigger: 'capslock' }).panelKey).toBe(0x09);
+    expect(normalizeSettings({ panelKey: 0x4b, toggleHotkey: { mods: MOD.ctrl, vk: 0x4b } }).panelKey).toBe(0x09);
+    expect(normalizeSettings({ panelKey: 0x59, textHotkey: { mods: MOD.win, vk: 0x59 } }).panelKey).toBe(0x09);
+  });
+
   it('moves the text shortcut off the pause shortcut', () => {
     expect(normalizeSettings({ toggleHotkey: { mods: MOD.alt, vk: 0x54 } })).toMatchObject({
       toggleHotkey: { mods: MOD.alt, vk: 0x54 },

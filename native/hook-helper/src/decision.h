@@ -43,17 +43,20 @@ struct Config {
   int dragThresholdPx = 8;
   uint32_t toggleMods = ModCtrl | ModAlt;
   uint32_t toggleVk = 0x50;  // 'P'
+  // The room keys are live only once a config turns them on (0 = off), so nothing is captured before the first config.
   uint32_t textMods = ModCtrl | ModAlt;
-  uint32_t textVk = 0x54;  // 'T'
+  uint32_t textVk = 0;
+  uint32_t panelVk = 0;  // held to show the room panel; captured with no modifier, never replayed
   bool enabled = true;
 };
 
 struct Emit {
-  enum class Kind { WheelOpen, WheelMove, WheelRelease, Click, Cancel, Toggled, TextRequested } kind;
+  enum class Kind { WheelOpen, WheelMove, WheelRelease, Click, Cancel, Toggled, TextRequested, Panel } kind;
   int x = 0;
   int y = 0;
   WheelKind wheel = WheelKind::Ping;  // point events only: the wheel whose trigger started the gesture
   bool enabled = false;               // Toggled only
+  bool show = false;                  // Panel only
 };
 
 enum class InjectKind { ButtonDown, ButtonUp, KeyDown, KeyUp };
@@ -72,6 +75,8 @@ struct Result {
 
 constexpr uint32_t kMaskVk = 0xFC;  // VK_NONAME: harmless key that stops Alt/Win menu activation
 constexpr uint64_t kWatchdogMs = 10000;
+// A held key repeats well inside this; a captured panel key that goes quiet for longer has lost its key-up.
+constexpr uint64_t kPanelRepeatGapMs = 1500;
 
 // Decides what happens to every input event. Pure logic: no Windows calls.
 class Decision {
@@ -151,6 +156,11 @@ class Decision {
   int px_ = 0;
   int py_ = 0;
   uint64_t lastMouseMs_ = 0;
+  // The panel key we swallowed and have not seen come up (0 = none), and when it last repeated.
+  uint32_t panelDown_ = 0;
+  uint64_t lastPanelMs_ = 0;
+  int lastX_ = 0;  // last mouse position, for the fullscreen probe on a key press
+  int lastY_ = 0;
 };
 
 }  // namespace lp

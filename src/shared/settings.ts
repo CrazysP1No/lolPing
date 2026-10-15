@@ -44,6 +44,8 @@ export interface Settings {
   toggleHotkey: Hotkey;
   /** Opens the custom text message dialog. */
   textHotkey: Hotkey;
+  /** Held in a room to show the room panel: one key's virtual-key code, no modifiers. */
+  panelKey: number;
   pingSizePx: number;
   pingDurationS: number;
   /** Your newest ping stays on screen until your next one or a pause (pings from the room still fade). */
@@ -107,6 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
   textHotkey: { mods: MOD.alt, vk: 0x54 },
+  panelKey: 0x09,
   pingSizePx: 110,
   pingDurationS: 3.2,
   keepLastPing: false,
@@ -219,6 +222,13 @@ function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey):
 }
 
 const hotkeysEqual = (a: Hotkey, b: Hotkey): boolean => a.mods === b.mods && a.vk === b.vk;
+const MODIFIER_VKS: readonly number[] = [0x10, 0x11, 0x12, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0x5b, 0x5c];
+
+/** A plain key that is not Esc, a modifier, or the key of another shortcut or custom trigger; else Tab. */
+function panelKey(raw: unknown, taken: readonly (number | null)[]): number {
+  return isVk(raw) && raw !== 0x1b && !MODIFIER_VKS.includes(raw) && !taken.includes(raw) ? raw : DEFAULT_SETTINGS.panelKey;
+}
+
 const TEXT_HOTKEY_FALLBACK: Hotkey = { mods: MOD.alt, vk: 0x59 }; // Alt+Y when Alt+T is taken
 
 function roomCode(raw: unknown): string | null {
@@ -256,6 +266,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     ? { ...(hotkeysEqual(toggleHotkey, DEFAULT_SETTINGS.textHotkey) ? TEXT_HOTKEY_FALLBACK : DEFAULT_SETTINGS.textHotkey) }
     : requestedTextHotkey;
   const emote = emoteKey(r.emoteTrigger, platform);
+  const emoteVk = triggerVk(triggersClash(pingTrigger, emote, toggleHotkey) ? 'off' : emote);
   const custom = customEmotes(r.customEmotes);
   return {
     version: 1,
@@ -269,6 +280,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
     textHotkey,
+    panelKey: panelKey(r.panelKey, [triggerVk(pingTrigger), emoteVk, toggleHotkey.vk, textHotkey.vk]),
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),
     pingDurationS: num(r.pingDurationS, 'pingDurationS'),
     keepLastPing: bool(r.keepLastPing, 'keepLastPing'),

@@ -84,6 +84,7 @@ Command parseCommand(const std::string& line, const Config& current) {
     cfg.toggleVk = static_cast<uint32_t>(getInt(m, "toggleVk", cfg.toggleVk));
     cfg.textMods = static_cast<uint32_t>(getInt(m, "textMods", cfg.textMods));
     cfg.textVk = static_cast<uint32_t>(getInt(m, "textVk", cfg.textVk));
+    cfg.panelVk = static_cast<uint32_t>(getInt(m, "panelVk", cfg.panelVk));
     cfg.enabled = getBool(m, "enabled", cfg.enabled);
     c.kind = Command::Kind::Config;
     c.config = cfg;

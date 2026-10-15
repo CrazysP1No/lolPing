@@ -14,6 +14,7 @@ export type HelperEvent =
   | { type: 'cancel' }
   | { type: 'toggled'; enabled: boolean }
   | { type: 'textRequested' }
+  | { type: 'panel'; show: boolean }
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
@@ -45,6 +46,8 @@ export function parseHelperLine(line: string): HelperEvent | null {
       return typeof o.enabled === 'boolean' ? { type: 'toggled', enabled: o.enabled } : null;
     case 'textRequested':
       return { type: 'textRequested' };
+    case 'panel':
+      return typeof o.show === 'boolean' ? { type: 'panel', show: o.show } : null;
     case 'error':
       if (typeof o.message !== 'string') return null;
       return typeof o.code === 'string' ? { type: 'error', message: o.message, code: o.code } : { type: 'error', message: o.message };
@@ -81,13 +84,17 @@ export type HelperCommand =
       toggleVk: number;
       textMods: number;
       textVk: number;
+      panelVk: number;
       enabled: boolean;
     }
   | { type: 'setEnabled'; enabled: boolean }
   | { type: 'suspend'; on: boolean }
   | { type: 'shutdown' };
 
-/** `live.text` is false outside a room: textVk 0 tells the helper to leave the text shortcut to other apps. */
+/**
+ * `live.text` and `live.panel` are false outside a room: a key code of 0 tells the helper to leave that key
+ * (the text shortcut, the panel key) to other apps.
+ */
 export function configCommand(
   s: Settings,
   enabled: boolean,
@@ -110,6 +117,7 @@ export function configCommand(
     toggleVk: s.toggleHotkey.vk,
     textMods: s.textHotkey.mods,
     textVk: live.text ? s.textHotkey.vk : 0,
+    panelVk: live.panel ? s.panelKey : 0,
     enabled,
   };
 }
