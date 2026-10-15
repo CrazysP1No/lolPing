@@ -6,9 +6,13 @@ const MAX_LINES = 200;
 export class RoomHistory {
   private readonly all: HistoryLine[] = [];
 
+  /** `onPush` runs after every new line, so an open panel can show it. */
+  constructor(private readonly onPush?: () => void) {}
+
   push(line: HistoryLine): void {
     this.all.push(line);
     if (this.all.length > MAX_LINES) this.all.splice(0, this.all.length - MAX_LINES);
+    this.onPush?.();
   }
 
   lines(): readonly HistoryLine[] {

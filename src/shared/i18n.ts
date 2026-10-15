@@ -291,6 +291,23 @@ const en = {
   readyMissing: (names: string[]) => `Not ready: ${names.join(', ')}`,
   kickedYou: 'You were removed from the room',
 
+  // room panel
+  panelMembers: 'Players',
+  panelHistory: 'History',
+  panelHistoryEmpty: 'Nothing has been said yet',
+  panelSurrender: 'Surrender',
+  panelReadyCheck: 'Ready check',
+  panelKick: (name: string) => `Remove ${name}`,
+  panelStatus: {
+    on: 'In the room',
+    paused: 'Paused',
+    muted: 'Muted the room',
+    update: 'Needs an update',
+    noChat: 'Can’t see text and votes',
+    textOff: 'Text is off',
+    votesOff: 'Votes are off',
+  },
+
   // updates
   updateAvailable: (v: string) => `lolPing ${v} is available`,
   updateNow: 'Update',
@@ -587,6 +604,22 @@ const zh: Strings = {
   readyAll: '所有人都准备好了',
   readyMissing: (names) => `未准备：${names.join('、')}`,
   kickedYou: '你被移出了房间',
+
+  panelMembers: '成员',
+  panelHistory: '记录',
+  panelHistoryEmpty: '还没有人说话',
+  panelSurrender: '投降',
+  panelReadyCheck: '准备确认',
+  panelKick: (name) => `移出 ${name}`,
+  panelStatus: {
+    on: '在房间中',
+    paused: '已暂停',
+    muted: '已将房间静音',
+    update: '需要更新',
+    noChat: '看不到文字和投票',
+    textOff: '文字已关闭',
+    votesOff: '投票已关闭',
+  },
 
   updateAvailable: (v) => `有新版本 lolPing ${v}`,
   updateNow: '更新',

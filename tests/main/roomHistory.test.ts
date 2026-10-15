@@ -20,6 +20,14 @@ describe('RoomHistory', () => {
     expect(history.lines()[199].text).toBe('line 205');
   });
 
+  it('tells its listener after each pushed line, with the line already in', () => {
+    const seen: number[] = [];
+    const history: RoomHistory = new RoomHistory(() => seen.push(history.lines().length));
+    history.push(line(1));
+    history.push(line(2));
+    expect(seen).toEqual([1, 2]);
+  });
+
   it('empties on clear', () => {
     const history = new RoomHistory();
     history.push(line(1));

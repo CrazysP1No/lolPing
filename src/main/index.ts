@@ -10,6 +10,7 @@ import { featureOn, liveKeys, roomFeaturesOff } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
+import type { VoteKind } from '../shared/roomProtocol';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { sameTagRgb, tagWire } from '../shared/roomColors';
 import { overlaySettings, type Settings } from '../shared/settings';
@@ -333,7 +334,7 @@ function start(): void {
     if (shared) room.sendEmote(p.ref, shared);
   });
   // This session's room lines: members' text and alive lines while the text feature is on, and our own.
-  const history = new RoomHistory();
+  const history = new RoomHistory(() => refreshRoster());
   const lineDeps: Pick<RoomTextDeps, 'show' | 'history' | 'now'> = {
     show: (p) => overlays.spawnText({ ...p, style: settings.roomTextStyle }),
     history,
@@ -365,9 +366,33 @@ function start(): void {
     view, lang: resolveLang(settings.language, app.getLocale()), max: MAX_MEMBERS, room: room.state(), history: history.lines(),
     vote, voteOver, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
   });
+  /** An open roster follows the room and its history; a hidden one ignores this. */
+  function refreshRoster(): void {
+    panels.update(panelState('roster', null));
+  }
+  room.on('state', refreshRoster);
   panels.on('action', (a: PanelAction) => {
-    if (a.t === 'ballot') roomVotes?.answer(a.yes);
+    switch (a.t) {
+      case 'ballot':
+        roomVotes?.answer(a.yes);
+        break;
+      case 'alive':
+        sendOwnAlive(a.peer, { x: a.x, y: a.y });
+        break;
+      case 'mute':
+        room.muteMember(a.peer, a.on);
+        break;
+      case 'kick':
+        startVote('kick', a.peer);
+        break;
+      case 'vote':
+        startVote(a.kind);
+        break;
+    }
   });
+  const startVote = (kind: VoteKind, target?: string): void => {
+    if (roomVotes?.start(kind, target) === 'busy') overlays.toast(text().voteBusy, '');
+  };
   // Votes run while the feature is on; with it off, members' votes and ballots are ignored here.
   let roomVotes: RoomVotes | null = null;
   const syncRoomVotes = (): void => {
@@ -439,17 +464,27 @@ function start(): void {
   }
 
   const syncSuspended = (): void => bridge.send({ type: 'suspend', on: capturing || textOpen });
-  /** Shows our own text where the box was opened, and sends it to the room. */
-  const sendOwnText = (message: string, at: { x: number; y: number }): void => {
+  /** A screen point (DIPs) as our own lines and the room see it: its display, the point inside it, and the shared form. */
+  const ownSpot = (at: { x: number; y: number }) => {
     const display = screen.getDisplayNearestPoint(at);
     const x = at.x - display.bounds.x;
     const y = at.y - display.bounds.y;
-    postLine(lineDeps, {
-      kind: 'text', owner: 'self', tag: { name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom) },
-      displayId: display.id, x, y, text: message,
-    });
-    const shared = toShared(overlays.numbered(), display.id, x, y);
+    return { displayId: display.id, x, y, shared: toShared(overlays.numbered(), display.id, x, y) };
+  };
+  const ownTag = () => ({ name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom) });
+  /** Shows our own text where the box was opened, and sends it to the room. */
+  const sendOwnText = (message: string, at: { x: number; y: number }): void => {
+    const { shared, ...spot } = ownSpot(at);
+    postLine(lineDeps, { kind: 'text', owner: 'self', tag: ownTag(), ...spot, text: message });
     if (shared) room.sendText(message, shared);
+  };
+  /** "<name> - Alive" for the member whose name tag was clicked in the panel, shown here and sent to the room. */
+  const sendOwnAlive = (peer: string, at: { x: number; y: number }): void => {
+    const who = room.state().members.find((m) => m.peer === peer);
+    if (!who || !featureOn(settings, 'roomText')) return;
+    const { shared, ...spot } = ownSpot(at);
+    postLine(lineDeps, { kind: 'alive', owner: 'self', tag: ownTag(), ...spot, text: text().aliveLine(who.name) });
+    if (shared) room.sendAlive(peer, shared);
   };
   registerTextWindow((raw, at) => {
     const input = parseTextInput(raw);

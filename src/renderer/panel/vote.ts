@@ -38,7 +38,9 @@ const RING_RADIUS = 26;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K, className: string, text?: string,
+): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   e.className = className;
   if (text !== undefined) e.textContent = text;
