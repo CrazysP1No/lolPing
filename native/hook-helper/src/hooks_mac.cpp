@@ -140,6 +140,8 @@ CGEventRef tapCallback(CGEventTapProxy, CGEventType type, CGEventRef event, void
   if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
     if (g_tap != nullptr) CGEventTapEnable(g_tap, true);
     resync();
+    // Key events were missed while the tap was off, so a held panel key may already be up: hide the panel.
+    apply(g_decision->releasePanel());
     return event;
   }
   if (CGEventGetIntegerValueField(event, kCGEventSourceUserData) == kSelfMarker) return event;
@@ -207,6 +209,8 @@ void handleCommand(const std::string& text) {
 int runHooks(Output& out) {
   Decision decision;
   decision.setMaskMenuKeys(false);
+  // The repeat watchdog only guards lost key-ups; macOS repeat delay and the repeat setting make repeats unreliable.
+  decision.setPanelRepeatGap(0);
   g_decision = &decision;
   g_out = &out;
 

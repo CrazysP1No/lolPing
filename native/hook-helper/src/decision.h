@@ -93,6 +93,11 @@ class Decision {
   // Windows opens the menu bar / Start menu on a lone Alt / Win key-up, so a swallowed press while one is held
   // gets a mask key before that key-up. macOS has no such behaviour: its hook layer turns this off.
   void setMaskMenuKeys(bool on) { maskMenuKeys_ = on; }
+  // How long a captured panel key may go without a repeat before the panel hides itself (a lost key-up).
+  // 0 = no watchdog, for platforms where repeats are not a reliable sign that the key is still down.
+  void setPanelRepeatGap(uint64_t ms) { panelRepeatGapMs_ = ms; }
+  // Hides the panel without a key-up (the OS stopped telling us about keys). The up, if it comes, stays swallowed.
+  Result releasePanel();
 
   // Resync with the OS: forget keys we believe are down but isDown(vk) says are up
   // (key-ups the hook never saw: Win+L, Ctrl+Alt+Del, UAC, hook reinstall). Never marks a key as down.
@@ -159,6 +164,7 @@ class Decision {
   // The panel key we swallowed and have not seen come up (0 = none), and when it last repeated.
   uint32_t panelDown_ = 0;
   uint64_t lastPanelMs_ = 0;
+  uint64_t panelRepeatGapMs_ = kPanelRepeatGapMs;
   int lastX_ = 0;  // last mouse position, for the fullscreen probe on a key press
   int lastY_ = 0;
 };

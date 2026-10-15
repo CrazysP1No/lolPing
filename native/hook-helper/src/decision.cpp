@@ -161,15 +161,21 @@ Result Decision::setSuspended(bool on) {
 
 void Decision::setFullscreenProbe(std::function<bool(int x, int y)> probe) { fullscreenProbe_ = std::move(probe); }
 
+Result Decision::releasePanel() {
+  Result r;
+  if (panelDown_ == 0) return r;
+  keyDown_[panelDown_] = false;
+  panelDown_ = 0;
+  r.emits.push_back(panelEmit(false));
+  return r;
+}
+
 Result Decision::tick(uint64_t nowMs) {
   Result r;
   // A captured panel key whose repeats stopped lost its key-up: hide the panel. The real up, if it still
   // comes, stays swallowed through swallowKeyUps_, and the key counts as up for the next press.
-  if (panelDown_ != 0 && nowMs > lastPanelMs_ && nowMs - lastPanelMs_ > kPanelRepeatGapMs) {
-    keyDown_[panelDown_] = false;
-    panelDown_ = 0;
-    r.emits.push_back(panelEmit(false));
-  }
+  if (panelDown_ != 0 && panelRepeatGapMs_ != 0 && nowMs > lastPanelMs_ && nowMs - lastPanelMs_ > panelRepeatGapMs_)
+    r = releasePanel();
   const bool busy = state_ == State::Pending || state_ == State::Wheel;
   if (busy && nowMs > lastMouseMs_ && nowMs - lastMouseMs_ > kWatchdogMs) {
     r.emits.push_back(Emit{Emit::Kind::Cancel});

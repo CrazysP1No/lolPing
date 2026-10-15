@@ -71,6 +71,8 @@ class Hooks {
   std::set<unsigned int> heldButtons;
   explicit Hooks(Display* d, Output& o): display(d), root(DefaultRootWindow(d)), out(o) {
     decision.setMaskMenuKeys(false);
+    // The repeat watchdog only guards lost key-ups; repeats may not reach the decision under the key grab.
+    decision.setPanelRepeatGap(0);
     refreshKeys();
   }
   void refreshKeys() {

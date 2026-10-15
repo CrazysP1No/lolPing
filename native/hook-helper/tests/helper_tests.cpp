@@ -650,6 +650,41 @@ static void test_panel_repeats_keep_it_shown() {
   CHECK(panelShows(d.tick(3600), false));
 }
 
+static void test_panel_with_no_repeat_watchdog_stays_shown_through_a_long_hold() {
+  Decision d = withPanel();
+  d.setPanelRepeatGap(0);  // macOS and Linux: repeats are not a reliable sign the key is still down
+  InputEvent down = kd(TAB);
+  down.timeMs = 0;
+  d.onEvent(down);
+  CHECK(d.tick(60000).emits.empty());
+  CHECK(d.tick(600000).emits.empty());
+  Result r = d.onEvent(ku(TAB));
+  CHECK(r.swallow && panelShows(r, false));
+}
+
+static void test_panel_repeat_gap_is_a_setting() {
+  Decision d = withPanel();
+  d.setPanelRepeatGap(3000);
+  InputEvent down = kd(TAB);
+  down.timeMs = 0;
+  d.onEvent(down);
+  CHECK(d.tick(2500).emits.empty());
+  CHECK(panelShows(d.tick(3100), false));
+}
+
+static void test_release_panel_hides_it_and_keeps_the_up_swallowed() {
+  Decision d = withPanel();
+  CHECK(d.releasePanel().emits.empty());  // nothing shown: nothing to do
+  d.onEvent(kd(TAB));
+  Result r = d.releasePanel();  // the macOS event tap was disabled and enabled again
+  CHECK(panelShows(r, false));
+  CHECK(d.releasePanel().emits.empty());
+  r = d.onEvent(ku(TAB));
+  CHECK(r.swallow && r.emits.empty());
+  r = d.onEvent(kd(TAB));
+  CHECK(r.swallow && panelShows(r, true));
+}
+
 static void test_text_hotkey_ignored_while_paused() {
   Decision d = withAltText();
   d.setEnabled(false);
@@ -1327,6 +1362,9 @@ int main() {
   test_panel_key_up_while_paused_is_swallowed();
   test_panel_hides_when_repeats_stop();
   test_panel_repeats_keep_it_shown();
+  test_panel_with_no_repeat_watchdog_stays_shown_through_a_long_hold();
+  test_panel_repeat_gap_is_a_setting();
+  test_release_panel_hides_it_and_keeps_the_up_swallowed();
   test_text_hotkey_ignored_while_paused();
   test_disabling_mid_drag_cancels_and_swallows_up();
   test_config_change_mid_drag_cancels();
