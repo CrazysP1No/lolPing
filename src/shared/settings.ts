@@ -3,6 +3,7 @@ import {
   CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
+import { DEFAULT_FEATURES, normalizeFeatures, type Features } from './features';
 import { WHEEL } from './geometry';
 import { LANGUAGE_PREFS, strings, type Lang, type LanguagePref } from './i18n';
 import { HOTKEY_PRIMARY_MODS, MOD, type Hotkey, vkLabel } from './keys';
@@ -78,6 +79,8 @@ export interface Settings {
   autoUpdateCheck: boolean;
   /** The newest version already announced with a toast, as x.y.z, so each version is announced once. */
   updateNotifiedVersion: string | null;
+  /** Optional parts of the app that can be switched off; see features.ts. */
+  features: Features;
 }
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
@@ -123,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   friendEmotes: true,
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
+  features: { ...DEFAULT_FEATURES },
 };
 
 export const LIMITS = {
@@ -267,6 +271,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     friendEmotes: bool(r.friendEmotes, 'friendEmotes'),
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
+    features: normalizeFeatures(r.features),
   };
 }
 

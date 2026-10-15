@@ -486,3 +486,22 @@ describe('update settings', () => {
     expect(mergeSettings(s, { updateNotifiedVersion: 'junk' }).updateNotifiedVersion).toBeNull();
   });
 });
+
+describe('feature settings', () => {
+  it('loads a 0.5.2 settings file with every feature on', () => {
+    const { features: _features, ...old } = DEFAULT_SETTINGS;
+    expect(normalizeSettings(old).features).toEqual(DEFAULT_SETTINGS.features);
+    expect(Object.values(normalizeSettings(old).features).every((v) => v)).toBe(true);
+  });
+
+  it('keeps a switched-off feature', () => {
+    const s = normalizeSettings({ features: { ...DEFAULT_SETTINGS.features, emotes: false } });
+    expect(s.features.emotes).toBe(false);
+    expect(s.features.rooms).toBe(true);
+  });
+
+  it('falls back to every feature on when features is not an object', () => {
+    for (const raw of ['yes', 1, null, [true]]) expect(normalizeSettings({ features: raw }).features).toEqual(DEFAULT_SETTINGS.features);
+    expect(normalizeSettings({ features: { rooms: 1 } }).features.rooms).toBe(true);
+  });
+});
