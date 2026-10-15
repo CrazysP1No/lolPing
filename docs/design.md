@@ -399,7 +399,7 @@ Every member counts the ballots itself. Nobody announces a result.
 - **Thresholds:** surrender passes at `ceil(0.7 × voters)` yes; a ready check needs every voter and fails on the first no; a kick needs `floor(voters / 2) + 1` yes with the target not counted as a voter.
 - **Early end:** as soon as the result cannot change.
 - **Mute and switches:** a muted member's `vote` opens nothing for us and we count as no in it; their ballots in other votes still count. With `roomVotes` off we open nothing, send no ballots, and `nf` lists `votes`, so others count us as no.
-- **Kick is best effort.** When a kick passes, each member that counted it drops the target and ignores that peer id for the session. The target's own app counts the same ballots, leaves the room, clears `lastRoomCode` and says "You were removed from the room". Members whose count differs because of lost packets may still see the target, and a modified app can ignore the result and rejoin with a new peer id. Nobody can target themselves, and a kick for a peer we do not know is dropped.
+- **Kick is best effort.** When a kick passes, each member that counted it drops the target and ignores that peer id for the session. The target's own app counts the same ballots, leaves the room, clears `lastRoomCode` and says "You were removed from the room". Members whose count differs because of lost packets may still see the target, and a kicked person can rejoin by entering the room code again, which makes a new peer id. The room code is the only key, so a kick doesn't lock anyone out. Nobody can target themselves, and a kick for a peer we do not know is dropped.
 
 ### Text hotkey and panel key in the helper
 
