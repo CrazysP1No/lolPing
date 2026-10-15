@@ -5,9 +5,13 @@ import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
 export const MAX_NAME = 16;
-export const MAX_TEXT = 160;
+export const MAX_TEXT = 120;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
+
+/** Room features a member can switch off; their presence says so, so nobody sends them what they can't show. */
+export type RoomFeatureOff = 'text' | 'votes';
+const FEATURES_OFF: readonly RoomFeatureOff[] = ['text', 'votes'];
 
 export type MemberStatus = 'on' | 'paused' | 'muted';
 const STATUSES: readonly MemberStatus[] = ['on', 'paused', 'muted'];
@@ -31,6 +35,8 @@ export interface PresenceMsg extends Base {
   status: MemberStatus;
   /** Added in 0.5.2: the 32-hex hashes of the custom emotes on our wheel and centre, at most 9. Older apps leave it out. */
   em: string[];
+  /** Added in 0.6.0: the room features this peer has switched off. Older apps leave it out, which reads as none. */
+  nf: RoomFeatureOff[];
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -58,6 +64,29 @@ export interface TextMsg extends Base {
   x: number;
   y: number;
 }
+/** Added in 0.6.0: a line from the peer `who` to where the sender's cursor is; older apps drop it as an unknown type. */
+export interface AliveMsg extends Base {
+  t: 'alive';
+  who: string;
+  d: number;
+  x: number;
+  y: number;
+}
+export type VoteKind = 'ff' | 'ready' | 'kick';
+const VOTE_KINDS: readonly VoteKind[] = ['ff', 'ready', 'kick'];
+/** Added in 0.6.0: starts a vote. `id` names it; `target` is the peer to remove and only a kick has one. */
+export interface VoteMsg extends Base {
+  t: 'vote';
+  id: string;
+  kind: VoteKind;
+  target?: string;
+}
+/** Added in 0.6.0: the sender's answer to vote `id`. */
+export interface BallotMsg extends Base {
+  t: 'ballot';
+  id: string;
+  yes: boolean;
+}
 /** Added in 0.5.2: asks the peer named `to` for the still of custom emote `h`. `need` lists chunk indexes, [] = all of them. */
 export interface WantMsg extends Base {
   t: 'want';
@@ -76,7 +105,7 @@ export interface ChunkMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | WantMsg | ChunkMsg | ByeMsg;
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | AliveMsg | VoteMsg | BallotMsg | WantMsg | ChunkMsg | ByeMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -97,6 +126,11 @@ export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): 
 export function sanitizeText(raw: string): string {
   return [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, MAX_TEXT).join('').trim();
 }
+
+const PEER_RE = /^[0-9a-f]{16}$/;
+const VOTE_ID_RE = /^[0-9a-f]{8}$/;
+/** A vote id: 8 lower-case hex characters. */
+export const isVoteId = (v: unknown): v is string => typeof v === 'string' && VOTE_ID_RE.test(v);
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isUint = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
@@ -121,6 +155,12 @@ function emList(raw: unknown): string[] {
   return out;
 }
 
+/** The switched-off features, rebuilt: known ones only, once each. Anything else means none. */
+function nfList(raw: unknown): RoomFeatureOff[] {
+  if (!Array.isArray(raw)) return [];
+  return FEATURES_OFF.filter((f) => raw.includes(f));
+}
+
 /** Builds a fresh message from known fields only, or null when anything is missing or out of range. */
 export function validateMessage(raw: unknown): RoomMessage | null {
   if (!isObj(raw)) return null;
@@ -129,12 +169,12 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const base = { peer, seq, ts };
   switch (t) {
     case 'presence': {
-      const { proto, app, name, color, rgb, status, em } = raw;
+      const { proto, app, name, color, rgb, status, em, nf } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
       const presence: PresenceMsg = {
         t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
-        em: emList(em),
+        em: emList(em), nf: nfList(nf),
       };
       // A malformed custom colour is dropped rather than the whole presence: an unreadable tag beats a missing member.
       return isTagRgb(rgb) ? { ...presence, rgb } : presence;
@@ -157,6 +197,24 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (!isUnit(x) || !isUnit(y)) return null;
       const safe = sanitizeText(text);
       return safe ? { t, ...base, text: safe, d: d as number, x, y } : null;
+    }
+    case 'alive': {
+      const { who, d, x, y } = raw;
+      if (typeof who !== 'string' || !PEER_RE.test(who)) return null;
+      if (!Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY || !isUnit(x) || !isUnit(y)) return null;
+      return { t, ...base, who, d: d as number, x, y };
+    }
+    case 'vote': {
+      const { id, kind, target } = raw;
+      if (!isVoteId(id) || !VOTE_KINDS.includes(kind as VoteKind)) return null;
+      if (kind === 'kick') {
+        return typeof target === 'string' && PEER_RE.test(target) ? { t, ...base, id, kind, target } : null;
+      }
+      return target === undefined ? { t, ...base, id, kind: kind as VoteKind } : null;
+    }
+    case 'ballot': {
+      const { id, yes } = raw;
+      return isVoteId(id) && typeof yes === 'boolean' ? { t, ...base, id, yes } : null;
     }
     case 'want': {
       const { to, h, need } = raw;
@@ -197,7 +255,7 @@ export function isOlderThan(app: string, version: string): boolean {
 }
 
 export function encodeMessage(m: RoomMessage): Uint8Array {
-  const out = m.t === 'ping' || m.t === 'emote' || m.t === 'text' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
+  const out = m.t === 'ping' || m.t === 'emote' || m.t === 'text' || m.t === 'alive' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
 }
 

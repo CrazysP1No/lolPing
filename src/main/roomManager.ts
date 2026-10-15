@@ -463,6 +463,7 @@ export class RoomManager extends EventEmitter {
       this.emit(msg.t, msg);
       return;
     }
+    if (msg.t === 'alive' || msg.t === 'vote' || msg.t === 'ballot') return; // not carried between members yet
     // Pings, emotes and text pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
     if (!this.limiter.allow(m.peer, this.deps.profile().limit)) return;

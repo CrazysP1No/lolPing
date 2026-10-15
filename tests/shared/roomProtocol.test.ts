@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_PACKET, open, seal } from '../../src/main/roomCrypto';
 import {
   isTagColor, isTagRgb, nearestTagColor, readableTagRgb, sameTagRgb, TAG_COLORS, tagColorCss, tagHex, tagRgbFromHex, tagWire,
 } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, isOlderThan, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
-  type ChunkMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg, type WantMsg,
+  clampNameInput, decodeMessage, encodeMessage, isOlderThan, isVoteId, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
+  type AliveMsg, type BallotMsg, type ChunkMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg,
+  type VoteMsg, type WantMsg,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
-const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on', em: [] };
+const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on', em: [], nf: [] };
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const text: TextMsg = { ...base, t: 'text', text: 'Group mid', d: 2, x: 0.25, y: 1 };
@@ -55,6 +57,66 @@ describe('text messages', () => {
     ['x above 1', { ...text, x: 1.1 }],
   ])('rejects %s', (_label, raw) => {
     expect(validateMessage(raw)).toBeNull();
+  });
+});
+
+describe('room text, alive lines, votes and ballots', () => {
+  const who = 'fedcba9876543210';
+  const alive: AliveMsg = { ...base, t: 'alive', who, d: 1, x: 0.5, y: 0.25 };
+  const ff: VoteMsg = { ...base, t: 'vote', id: '0a1b2c3d', kind: 'ff' };
+  const kick: VoteMsg = { ...base, t: 'vote', id: '0a1b2c3d', kind: 'kick', target: who };
+  const ballot: BallotMsg = { ...base, t: 'ballot', id: '0a1b2c3d', yes: true };
+
+  it('cuts text to 120 code points and drops text that cleans to nothing', () => {
+    expect(MAX_TEXT).toBe(120);
+    const cut = validateMessage({ ...text, text: '字'.repeat(121) });
+    expect(cut?.t === 'text' && [...cut.text]).toHaveLength(120);
+    expect(validateMessage({ ...text, text: '\u200b\u202e' })).toBeNull();
+    expect(validateMessage({ ...text, text: 'a\nb' })).toMatchObject({ text: 'ab' });
+  });
+
+  it('keeps a worst-case text packet under the sealed packet cap', () => {
+    const key = Buffer.alloc(32, 7);
+    const worst: TextMsg = { ...text, text: '😀'.repeat(120), d: 16, x: 0.1234, y: 0.5678 };
+    const packet = seal(key, encodeMessage(worst));
+    expect(packet.length).toBeLessThanOrEqual(MAX_PACKET);
+    expect(decodeMessage(open(key, packet) ?? new Uint8Array())).toEqual(worst);
+  });
+
+  it('accepts alive, vote and ballot with good fields only', () => {
+    for (const m of [alive, ff, kick, ballot]) expect(decodeMessage(encodeMessage(m))).toEqual(m);
+    expect(validateMessage({ ...alive, extra: 1 })).toEqual(alive);
+    for (const bad of [
+      { ...alive, who: 'abc' },
+      { ...alive, who: 'FEDCBA9876543210' },
+      { ...alive, d: 0 },
+      { ...alive, x: 2 },
+      { ...ff, id: 'XYZ' },
+      { ...ff, id: '0A1B2C3D' },
+      { ...ff, kind: 'remake' },
+      { ...ff, kind: 'kick' },
+      { ...kick, target: 'nope' },
+      { ...ff, target: who },
+      { ...ballot, id: '1234' },
+      { ...ballot, yes: 'true' },
+      { ...ballot, yes: 1 },
+    ]) expect(validateMessage(bad)).toBeNull();
+  });
+
+  it('rounds the position of an alive line like a ping', () => {
+    expect(decodeMessage(encodeMessage({ ...alive, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
+  });
+
+  it('knows a vote id: eight lower-case hex characters', () => {
+    expect(isVoteId('0a1b2c3d')).toBe(true);
+    for (const v of ['0a1b2c3', '0a1b2c3d4', '0A1B2C3D', 'ghijklmn', 7, null, undefined]) expect(isVoteId(v)).toBe(false);
+  });
+
+  it('reads nf as the known room features, once each', () => {
+    expect(validateMessage({ ...presence, nf: ['text', 'text', 'votes', 'emotes', 3] })).toMatchObject({ nf: ['text', 'votes'] });
+    expect(validateMessage({ ...presence, nf: 'text' })).toMatchObject({ t: 'presence', nf: [] });
+    const { nf: _nf, ...old } = presence;
+    expect(validateMessage(old)).toMatchObject({ nf: [] });
   });
 });
 
