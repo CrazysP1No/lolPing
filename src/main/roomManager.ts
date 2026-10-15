@@ -467,8 +467,8 @@ export class RoomManager extends EventEmitter {
     const isNew = !m;
     if (!m) {
       // The room cap is judged here too, not only at settle: without this, anyone can grow the room past
-      // MAX_MEMBERS afterwards, and every extra "member" earns its own emote-chunk serving quota.
-      if (this.phase === 'active' && this.members.size >= MAX_MEMBERS) return;
+      // MAX_MEMBERS afterwards, and every extra "member" earns its own emote-chunk serving quota. We are one of them.
+      if (this.phase === 'active' && this.members.size + 1 >= MAX_MEMBERS) return;
       // One LAN address is one lolPing: two members behind it is a rebound, a third is forgery. Shared transports
       // can't be judged this way (every relay member arrives from the same key).
       if (!t.shared && this.membersAt(t.kind, key) >= 2) return;

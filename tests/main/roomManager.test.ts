@@ -897,9 +897,8 @@ describe('emote transfer gating (audit regressions)', () => {
 
   it('ignores new members once the room is full, however many presences arrive', async () => {
     await joinActive();
-    for (let n = 0; n < 12; n++) new Remote(`${n}`.repeat(16), `lan:${n}`, lan).presence();
-    const remote = room.state().members.filter((m) => !m.self);
-    expect(remote).toHaveLength(8); // MAX_MEMBERS: the ninth and on never became members
+    for (let n = 0; n < MAX_MEMBERS + 4; n++) new Remote(n.toString(16).padStart(16, '0'), `lan:${n}`, lan).presence();
+    expect(room.state().members).toHaveLength(MAX_MEMBERS); // we count too: the room never grows past MAX_MEMBERS people
   });
 
   it('lets at most two members share one LAN address', async () => {
