@@ -14,10 +14,12 @@ import { EmoteStage } from './emoteFx';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
+import { spawnText } from './textFx';
 import { Wheel, type WheelItem } from './wheel';
 
 const pingLayer = document.getElementById('pings') as HTMLElement;
 const toastLayer = document.getElementById('toasts') as HTMLElement;
+const textLayer = document.getElementById('texts') as HTMLElement;
 const pingSvg = document.getElementById('wheel') as unknown as SVGSVGElement;
 
 // The emote wheel is a second copy of the ping wheel's svg, and its emotes get a layer of their own above the pings.
@@ -118,6 +120,7 @@ window.overlay.on('ping:unkeep', dropKeptPing);
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
+window.overlay.on('text:spawn', (t) => spawnText(textLayer, t.text, t.x, t.y, t.tag));
 
 /** Resolves with `label` when the image at `url` doesn't load. */
 const probe = (url: string, label: string): Promise<string | null> =>

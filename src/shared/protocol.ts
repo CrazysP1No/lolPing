@@ -13,6 +13,7 @@ export type HelperEvent =
   | { type: 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click'; x: number; y: number; wheel: WheelKind }
   | { type: 'cancel' }
   | { type: 'toggled'; enabled: boolean }
+  | { type: 'textRequested' }
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
@@ -42,6 +43,8 @@ export function parseHelperLine(line: string): HelperEvent | null {
       return { type: 'cancel' };
     case 'toggled':
       return typeof o.enabled === 'boolean' ? { type: 'toggled', enabled: o.enabled } : null;
+    case 'textRequested':
+      return { type: 'textRequested' };
     case 'error':
       if (typeof o.message !== 'string') return null;
       return typeof o.code === 'string' ? { type: 'error', message: o.message, code: o.code } : { type: 'error', message: o.message };
@@ -76,6 +79,8 @@ export type HelperCommand =
       dragThresholdPx: number;
       toggleMods: number;
       toggleVk: number;
+      textMods: number;
+      textVk: number;
       enabled: boolean;
     }
   | { type: 'setEnabled'; enabled: boolean }
@@ -98,6 +103,8 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
     dragThresholdPx: s.dragThresholdPx,
     toggleMods: s.toggleHotkey.mods,
     toggleVk: s.toggleHotkey.vk,
+    textMods: s.textHotkey.mods,
+    textVk: s.textHotkey.vk,
     enabled,
   };
 }

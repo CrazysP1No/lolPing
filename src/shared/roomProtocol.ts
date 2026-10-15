@@ -5,6 +5,7 @@ import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
 export const MAX_NAME = 16;
+export const MAX_TEXT = 160;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
 
@@ -49,6 +50,14 @@ export interface EmoteMsg extends Base {
   x: number;
   y: number;
 }
+/** Added after 0.5.1: older apps safely drop it as an unknown type. */
+export interface TextMsg extends Base {
+  t: 'text';
+  text: string;
+  d: number;
+  x: number;
+  y: number;
+}
 /** Added in 0.5.2: asks the peer named `to` for the still of custom emote `h`. `need` lists chunk indexes, [] = all of them. */
 export interface WantMsg extends Base {
   t: 'want';
@@ -67,7 +76,7 @@ export interface ChunkMsg extends Base {
 export interface ByeMsg extends Base {
   t: 'bye';
 }
-export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | WantMsg | ChunkMsg | ByeMsg;
+export type RoomMessage = PresenceMsg | PingMsg | EmoteMsg | TextMsg | WantMsg | ChunkMsg | ByeMsg;
 
 // C0/C1 controls, zero-width characters, bidi marks, embeddings and isolates, BOM, line/paragraph separators,
 // soft hyphen, combining grapheme joiner, Arabic letter mark, Mongolian vowel separator and the Hangul fillers
@@ -82,6 +91,11 @@ export const clampNameInput = (v: string): string => [...v].slice(0, MAX_NAME).j
 export function sanitizeName(raw: string, fallback = 'Player', max = MAX_NAME): string {
   const name = [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, max).join('').trim();
   return name || fallback;
+}
+
+/** Plain overlay text that cannot hide, reorder, or break the UI around it. */
+export function sanitizeText(raw: string): string {
+  return [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, MAX_TEXT).join('').trim();
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -137,6 +151,13 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       if (!isUnit(x) || !isUnit(y)) return null;
       return { t, ...base, e, d: d as number, x, y };
     }
+    case 'text': {
+      const { text, d, x, y } = raw;
+      if (typeof text !== 'string' || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
+      if (!isUnit(x) || !isUnit(y)) return null;
+      const safe = sanitizeText(text);
+      return safe ? { t, ...base, text: safe, d: d as number, x, y } : null;
+    }
     case 'want': {
       const { to, h, need } = raw;
       if (typeof to !== 'string' || !/^[0-9a-f]{16}$/.test(to) || typeof h !== 'string' || !HASH_RE.test(h)) return null;
@@ -176,7 +197,7 @@ export function isOlderThan(app: string, version: string): boolean {
 }
 
 export function encodeMessage(m: RoomMessage): Uint8Array {
-  const out = m.t === 'ping' || m.t === 'emote' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
+  const out = m.t === 'ping' || m.t === 'emote' || m.t === 'text' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
 }
 

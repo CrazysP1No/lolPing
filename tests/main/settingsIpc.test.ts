@@ -8,6 +8,7 @@ import { registerSettingsIpc, type SettingsIpcDeps } from '../../src/main/settin
 import { SettingsStore } from '../../src/main/settingsStore';
 import { strings } from '../../src/shared/i18n';
 import { SETTINGS_CH } from '../../src/shared/ipc';
+import { MOD } from '../../src/shared/keys';
 import type { UpdateState } from '../../src/shared/update';
 
 const h = vi.hoisted(() => ({
@@ -55,6 +56,12 @@ function registerWith(update?: SettingsIpcDeps['update']): void {
 }
 
 describe('settings IPC', () => {
+  it('refuses to make the text and enable shortcuts identical', async () => {
+    const result = await call(SETTINGS_CH.set, { textHotkey: store.get().toggleHotkey });
+    expect(result).toMatchObject({ ok: false, error: strings('en').shortcutClash });
+    expect(store.get().textHotkey).toEqual({ mods: MOD.ctrl | MOD.alt, vk: 0x54 });
+  });
+
   it('setSettings ignores customEmotes from the window', async () => {
     const forged = [{ id: `c:${'ab'.repeat(16)}`, name: 'forged', animated: true }];
     const result = await call(SETTINGS_CH.set, { volume: 12, customEmotes: forged });

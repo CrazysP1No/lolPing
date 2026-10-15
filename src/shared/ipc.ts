@@ -35,14 +35,21 @@ export interface OverlayEvents {
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
+  'text:spawn': Point & { text: string; tag?: PingTag };
 }
 
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
   'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'ping:unkeep', 'emote:spawn', 'emote:clear',
-  'toast:show',
+  'toast:show', 'text:spawn',
 ];
+
+export const TEXT_CH = { submit: 'text:submit' } as const;
+
+export interface TextApi {
+  submit(text: string): void;
+}
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
 export const OVERLAY_ASSETS = 'overlay:assets';

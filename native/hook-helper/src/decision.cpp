@@ -248,6 +248,16 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     }
     return;
   }
+  if (active() && vk == cfg_.textVk && mods() == cfg_.textMods) {
+    r.swallow = true;
+    swallowKeyUps_.insert(vk);
+    markSwallow();
+    if (!repeat) {
+      cancelGesture(r);
+      r.emits.push_back(Emit{Emit::Kind::TextRequested});
+    }
+    return;
+  }
   if (active()) {
     if (vk == kVkEsc && (state_ == State::Pending || state_ == State::Wheel)) {
       r.swallow = true;

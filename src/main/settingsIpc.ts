@@ -52,6 +52,8 @@ export interface SettingsIpcDeps {
   };
 }
 
+const sameHotkey = (a: Hotkey, b: Hotkey): boolean => a.mods === b.mods && a.vk === b.vk;
+
 /** Returns an error message when another app already owns this shortcut. */
 function hotkeyConflict(next: Hotkey, current: Hotkey, text: Strings, platform: Platform): string | null {
   if (next.mods === current.mods && next.vk === current.vk) return null;
@@ -82,7 +84,17 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
       return { ok: false, error: d.text().emoteKeyClash, settings: d.store.get() };
     }
     if (patch.toggleHotkey) {
+      if (sameHotkey(patch.toggleHotkey, patch.textHotkey ?? d.store.get().textHotkey)) {
+        return { ok: false, error: d.text().shortcutClash, settings: d.store.get() };
+      }
       const error = hotkeyConflict(patch.toggleHotkey, d.store.get().toggleHotkey, d.text(), d.platform);
+      if (error) return { ok: false, error, settings: d.store.get() };
+    }
+    if (patch.textHotkey) {
+      if (sameHotkey(patch.textHotkey, patch.toggleHotkey ?? d.store.get().toggleHotkey)) {
+        return { ok: false, error: d.text().shortcutClash, settings: d.store.get() };
+      }
+      const error = hotkeyConflict(patch.textHotkey, d.store.get().textHotkey, d.text(), d.platform);
       if (error) return { ok: false, error, settings: d.store.get() };
     }
     return { ok: true, settings: d.store.update(patch) };

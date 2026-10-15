@@ -24,13 +24,14 @@ import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
-import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
+import { OverlayManager, type SharedEmote, type SharedPing, type SharedText } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
+import { onTextWindowGone, openTextWindow, registerTextWindow } from './textWindow';
 import { AppTray, trayUpdateFrom, type TrayMode } from './tray';
 import { trayUpdateHandlers } from './trayUpdate';
 import { MacBackend, RELEASES_API } from './updateMac';
@@ -103,6 +104,7 @@ function start(): void {
   let enabled = settings.enabledOnStart;
   let quitting = false; // read by pushStatus: once true, the tray and overlays are gone
   let capturing = false; // the settings page is listening for a key, so the helper must stay suspended
+  let textOpen = false;
 
   const overlays = new OverlayManager(
     overlaySettings(settings),
@@ -310,6 +312,11 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
   });
+  room.on('remoteText', (p) => overlays.spawnRemoteText(p));
+  overlays.on('sharedText', (p: SharedText) => {
+    const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
+    if (shared) room.sendText(p.text, shared);
+  });
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
     const t = text();
@@ -351,11 +358,24 @@ function start(): void {
     pushStatus();
   }
 
+  const syncSuspended = (): void => bridge.send({ type: 'suspend', on: capturing || textOpen });
+  registerTextWindow((message) => overlays.spawnText(message));
+  onTextWindowGone(() => {
+    textOpen = false;
+    syncSuspended();
+  });
+  const openText = (): void => {
+    if (!enabled || textOpen || capturing) return;
+    textOpen = true;
+    syncSuspended();
+    openTextWindow();
+  };
   bridge.on('event', (ev) => {
     if (ev.type === 'toggled') setEnabled(ev.enabled);
+    else if (ev.type === 'textRequested') openText();
     else if (ev.type === 'ready') {
       // A restarted helper starts unsuspended: re-apply an active key capture.
-      if (capturing) bridge.send({ type: 'suspend', on: true });
+      if (capturing || textOpen) syncSuspended();
     } else if (ev.type === 'error') console.warn('[helper]', ev.code ?? '', ev.message);
     else overlays.handle(ev);
   });
@@ -421,7 +441,7 @@ function start(): void {
     retryHelper: startHelper,
     setCapturing: (on) => {
       capturing = on;
-      bridge.send({ type: 'suspend', on });
+      syncSuspended();
     },
     openAccessibility: () => {
       if (!IS_MAC) return;
@@ -449,7 +469,7 @@ function start(): void {
   onSettingsWindowGone(() => {
     if (!capturing) return;
     capturing = false;
-    bridge.send({ type: 'suspend', on: false });
+    syncSuspended();
   });
 
   bridge.send(configCommand(settings, enabled));

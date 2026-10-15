@@ -40,6 +40,8 @@ export interface Settings {
   /** The wheel's slices, top (N) then clockwise. */
   wheel: PingId[];
   toggleHotkey: Hotkey;
+  /** Opens the custom text message dialog. */
+  textHotkey: Hotkey;
   pingSizePx: number;
   pingDurationS: number;
   /** Your newest ping stays on screen until your next one or a pause (pings from the room still fade). */
@@ -100,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wheelSizePx: WHEEL.size,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
+  textHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 },
   pingSizePx: 110,
   pingDurationS: 3.2,
   keepLastPing: false,
@@ -191,7 +194,7 @@ export function patchClashes(current: Settings, patch: Partial<Settings>, platfo
   return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), hotkey(pick('toggleHotkey')));
 }
 
-function hotkey(raw: unknown): Hotkey {
+function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey): Hotkey {
   // Needs Ctrl, Alt or Win: a Shift-only hotkey would swallow ordinary capital letters system-wide.
   if (
     isObj(raw) && Number.isInteger(raw.mods) && (raw.mods as number) >= 1 && (raw.mods as number) <= 15
@@ -199,8 +202,11 @@ function hotkey(raw: unknown): Hotkey {
   ) {
     return { mods: raw.mods as number, vk: raw.vk };
   }
-  return { ...DEFAULT_SETTINGS.toggleHotkey };
+  return { ...fallback };
 }
+
+const hotkeysEqual = (a: Hotkey, b: Hotkey): boolean => a.mods === b.mods && a.vk === b.vk;
+const TEXT_HOTKEY_FALLBACK: Hotkey = { mods: MOD.ctrl | MOD.alt, vk: 0x59 }; // Ctrl+Alt+Y when Ctrl+Alt+T is taken
 
 function roomCode(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -232,6 +238,10 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
   const fallbackName = sanitizeName(identity.name);
   const pingTrigger = trigger(r.trigger, platform);
   const toggleHotkey = hotkey(r.toggleHotkey);
+  const requestedTextHotkey = hotkey(r.textHotkey, DEFAULT_SETTINGS.textHotkey);
+  const textHotkey = hotkeysEqual(toggleHotkey, requestedTextHotkey)
+    ? { ...(hotkeysEqual(toggleHotkey, DEFAULT_SETTINGS.textHotkey) ? TEXT_HOTKEY_FALLBACK : DEFAULT_SETTINGS.textHotkey) }
+    : requestedTextHotkey;
   const emote = emoteKey(r.emoteTrigger, platform);
   const custom = customEmotes(r.customEmotes);
   return {
@@ -245,6 +255,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     clickPingId: isPingId(r.clickPingId) ? r.clickPingId : DEFAULT_CLICK_PING,
     wheel: isValidWheel(r.wheel) ? [...r.wheel] : [...DEFAULT_WHEEL],
     toggleHotkey,
+    textHotkey,
     pingSizePx: num(r.pingSizePx, 'pingSizePx'),
     pingDurationS: num(r.pingDurationS, 'pingDurationS'),
     keepLastPing: bool(r.keepLastPing, 'keepLastPing'),

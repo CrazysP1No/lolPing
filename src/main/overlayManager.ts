@@ -27,6 +27,13 @@ export interface SharedEmote {
   y: number;
 }
 
+export interface SharedText {
+  text: string;
+  displayId: number;
+  x: number;
+  y: number;
+}
+
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /**
@@ -153,6 +160,20 @@ export class OverlayManager extends EventEmitter {
   spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; peer: string; tag: PingTag }): void {
     this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: this.resolveArt(p.ref, true), x: p.x, y: p.y, tag: p.tag });
     this.clearElsewhere(p.displayId, p.peer);
+  }
+
+  /** Shows text at the current pointer and returns its room-shareable position. */
+  spawnText(text: string): void {
+    const point = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(point);
+    const x = point.x - display.bounds.x;
+    const y = point.y - display.bounds.y;
+    this.send(display.id, 'text:spawn', { text, x, y });
+    this.emit('sharedText', { text, displayId: display.id, x, y } satisfies SharedText);
+  }
+
+  spawnRemoteText(p: { displayId: number; x: number; y: number; text: string; tag: PingTag }): void {
+    this.send(p.displayId, 'text:spawn', p);
   }
 
   /** This machine's displays with their room numbers (#1 = primary). */
