@@ -78,8 +78,8 @@ function memberRow(m: RoomMember, state: PanelState, t: Strings, act: (a: PanelA
   if (tag instanceof HTMLButtonElement) {
     tag.type = 'button';
     tag.title = t.aliveLine(m.name);
-    // The app puts the line at the cursor; the click's own point is only sent along.
-    tag.addEventListener('click', (e) => act({ t: 'alive', peer: m.peer, x: e.screenX, y: e.screenY }));
+    // The app puts the line at the cursor: the page's own screen point is not in DIPs on every display setup.
+    tag.addEventListener('click', () => act({ t: 'alive', peer: m.peer }));
   }
   row.append(status, tag);
   if (m.self) row.append(el('span', 'self', t.roomYou));

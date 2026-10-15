@@ -37,7 +37,7 @@ import { RoomVotes, voteResultLine } from './roomVotes';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
-import { onTextWindowGone, openTextWindow, registerTextWindow } from './textWindow';
+import { closeTextWindow, onTextWindowGone, openTextWindow, registerTextWindow } from './textWindow';
 import { AppTray, trayUpdateFrom, type TrayMode } from './tray';
 import { trayUpdateHandlers } from './trayUpdate';
 import { MacBackend, RELEASES_API } from './updateMac';
@@ -177,7 +177,8 @@ function start(): void {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
     },
-    announceEmotes: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
+    // With emotes switched off we announce none, so friends don't send stills for emotes we won't use.
+    announceEmotes: () => (featureOn(settings, 'emotes') ? announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId) : []),
   });
   // Custom emote stills travel both ways: this side asks for friends' hashes and answers wants for our own.
   const transfer = new EmoteTransfer({
@@ -308,6 +309,8 @@ function start(): void {
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
+  // The vote widget and the roster live in their own windows that never take focus.
+  const panels = new PanelWindows();
   // The room keys (Alt+T and the panel key) are the helper's only while a room is active, so they reach other apps otherwise.
   let live = liveKeys(settings, { active: false }, enabled);
   const sendConfig = (): void => {
@@ -357,11 +360,10 @@ function start(): void {
     if (s.phase === 'idle') {
       history.clear();
       memberNames.clear();
+      closeTextWindow(); // its text and commands only make sense in a room, and a kick leaves it open otherwise
     }
     for (const m of s.members) memberNames.set(m.peer, m.name);
   });
-  // The vote widget and the roster live in their own windows that never take focus.
-  const panels = new PanelWindows();
   const panelState = (view: PanelState['view'], vote: PanelState['vote'], voteOver = false): PanelState => ({
     view, lang: resolveLang(settings.language, app.getLocale()), max: MAX_MEMBERS, room: room.state(), history: history.lines(),
     vote, voteOver, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
@@ -539,6 +541,7 @@ function start(): void {
     } else if (ev.type === 'ready') {
       // A restarted helper starts unsuspended: re-apply an active key capture.
       if (capturing || textOpen) syncSuspended();
+      panels.hideRoster(); // a restarted helper lost the panel key's up, so a shown roster would stay up
     } else if (ev.type === 'error') console.warn('[helper]', ev.code ?? '', ev.message);
     else overlays.handle(ev);
   });

@@ -19,6 +19,11 @@ export function onTextWindowGone(cb: () => void): void {
   goneListeners.push(cb);
 }
 
+/** Closes the box if it is open, for when the room it was opened for is gone. */
+export function closeTextWindow(): void {
+  if (win && !win.isDestroyed()) win.close();
+}
+
 /** `onSubmit` answers what the box typed: 'sent' closes it, anything else keeps it open with that hint. */
 export function registerTextWindow(onSubmit: (raw: string, at: Point) => TextAnswer): void {
   submit = onSubmit;

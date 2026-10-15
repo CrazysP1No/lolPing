@@ -91,12 +91,9 @@ export interface PanelState {
   votesOn: boolean;
 }
 
-/**
- * What a click in a panel window asks for. `x`, `y` of `alive` are the click's screen point as the page saw it;
- * the app places the line at the cursor instead.
- */
+/** What a click in a panel window asks for. An `alive` line is placed at the cursor by the app, not by the page. */
 export type PanelAction =
-  | { t: 'alive'; peer: string; x: number; y: number }
+  | { t: 'alive'; peer: string }
   | { t: 'mute'; peer: string; on: boolean }
   | { t: 'kick'; peer: string }
   | { t: 'vote'; kind: 'ff' | 'ready' }
@@ -116,7 +113,7 @@ export function parsePanelAction(raw: unknown): PanelAction | null {
   const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
   switch (a.t) {
     case 'alive':
-      return isPeer(a.peer) && isNum(a.x) && isNum(a.y) ? { t: 'alive', peer: a.peer, x: a.x, y: a.y } : null;
+      return isPeer(a.peer) ? { t: 'alive', peer: a.peer } : null;
     case 'mute':
       return isPeer(a.peer) && typeof a.on === 'boolean' ? { t: 'mute', peer: a.peer, on: a.on } : null;
     case 'kick':

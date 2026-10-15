@@ -5,7 +5,7 @@ const peer = '0123456789abcdef';
 
 describe('parsePanelAction', () => {
   it('accepts only well-formed panel actions', () => {
-    expect(parsePanelAction({ t: 'alive', peer, x: 10.5, y: 20 })).toEqual({ t: 'alive', peer, x: 10.5, y: 20 });
+    expect(parsePanelAction({ t: 'alive', peer })).toEqual({ t: 'alive', peer });
     expect(parsePanelAction({ t: 'mute', peer, on: true })).toEqual({ t: 'mute', peer, on: true });
     expect(parsePanelAction({ t: 'kick', peer })).toEqual({ t: 'kick', peer });
     expect(parsePanelAction({ t: 'vote', kind: 'ff' })).toEqual({ t: 'vote', kind: 'ff' });
@@ -21,14 +21,12 @@ describe('parsePanelAction', () => {
     for (const bad of ['', 'ABCDEF0123456789', '0123456789abcde', '0123456789abcdef0', 5, null]) {
       expect(parsePanelAction({ t: 'kick', peer: bad })).toBeNull();
       expect(parsePanelAction({ t: 'mute', peer: bad, on: true })).toBeNull();
-      expect(parsePanelAction({ t: 'alive', peer: bad, x: 1, y: 1 })).toBeNull();
+      expect(parsePanelAction({ t: 'alive', peer: bad })).toBeNull();
     }
   });
 
-  it('refuses points that are not finite numbers, and flags that are not booleans', () => {
-    expect(parsePanelAction({ t: 'alive', peer, x: Number.NaN, y: 1 })).toBeNull();
-    expect(parsePanelAction({ t: 'alive', peer, x: 1, y: Infinity })).toBeNull();
-    expect(parsePanelAction({ t: 'alive', peer, x: '1', y: 1 })).toBeNull();
+  it('drops a point sent with an alive action, and refuses flags that are not booleans', () => {
+    expect(parsePanelAction({ t: 'alive', peer, x: 10.5, y: 20 })).toEqual({ t: 'alive', peer });
     expect(parsePanelAction({ t: 'mute', peer, on: 1 })).toBeNull();
     expect(parsePanelAction({ t: 'ballot', yes: 'yes' })).toBeNull();
   });
