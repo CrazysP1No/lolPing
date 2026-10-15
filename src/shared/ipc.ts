@@ -91,7 +91,10 @@ export interface PanelState {
   votesOn: boolean;
 }
 
-/** What a click in a panel window asks for. `x`, `y` of `alive` are the click's screen point in DIPs. */
+/**
+ * What a click in a panel window asks for. `x`, `y` of `alive` are the click's screen point as the page saw it;
+ * the app places the line at the cursor instead.
+ */
 export type PanelAction =
   | { t: 'alive'; peer: string; x: number; y: number }
   | { t: 'mute'; peer: string; on: boolean }

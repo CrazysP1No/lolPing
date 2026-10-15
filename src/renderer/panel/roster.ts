@@ -78,7 +78,7 @@ function memberRow(m: RoomMember, state: PanelState, t: Strings, act: (a: PanelA
   if (tag instanceof HTMLButtonElement) {
     tag.type = 'button';
     tag.title = t.aliveLine(m.name);
-    // The click's screen point is where everyone sees the line, like a ping at the cursor.
+    // The app puts the line at the cursor; the click's own point is only sent along.
     tag.addEventListener('click', (e) => act({ t: 'alive', peer: m.peer, x: e.screenX, y: e.screenY }));
   }
   row.append(status, tag);
@@ -159,7 +159,7 @@ export function renderRoster(root: HTMLElement, state: PanelState, act: (a: Pane
   }
   card.append(head, tabs, list);
 
-  if (tab === 'members' && state.votesOn) {
+  if (state.votesOn) {
     const foot = el('footer', 'roster-foot');
     foot.append(footerButton(t.panelSurrender, 'ff', act), footerButton(t.panelReadyCheck, 'ready', act));
     card.append(foot);

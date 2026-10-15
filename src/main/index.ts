@@ -377,7 +377,8 @@ function start(): void {
         roomVotes?.answer(a.yes);
         break;
       case 'alive':
-        sendOwnAlive(a.peer, { x: a.x, y: a.y });
+        // The cursor, as the text box does: the page's own screen point is not in DIPs on every display setup.
+        sendOwnAlive(a.peer, screen.getCursorScreenPoint());
         break;
       case 'mute':
         room.muteMember(a.peer, a.on);
@@ -535,8 +536,7 @@ function start(): void {
     else if (ev.type === 'panel') {
       if (!ev.show) panels.hideRoster();
       else if (live.panel) panels.showRoster(screen.getCursorScreenPoint(), panelState('roster', null));
-    }
-    else if (ev.type === 'ready') {
+    } else if (ev.type === 'ready') {
       // A restarted helper starts unsuspended: re-apply an active key capture.
       if (capturing || textOpen) syncSuspended();
     } else if (ev.type === 'error') console.warn('[helper]', ev.code ?? '', ev.message);
