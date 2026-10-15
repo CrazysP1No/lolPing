@@ -10,6 +10,7 @@ import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
+import { sameTagRgb, tagWire } from '../shared/roomColors';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
@@ -159,7 +160,7 @@ function start(): void {
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
-    profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit }),
+    profile: () => ({ name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom), limit: settings.incomingPingLimit }),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
@@ -375,7 +376,10 @@ function start(): void {
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
-    if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
+    if (
+      s.displayName !== previous.displayName || s.tagColor !== previous.tagColor
+      || !sameTagRgb(s.tagColorCustom, previous.tagColorCustom)
+    ) room.profileChanged();
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();

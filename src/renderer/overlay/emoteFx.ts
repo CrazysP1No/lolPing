@@ -1,6 +1,6 @@
 import { EMOTE_DURATION_S, emoteAnimUrl, type EmoteArt } from '../../shared/emotes';
 import type { PingTag } from '../../shared/ipc';
-import { TAG_COLORS } from '../../shared/roomColors';
+import { tagColorCss } from '../../shared/roomColors';
 
 export interface EmoteOptions {
   /** How wide the emote's art appears. */
@@ -85,7 +85,7 @@ export class EmoteStage {
     if (opts.tag) {
       const tag = div('tag');
       tag.textContent = opts.tag.name; // never HTML: the name comes from another machine
-      tag.style.setProperty('--tag', TAG_COLORS[opts.tag.color] ?? TAG_COLORS[0]);
+      tag.style.setProperty('--tag', tagColorCss(opts.tag.color, opts.tag.rgb));
       root.append(tag);
     }
     this.layer.append(root);

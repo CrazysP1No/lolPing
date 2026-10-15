@@ -5,7 +5,7 @@ import {
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
 import type { RoomMember, RoomState } from '../../../shared/room';
-import { TAG_COLORS } from '../../../shared/roomColors';
+import { TAG_COLORS, readableTagRgb, tagColorCss, tagHex, tagRgbFromHex } from '../../../shared/roomColors';
 import { clampNameInput } from '../../../shared/roomProtocol';
 import { LIMITS, type Settings } from '../../../shared/settings';
 import { api } from '../api';
@@ -82,7 +82,7 @@ function MemberRow({ m }: { m: RoomMember }) {
   const t = useText();
   return (
     <div className="member">
-      <span className="tagDot" style={{ background: TAG_COLORS[m.color] }} />
+      <span className="tagDot" style={{ background: tagColorCss(m.color, m.rgb) }} />
       <span className="memberName">
         {m.name}
         {m.self ? <span className="desc inline">({t.roomYou})</span> : null}
@@ -166,15 +166,31 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
   const t = useText();
   const room = useRoomState();
   if (!room) return null;
+  // The picker opens at the custom colour when there is one, else at the palette entry in use.
+  const pickerValue = tagHex(s.tagColorCustom ?? tagRgbFromHex(TAG_COLORS[s.tagColor] ?? TAG_COLORS[0]) ?? [255, 255, 255]);
   return (
     <>
       <NameRow value={s.displayName} onSave={(displayName) => void update({ displayName })} />
-      <SettingRow icon={<Color24Regular />} title={t.roomColor}>
-        <div className="swatches" role="radiogroup" aria-label={t.roomColor}>
-          {TAG_COLORS.map((c, i) => (
-            <button key={c} type="button" role="radio" aria-checked={s.tagColor === i} aria-label={t.roomColorLabel(i + 1)}
-              className={`swatch${s.tagColor === i ? ' sel' : ''}`} style={{ background: c }} onClick={() => void update({ tagColor: i })} />
-          ))}
+      <SettingRow icon={<Color24Regular />} title={t.roomColor} description={t.roomColorCustomHint}>
+        <div className="swatches">
+          <div className="swatchRow" role="radiogroup" aria-label={t.roomColor}>
+            {TAG_COLORS.map((c, i) => {
+              const on = !s.tagColorCustom && s.tagColor === i;
+              return (
+                <button key={c} type="button" role="radio" aria-checked={on} aria-label={t.roomColorLabel(i + 1)}
+                  className={`swatch${on ? ' sel' : ''}`} style={{ background: c }}
+                  onClick={() => void update({ tagColor: i, tagColorCustom: null })} />
+              );
+            })}
+          </div>
+          <label className={`swatch custom${s.tagColorCustom ? ' sel' : ' unset'}`} title={t.roomColorCustom}
+            style={s.tagColorCustom ? { background: tagColorCss(s.tagColor, s.tagColorCustom) } : undefined}>
+            <input type="color" value={pickerValue} aria-label={t.roomColorCustom}
+              onChange={(e) => {
+                const picked = tagRgbFromHex(e.target.value);
+                if (picked) void update({ tagColorCustom: readableTagRgb(picked) });
+              }} />
+          </label>
         </div>
       </SettingRow>
       {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} />}

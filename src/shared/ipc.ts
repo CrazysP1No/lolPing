@@ -3,6 +3,7 @@ import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
+import type { TagRgb } from './roomColors';
 import type { OverlaySettings, Settings } from './settings';
 import type { UpdateState } from './update';
 
@@ -11,10 +12,11 @@ export interface Point {
   y: number;
 }
 
-/** The name tag under a room member's ping. `color` indexes TAG_COLORS. */
+/** The name tag under a room member's ping. `color` indexes TAG_COLORS; `rgb` is a custom colour when set. */
 export interface PingTag {
   name: string;
   color: number;
+  rgb?: TagRgb | null;
 }
 
 /** main → overlay renderer messages. Points are CSS pixels inside that overlay. */

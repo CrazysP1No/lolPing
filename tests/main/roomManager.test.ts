@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
 import { MAX_MEMBERS, RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
+import type { TagRgb } from '../../src/shared/roomColors';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
@@ -32,7 +33,7 @@ class Remote {
 
 let lan: FakeTransport;
 let room: RoomManager;
-let profile: { name: string; color: number; limit: number };
+let profile: { name: string; color: number; rgb: TagRgb | null; limit: number };
 let pings: RemotePing[];
 let emotes: RemoteEmote[];
 let toasts: RoomToast[];
@@ -52,7 +53,7 @@ async function joinActive(): Promise<void> {
 beforeEach(() => {
   vi.useFakeTimers({ now: 1_780_000_000_000 });
   lan = new FakeTransport('lan');
-  profile = { name: 'Me', color: 1, limit: 5 };
+  profile = { name: 'Me', color: 1, rgb: null, limit: 5 };
   pings = [];
   emotes = [];
   toasts = [];
@@ -253,7 +254,7 @@ describe('incoming pings', () => {
 
   it('maps a ping onto the target display with the sender’s tag', () => {
     alex.ping({ ping: 'push', x: 0.5, y: 0.25 });
-    expect(pings).toEqual([{ displayId: 100, x: 960, y: 270, id: 'push', tag: { name: 'Alex', color: 4 } }]);
+    expect(pings).toEqual([{ displayId: 100, x: 960, y: 270, id: 'push', tag: { name: 'Alex', color: 4, rgb: null } }]);
   });
 
   it('shows a packet that arrives twice only once', () => {
@@ -309,7 +310,7 @@ describe('incoming emotes', () => {
 
   it('emits remote emotes with the sender’s tag, mapped onto the target display', () => {
     alex.emote({ e: 'gg', d: 1, x: 0.5, y: 0.25 });
-    expect(emotes).toEqual([{ displayId: 100, x: 960, y: 270, ref: 'gg', peer: alex.peer, tag: { name: 'Pa', color: 2 } }]);
+    expect(emotes).toEqual([{ displayId: 100, x: 960, y: 270, ref: 'gg', peer: alex.peer, tag: { name: 'Pa', color: 2, rgb: null } }]);
     expect(pings).toHaveLength(0);
   });
 

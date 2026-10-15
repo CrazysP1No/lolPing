@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { EmoteRef } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
 import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../shared/room';
+import type { TagRgb } from '../shared/roomColors';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
   decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, type MemberStatus, type PresenceMsg, type RoomMessage,
@@ -39,12 +40,19 @@ const SLEEP_GAP_MS = 5000;
 /** How long the clock warning stays up after the last stale presence. */
 const SKEW_HINT_MS = 30_000;
 
+/** A member's name tag as it reaches the overlay: a palette index, plus the exact colour when it is a custom one. */
+export interface MemberTag {
+  name: string;
+  color: number;
+  rgb: TagRgb | null;
+}
+
 export interface RemotePing {
   displayId: number;
   x: number;
   y: number;
   id: PingId;
-  tag: { name: string; color: number };
+  tag: MemberTag;
 }
 
 export interface RemoteEmote {
@@ -54,7 +62,7 @@ export interface RemoteEmote {
   ref: EmoteRef;
   /** The sender, so their earlier emote can be replaced: everyone has one on screen at a time. */
   peer: string;
-  tag: { name: string; color: number };
+  tag: MemberTag;
 }
 
 export type RoomToast =
@@ -69,7 +77,7 @@ export interface RoomDeps {
   deriveKeys(canonical: string): Promise<RoomKeys>;
   appVersion: string;
   /** Read on every use, so settings changes apply at once. `limit`: incoming pings per second per member, 0 = unlimited. */
-  profile(): { name: string; color: number; limit: number };
+  profile(): { name: string; color: number; rgb: TagRgb | null; limit: number };
   /** Display number → where a ping for it lands here, or null to drop it. The hook share mode will replace. */
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
   /** The 32-hex hashes our presence announces: the custom emotes on our wheel and centre. Read on every presence. */
@@ -80,6 +88,7 @@ interface Member {
   peer: string;
   name: string;
   color: number;
+  rgb: TagRgb | null;
   status: MemberStatus;
   needsUpdate: boolean;
   noEmotes: boolean;
@@ -299,9 +308,12 @@ export class RoomManager extends EventEmitter {
       this.phase === 'idle' ? 'off' : ([...this.active].find((t) => t.kind === kind)?.status ?? 'off');
     const p = this.deps.profile();
     const members: RoomMember[] = this.phase === 'idle' ? [] : [
-      { peer: this.self, name: p.name, color: p.color, path: 'lan', status: this.status(), needsUpdate: false, noEmotes: false, muted: false, self: true },
+      {
+        peer: this.self, name: p.name, color: p.color, rgb: p.rgb, path: 'lan', status: this.status(),
+        needsUpdate: false, noEmotes: false, muted: false, self: true,
+      },
       ...[...this.members.values()].map((m) => ({
-        peer: m.peer, name: m.name, color: m.color, path: this.path(m, now), status: m.status,
+        peer: m.peer, name: m.name, color: m.color, rgb: m.rgb, path: this.path(m, now), status: m.status,
         needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, muted: m.muted, self: false,
       })),
     ];
@@ -445,7 +457,7 @@ export class RoomManager extends EventEmitter {
     const target = this.deps.resolveTarget(msg.d);
     if (!target) return;
     const [x, y] = [msg.x * target.width, msg.y * target.height];
-    const tag = { name: m.name, color: m.color };
+    const tag: MemberTag = { name: m.name, color: m.color, rgb: m.rgb };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
     else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
   }
@@ -461,7 +473,8 @@ export class RoomManager extends EventEmitter {
       // can't be judged this way (every relay member arrives from the same key).
       if (!t.shared && this.membersAt(t.kind, key) >= 2) return;
       m = {
-        peer: msg.peer, name: msg.name, color: msg.color, status: msg.status, needsUpdate: false, noEmotes: false, muted: false, em: [],
+        peer: msg.peer, name: msg.name, color: msg.color, rgb: msg.rgb ?? null, status: msg.status,
+        needsUpdate: false, noEmotes: false, muted: false, em: [],
         firstSeen: this.deps.now(), viaInternet: false, paths: {},
       };
       this.members.set(m.peer, m);
@@ -469,6 +482,7 @@ export class RoomManager extends EventEmitter {
     }
     m.name = msg.name;
     m.color = msg.color;
+    m.rgb = msg.rgb ?? null;
     m.status = msg.status;
     m.needsUpdate = msg.proto !== PROTOCOL_VERSION;
     m.noEmotes = isOlderThan(msg.app, EMOTES_SINCE);
@@ -547,7 +561,12 @@ export class RoomManager extends EventEmitter {
 
   private presencePacket(): Buffer {
     const p = this.deps.profile();
-    return this.seal({ t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(), em: [...this.deps.announceEmotes()] });
+    return this.seal({
+      t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
+      em: [...this.deps.announceEmotes()],
+      // Left out rather than sent as null: a peer on an older build ignores it either way, and this keeps the packet small.
+      ...(p.rgb ? { rgb: p.rgb } : {}),
+    });
   }
 
   /**

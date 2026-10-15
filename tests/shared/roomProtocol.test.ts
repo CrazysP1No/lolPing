@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
+import {
+  isTagColor, isTagRgb, nearestTagColor, readableTagRgb, sameTagRgb, TAG_COLORS, tagColorCss, tagHex, tagRgbFromHex, tagWire,
+} from '../../src/shared/roomColors';
 import {
   clampNameInput, decodeMessage, encodeMessage, isOlderThan, sanitizeName, validateMessage, type ChunkMsg, type EmoteMsg,
   type PingMsg, type PresenceMsg, type RoomMessage, type WantMsg,
@@ -77,6 +79,14 @@ describe('validateMessage', () => {
 
   it('sanitises the name', () => {
     expect(validateMessage({ ...presence, name: '‮Alex\u0000' })).toMatchObject({ name: 'Alex' });
+  });
+
+  it('carries a custom tag colour through, and drops a malformed one without dropping the member', () => {
+    expect(validateMessage({ ...presence, rgb: [12, 34, 56] })).toEqual({ ...presence, rgb: [12, 34, 56] });
+    // A bad custom colour costs the colour, never the member: the presence still validates on its palette index.
+    for (const rgb of [[0, 0], [0, 0, 0, 0], [0, 0, 256], ['1', 2, 3], 'rgb(1,2,3)', 3]) {
+      expect(validateMessage({ ...presence, rgb })).toEqual(presence);
+    }
   });
 });
 
@@ -250,5 +260,68 @@ describe('tag colours', () => {
     expect(isTagColor(0)).toBe(true);
     expect(isTagColor(7)).toBe(true);
     for (const v of [8, -1, 1.5, '1', null]) expect(isTagColor(v)).toBe(false);
+  });
+
+  it('accepts a custom colour as three channels, and nothing else', () => {
+    expect(isTagRgb([0, 0, 0])).toBe(true);
+    expect(isTagRgb([255, 128, 7])).toBe(true);
+    for (const v of [
+      [0, 0], [0, 0, 0, 0], [0, 0, 256], [0, 0, -1], [0, 0, 1.5], ['1', 2, 3], 'rgb(1,2,3)', null, undefined, 3, {},
+    ]) expect(isTagRgb(v)).toBe(false);
+  });
+
+  it('lifts a colour too dark for the dark pill, and leaves a readable one alone', () => {
+    expect(readableTagRgb([255, 255, 255])).toEqual([255, 255, 255]);
+    expect(readableTagRgb([79, 195, 247])).toEqual([79, 195, 247]); // the sky entry already reads
+
+    const lifted = readableTagRgb([0, 0, 0]);
+    expect(lifted[0]).toBe(lifted[1]);
+    expect(lifted[1]).toBe(lifted[2]); // neutral in, neutral out: the hue did not move
+    expect(lifted[0]).toBeGreaterThan(100);
+    expect(readableTagRgb(lifted)).toEqual(lifted); // already at the floor: a second pass changes nothing
+  });
+
+  it('builds CSS from numbers only, so nothing off the network reaches a style', () => {
+    expect(tagColorCss(0, null)).toBe(TAG_COLORS[0]);
+    expect(tagColorCss(99, null)).toBe(TAG_COLORS[0]); // out of range falls back
+    expect(tagColorCss(0, undefined)).toBe(TAG_COLORS[0]);
+    // A colour that already reads is used as it is, still built here from three numbers.
+    expect(tagColorCss(0, [255, 0, 0])).toBe('rgb(255, 0, 0)');
+    // A dark one is clamped before it becomes CSS, and the result is still just three numbers.
+    expect(tagColorCss(0, [0, 0, 0])).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+    expect(tagColorCss(0, [0, 0, 0])).not.toBe('rgb(0, 0, 0)');
+  });
+
+  it('matches a custom colour to the nearest palette entry for older builds', () => {
+    expect(nearestTagColor([79, 195, 247])).toBe(0); // exactly sky
+    expect(nearestTagColor([80, 195, 245])).toBe(0); // near sky
+    expect(nearestTagColor([224, 224, 224])).toBe(7); // exactly silver
+    for (const rgb of [[0, 0, 0], [255, 255, 255], [12, 200, 130]] as const) {
+      expect(isTagColor(nearestTagColor(rgb))).toBe(true);
+    }
+  });
+
+  it('round-trips a picker value and rejects anything that is not #rrggbb', () => {
+    expect(tagHex([79, 195, 247])).toBe('#4fc3f7');
+    expect(tagHex([0, 0, 0])).toBe('#000000');
+    expect(tagRgbFromHex('#4fc3f7')).toEqual([79, 195, 247]);
+    for (const hex of ['4fc3f7', '#4fc3f', '#4fc3f7f', '#gggggg', 'red', '']) expect(tagRgbFromHex(hex)).toBeNull();
+  });
+
+  it('compares custom colours by value, since they are arrays', () => {
+    expect(sameTagRgb(null, null)).toBe(true);
+    expect(sameTagRgb([1, 2, 3], [1, 2, 3])).toBe(true);
+    expect(sameTagRgb([1, 2, 3], [1, 2, 4])).toBe(false);
+    expect(sameTagRgb([1, 2, 3], null)).toBe(false);
+    expect(sameTagRgb(null, [1, 2, 3])).toBe(false);
+  });
+
+  it('keeps color a palette index on the wire, so a peer on an older build still accepts the presence', () => {
+    expect(tagWire(3, null)).toEqual({ color: 3, rgb: null });
+    const wire = tagWire(3, [10, 20, 30]);
+    expect(isTagColor(wire.color)).toBe(true);
+    expect(wire.rgb).toEqual([10, 20, 30]);
+    // The index is the nearest palette entry rather than the stored one, so older builds show something close.
+    expect(tagWire(3, [79, 195, 247]).color).toBe(0);
   });
 });

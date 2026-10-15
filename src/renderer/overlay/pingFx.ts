@@ -1,6 +1,6 @@
 import type { PingTag } from '../../shared/ipc';
 import { FALLBACK_TEXTURE, textureUrl, type PingDef } from '../../shared/pings';
-import { TAG_COLORS } from '../../shared/roomColors';
+import { tagColorCss } from '../../shared/roomColors';
 
 /** Safety ceiling: past this many pings on screen the oldest go early, so a ping flood can't bog the overlay down. */
 export const MAX_PINGS = 60;
@@ -55,7 +55,7 @@ export function spawnPing(layer: HTMLElement, def: PingDef, x: number, y: number
   if (opts.tag) {
     const tag = div('tag');
     tag.textContent = opts.tag.name; // never HTML: the name comes from another machine
-    tag.style.setProperty('--tag', TAG_COLORS[opts.tag.color] ?? TAG_COLORS[0]);
+    tag.style.setProperty('--tag', tagColorCss(opts.tag.color, opts.tag.rgb));
     root.append(tag);
   }
   while (layer.childElementCount >= MAX_PINGS) layer.firstElementChild?.remove();
