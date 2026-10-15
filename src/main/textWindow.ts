@@ -1,13 +1,13 @@
 import { BrowserWindow, ipcMain, screen } from 'electron';
 import { TEXT_CH, type Point, type TextAnswer, type TextBoxText } from '../shared/ipc';
 import { placeInside } from './coords';
-import { loadPage, pageUrl, preloadPath } from './paths';
+import { IS_MAC, loadPage, pageUrl, preloadPath } from './paths';
 
 /** The box's size in DIPs. */
 const WIDTH = 420;
 const HEIGHT = 64;
-/** If the box never gets keyboard focus (another app held it), it closes instead of sitting there unusable. */
-const FOCUS_WAIT_MS = 1000;
+/** If the box has no keyboard focus by then (another app held it, or the page never loaded), it closes instead of sitting there. */
+const FOCUS_WAIT_MS = 2000;
 
 let win: BrowserWindow | null = null;
 let at: Point = { x: 0, y: 0 };
@@ -59,7 +59,24 @@ export function openTextWindow(point: Point, strings: TextBoxText): void {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
+    // macOS: a non-activating panel takes key focus without making lolPing the active app, so the app the box was opened over stays active.
+    ...(IS_MAC ? { type: 'panel' as const } : {}),
     webPreferences: { preload: preloadPath('text'), spellcheck: false },
+  });
+  win = w;
+  // Every way the box can end goes through close(), whose 'closed' event releases the caller's suspend.
+  try {
+    setup(w);
+  } catch (err) {
+    w.destroy();
+    throw err;
+  }
+}
+
+function setup(w: BrowserWindow): void {
+  w.on('closed', () => {
+    if (win === w) win = null;
+    for (const cb of goneListeners) cb();
   });
   w.setAlwaysOnTop(true, 'screen-saver'); // above the overlay and a game's borderless window
   let focused = false;
@@ -70,17 +87,18 @@ export function openTextWindow(point: Point, strings: TextBoxText): void {
   w.on('blur', () => {
     if (focused) w.close();
   });
+  setTimeout(() => {
+    if (!w.isDestroyed() && !focused) w.close();
+  }, FOCUS_WAIT_MS);
   w.once('ready-to-show', () => {
     w.show();
     w.focus();
-    setTimeout(() => {
-      if (!w.isDestroyed() && !focused) w.close();
-    }, FOCUS_WAIT_MS);
   });
-  w.on('closed', () => {
-    win = null;
-    for (const cb of goneListeners) cb();
-  });
+  const closeIfAlive = (): void => {
+    if (!w.isDestroyed()) w.close();
+  };
+  w.webContents.on('did-fail-load', closeIfAlive);
+  w.webContents.on('render-process-gone', closeIfAlive);
   const ownUrl = new URL(pageUrl('text'));
   w.webContents.on('will-navigate', (event) => {
     try {
@@ -91,6 +109,5 @@ export function openTextWindow(point: Point, strings: TextBoxText): void {
     }
   });
   w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  void loadPage(w, 'text');
-  win = w;
+  loadPage(w, 'text').catch(closeIfAlive);
 }

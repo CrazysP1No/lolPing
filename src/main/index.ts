@@ -422,17 +422,22 @@ function start(): void {
   onTextWindowGone(() => {
     textOpen = false;
     syncSuspended();
-    // Hiding the app hands focus back to the app the box was opened over. Not while settings is open: it would vanish too.
-    if (IS_MAC && !settingsWindow()?.isVisible()) app.hide();
   });
   const openText = (): void => {
     if (!live.text || textOpen || capturing) return;
     textOpen = true;
     syncSuspended();
     const t = text();
-    openTextWindow(screen.getCursorScreenPoint(), {
-      placeholder: t.textBoxPlaceholder, hint: t.textBoxHint, unknown: t.textBoxUnknown, votesOff: t.textBoxVotesOff,
-    });
+    try {
+      openTextWindow(screen.getCursorScreenPoint(), {
+        placeholder: t.textBoxPlaceholder, hint: t.textBoxHint, unknown: t.textBoxUnknown, votesOff: t.textBoxVotesOff,
+      });
+    } catch (err) {
+      // No window will ever close to release the suspend, so release it here.
+      console.warn('[text]', err);
+      textOpen = false;
+      syncSuspended();
+    }
   };
   bridge.on('event', (ev) => {
     if (ev.type === 'toggled') setEnabled(ev.enabled);

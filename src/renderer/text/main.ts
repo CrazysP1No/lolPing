@@ -23,10 +23,19 @@ function clamp(): void {
   count.classList.toggle('full', used >= MAX_TEXT);
 }
 
+/** A held Enter repeats faster than the answer comes back: one submit at a time, or the text would be sent twice. */
+let sending = false;
+
 async function send(): Promise<void> {
-  const answer = await window.textApi.submit(input.value);
-  if (answer === 'unknown') showHint(words?.unknown ?? '', true);
-  else if (answer === 'votesOff') showHint(words?.votesOff ?? '', true);
+  if (sending) return;
+  sending = true;
+  try {
+    const answer = await window.textApi.submit(input.value);
+    if (answer === 'unknown') showHint(words?.unknown ?? '', true);
+    else if (answer === 'votesOff') showHint(words?.votesOff ?? '', true);
+  } finally {
+    sending = false;
+  }
 }
 
 // While an input method is composing, the box holds a draft: cutting it would break the composition, and Enter confirms it.
