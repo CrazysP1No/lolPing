@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isTagColor, TAG_COLORS } from '../../src/shared/roomColors';
+import {
+  isTagColor, isTagRgb, nearestTagColor, readableTagRgb, sameTagRgb, TAG_COLORS, tagColorCss, tagHex, tagRgbFromHex, tagWire,
+} from '../../src/shared/roomColors';
 import {
   clampNameInput, decodeMessage, encodeMessage, isOlderThan, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
-  type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg,
+  type ChunkMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg, type WantMsg,
 } from '../../src/shared/roomProtocol';
 
 const base = { peer: '0123456789abcdef', seq: 4, ts: 1_780_000_000_000 };
-const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on' };
+const presence: PresenceMsg = { ...base, t: 'presence', proto: 1, app: '0.3.0', name: 'Alex', color: 3, status: 'on', em: [] };
 const ping: PingMsg = { ...base, t: 'ping', ping: 'danger', d: 2, x: 0.25, y: 1 };
 const emote: EmoteMsg = { ...base, t: 'emote', e: 'gg', d: 2, x: 0.25, y: 1 };
 const text: TextMsg = { ...base, t: 'text', text: 'Group mid', d: 2, x: 0.25, y: 1 };
@@ -105,6 +107,14 @@ describe('validateMessage', () => {
   it('sanitises the name', () => {
     expect(validateMessage({ ...presence, name: '‮Alex\u0000' })).toMatchObject({ name: 'Alex' });
   });
+
+  it('carries a custom tag colour through, and drops a malformed one without dropping the member', () => {
+    expect(validateMessage({ ...presence, rgb: [12, 34, 56] })).toEqual({ ...presence, rgb: [12, 34, 56] });
+    // A bad custom colour costs the colour, never the member: the presence still validates on its palette index.
+    for (const rgb of [[0, 0], [0, 0, 0, 0], [0, 0, 256], ['1', 2, 3], 'rgb(1,2,3)', 3]) {
+      expect(validateMessage({ ...presence, rgb })).toEqual(presence);
+    }
+  });
 });
 
 describe('emote messages', () => {
@@ -141,6 +151,78 @@ describe('emote messages', () => {
 
   it('keeps known fields only', () => {
     expect(validateMessage({ ...emote, extra: 'ignored', ping: 'danger' })).toEqual(emote);
+  });
+});
+
+describe('presence announcements (em)', () => {
+  const hash = '0123456789abcdef0123456789abcdef';
+  const hash2 = 'fedcba9876543210fedcba9876543210';
+
+  it('round-trips the announced hashes', () => {
+    const m: PresenceMsg = { ...presence, em: [hash, hash2] };
+    expect(decodeMessage(encodeMessage(m))).toEqual(m);
+  });
+
+  it('reads a presence without em as announcing nothing (an app before 0.6.0)', () => {
+    expect(validateMessage({ t: 'presence', peer: presence.peer, seq: 1, ts: 1, proto: 1, app: '0.5.1', name: 'A', color: 0, status: 'on' }))
+      .toMatchObject({ em: [] });
+  });
+
+  it('rebuilds the list: malformed entries dropped, duplicates kept once, at most 9', () => {
+    const raw = { ...presence, em: [hash, hash, 'XYZ', 7, hash2, `${hash}0`] };
+    expect(validateMessage(raw)).toMatchObject({ em: [hash, hash2] });
+    expect(validateMessage({ ...presence, em: Array.from({ length: 20 }, () => hash) })).toMatchObject({ em: [hash] });
+    const many = [hash, hash2, ...Array.from({ length: 20 }, (_, i) => i.toString(16).padStart(32, '0'))];
+    expect(validateMessage({ ...presence, em: many })).toMatchObject({ em: many.slice(0, 9) });
+  });
+
+  it.each([
+    ['em not an array', { ...presence, em: hash }],
+    ['em entry not a string', { ...presence, em: [7] }],
+    ['em entry upper-case', { ...presence, em: [hash.toUpperCase()] }],
+    ['em entry short', { ...presence, em: ['0123'] }],
+  ])('reads %s as announcing nothing', (_label, raw) => {
+    expect(validateMessage(raw)).toMatchObject({ em: [] });
+  });
+});
+
+describe('want and chunk messages', () => {
+  const hash = '0123456789abcdef0123456789abcdef';
+  const want: WantMsg = { ...base, t: 'want', to: 'fedcba9876543210', h: hash, need: [0, 2] };
+  const chunk: ChunkMsg = { ...base, t: 'chunk', h: hash, i: 0, n: 17, b: Buffer.from('x'.repeat(750)).toString('base64') };
+
+  it('round-trips a want and a chunk', () => {
+    expect(decodeMessage(encodeMessage(want))).toEqual(want);
+    expect(decodeMessage(encodeMessage(chunk))).toEqual(chunk);
+  });
+
+  it('deduplicates a want’s need list', () => {
+    expect(validateMessage({ ...want, need: [2, 2, 0, 2] })).toMatchObject({ need: [2, 0] });
+  });
+
+  it.each([
+    ['to that is not a peer id', { ...want, to: 'nope' }],
+    ['to shaped like a hash', { ...want, to: hash }],
+    ['hash upper-case', { ...want, h: hash.toUpperCase() }],
+    ['need not an array', { ...want, need: 0 }],
+    ['need over 64 entries', { ...want, need: Array(65).fill(0) }],
+    ['need index at the chunk max', { ...want, need: [17] }],
+    ['need index negative', { ...want, need: [-1] }],
+    ['chunk count 0', { ...chunk, n: 0 }],
+    ['chunk count 18', { ...chunk, n: 18 }],
+    ['index at the count', { ...chunk, i: 17 }],
+    ['index above the count', { ...chunk, n: 3, i: 3 }],
+    ['base64 over 1000 characters', { ...chunk, b: 'QQ'.repeat(501) }],
+    ['base64 of a ragged length', { ...chunk, b: 'QQQ' }],
+    ['base64 with a stray character', { ...chunk, b: `${'A'.repeat(999)}*` }],
+    ['base64 not a string', { ...chunk, b: 9 }],
+  ])('rejects %s', (_label, raw) => {
+    expect(validateMessage(raw)).toBeNull();
+  });
+
+  it('accepts an empty need (all of it) and a full-size chunk', () => {
+    expect(validateMessage({ ...want, need: [] })).toMatchObject({ need: [] });
+    expect(validateMessage(chunk)).toEqual(chunk);
   });
 });
 
@@ -205,5 +287,68 @@ describe('tag colours', () => {
     expect(isTagColor(0)).toBe(true);
     expect(isTagColor(7)).toBe(true);
     for (const v of [8, -1, 1.5, '1', null]) expect(isTagColor(v)).toBe(false);
+  });
+
+  it('accepts a custom colour as three channels, and nothing else', () => {
+    expect(isTagRgb([0, 0, 0])).toBe(true);
+    expect(isTagRgb([255, 128, 7])).toBe(true);
+    for (const v of [
+      [0, 0], [0, 0, 0, 0], [0, 0, 256], [0, 0, -1], [0, 0, 1.5], ['1', 2, 3], 'rgb(1,2,3)', null, undefined, 3, {},
+    ]) expect(isTagRgb(v)).toBe(false);
+  });
+
+  it('lifts a colour too dark for the dark pill, and leaves a readable one alone', () => {
+    expect(readableTagRgb([255, 255, 255])).toEqual([255, 255, 255]);
+    expect(readableTagRgb([79, 195, 247])).toEqual([79, 195, 247]); // the sky entry already reads
+
+    const lifted = readableTagRgb([0, 0, 0]);
+    expect(lifted[0]).toBe(lifted[1]);
+    expect(lifted[1]).toBe(lifted[2]); // neutral in, neutral out: the hue did not move
+    expect(lifted[0]).toBeGreaterThan(100);
+    expect(readableTagRgb(lifted)).toEqual(lifted); // already at the floor: a second pass changes nothing
+  });
+
+  it('builds CSS from numbers only, so nothing off the network reaches a style', () => {
+    expect(tagColorCss(0, null)).toBe(TAG_COLORS[0]);
+    expect(tagColorCss(99, null)).toBe(TAG_COLORS[0]); // out of range falls back
+    expect(tagColorCss(0, undefined)).toBe(TAG_COLORS[0]);
+    // A colour that already reads is used as it is, still built here from three numbers.
+    expect(tagColorCss(0, [255, 0, 0])).toBe('rgb(255, 0, 0)');
+    // A dark one is clamped before it becomes CSS, and the result is still just three numbers.
+    expect(tagColorCss(0, [0, 0, 0])).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+    expect(tagColorCss(0, [0, 0, 0])).not.toBe('rgb(0, 0, 0)');
+  });
+
+  it('matches a custom colour to the nearest palette entry for older builds', () => {
+    expect(nearestTagColor([79, 195, 247])).toBe(0); // exactly sky
+    expect(nearestTagColor([80, 195, 245])).toBe(0); // near sky
+    expect(nearestTagColor([224, 224, 224])).toBe(7); // exactly silver
+    for (const rgb of [[0, 0, 0], [255, 255, 255], [12, 200, 130]] as const) {
+      expect(isTagColor(nearestTagColor(rgb))).toBe(true);
+    }
+  });
+
+  it('round-trips a picker value and rejects anything that is not #rrggbb', () => {
+    expect(tagHex([79, 195, 247])).toBe('#4fc3f7');
+    expect(tagHex([0, 0, 0])).toBe('#000000');
+    expect(tagRgbFromHex('#4fc3f7')).toEqual([79, 195, 247]);
+    for (const hex of ['4fc3f7', '#4fc3f', '#4fc3f7f', '#gggggg', 'red', '']) expect(tagRgbFromHex(hex)).toBeNull();
+  });
+
+  it('compares custom colours by value, since they are arrays', () => {
+    expect(sameTagRgb(null, null)).toBe(true);
+    expect(sameTagRgb([1, 2, 3], [1, 2, 3])).toBe(true);
+    expect(sameTagRgb([1, 2, 3], [1, 2, 4])).toBe(false);
+    expect(sameTagRgb([1, 2, 3], null)).toBe(false);
+    expect(sameTagRgb(null, [1, 2, 3])).toBe(false);
+  });
+
+  it('keeps color a palette index on the wire, so a peer on an older build still accepts the presence', () => {
+    expect(tagWire(3, null)).toEqual({ color: 3, rgb: null });
+    const wire = tagWire(3, [10, 20, 30]);
+    expect(isTagColor(wire.color)).toBe(true);
+    expect(wire.rgb).toEqual([10, 20, 30]);
+    // The index is the nearest palette entry rather than the stored one, so older builds show something close.
+    expect(tagWire(3, [79, 195, 247]).color).toBe(0);
   });
 });

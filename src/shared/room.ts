@@ -1,3 +1,4 @@
+import type { TagRgb } from './roomColors';
 import type { MemberStatus } from './roomProtocol';
 
 export type TransportStatus = 'off' | 'starting' | 'ok' | 'unavailable';
@@ -6,8 +7,10 @@ export type MemberPath = 'lan' | 'internet' | 'connecting' | 'unreachable';
 export interface RoomMember {
   peer: string;
   name: string;
-  /** Index into TAG_COLORS. */
+  /** Index into TAG_COLORS. Also what an older app shows when `rgb` is set: it never sees the exact colour. */
   color: number;
+  /** The member's custom tag colour, already clamped for readability, or null when it uses the palette entry. */
+  rgb: TagRgb | null;
   path: MemberPath;
   status: MemberStatus;
   needsUpdate: boolean;

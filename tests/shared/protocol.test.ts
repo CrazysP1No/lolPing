@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { configCommand, parseHelperLine, serializeCommand } from '../../src/shared/protocol';
+import { DEFAULT_FEATURES } from '../../src/shared/features';
 import { DEFAULT_SETTINGS } from '../../src/shared/settings';
 
 describe('parseHelperLine', () => {
@@ -56,6 +57,16 @@ describe('commands', () => {
       .toMatchObject({ emoteTrigger: 'mouse5', emoteTriggerVk: 0, emoteClick: true });
     expect(configCommand({ ...DEFAULT_SETTINGS, emoteTrigger: { vk: 0x54 } }, true))
       .toMatchObject({ trigger: 'alt', triggerVk: 0, emoteTrigger: 'vk', emoteTriggerVk: 0x54 });
+  });
+
+  it('sends no emote key while emotes are off', () => {
+    const c = configCommand({ ...DEFAULT_SETTINGS, emoteClick: true, features: { ...DEFAULT_FEATURES, emotes: false } }, true);
+    expect(c).toMatchObject({ emoteTrigger: 'off', emoteTriggerVk: 0, emoteClick: false });
+  });
+
+  it('keeps the emote key while only rooms are off', () => {
+    const c = configCommand({ ...DEFAULT_SETTINGS, features: { ...DEFAULT_FEATURES, rooms: false } }, true);
+    expect(c).toMatchObject({ emoteTrigger: 'ctrl' });
   });
 
   it('serializes one command per line', () => {

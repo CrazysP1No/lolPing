@@ -102,6 +102,32 @@ describe('normalizeSettings', () => {
   });
 });
 
+describe('wheel size', () => {
+  it('keeps the existing size for settings files without a wheel size', () => {
+    expect(normalizeSettings({ version: 1, pingSizePx: 120 }).wheelSizePx).toBe(600);
+  });
+
+  it('clamps and rounds the wheel size', () => {
+    expect(normalizeSettings({ wheelSizePx: 100 }).wheelSizePx).toBe(300);
+    expect(normalizeSettings({ wheelSizePx: 1200 }).wheelSizePx).toBe(900);
+    expect(normalizeSettings({ wheelSizePx: 457 }).wheelSizePx).toBe(460);
+  });
+
+  it('falls back to the default for invalid wheel sizes', () => {
+    for (const wheelSizePx of [undefined, null, '450', NaN, Infinity, -Infinity]) {
+      expect(normalizeSettings({ wheelSizePx }).wheelSizePx).toBe(600);
+    }
+  });
+
+  it('accepts renderer patches and sends the size to overlays without changing effect sizes', () => {
+    const s = mergeSettings(DEFAULT_SETTINGS, rendererPatch({ wheelSizePx: 450 }));
+    expect(s.wheelSizePx).toBe(450);
+    expect(overlaySettings(s).wheelSizePx).toBe(450);
+    expect(s.pingSizePx).toBe(DEFAULT_SETTINGS.pingSizePx);
+    expect(s.emoteSizePx).toBe(DEFAULT_SETTINGS.emoteSizePx);
+  });
+});
+
 describe('room settings', () => {
   const identity = { name: 'darren', color: 5 };
 
@@ -109,8 +135,13 @@ describe('room settings', () => {
     const s = normalizeSettings({}, 'win', identity);
     expect(s).toMatchObject({
       displayName: 'darren', tagColor: 5, incomingPingLimit: 5, allowInternet: true, rejoinRoom: true,
-      lastRoomCode: null, roomMuted: false,
+      lastRoomCode: null, roomMuted: false, friendEmotes: true,
     });
+  });
+
+  it('turns friends’ custom emotes off only by an explicit false', () => {
+    expect(normalizeSettings({ friendEmotes: false }).friendEmotes).toBe(false);
+    expect(normalizeSettings({ friendEmotes: 'no' }).friendEmotes).toBe(true);
   });
 
   it('defaults to Player and colour 0 without an identity', () => {
@@ -127,6 +158,24 @@ describe('room settings', () => {
   it('replaces an invalid tag colour with the identity colour', () => {
     expect(normalizeSettings({ tagColor: 9 }, 'win', identity).tagColor).toBe(5);
     expect(normalizeSettings({ tagColor: 2 }, 'win', identity).tagColor).toBe(2);
+  });
+
+  it('keeps a well-formed custom tag colour and drops anything else', () => {
+    expect(DEFAULT_SETTINGS.tagColorCustom).toBeNull();
+    expect(normalizeSettings({ tagColorCustom: [79, 195, 247] }).tagColorCustom).toEqual([79, 195, 247]);
+    for (const v of [[0, 0], [0, 0, 999], [0, 0, -1], ['1', 2, 3], 'red', 3, null, undefined]) {
+      expect(normalizeSettings({ tagColorCustom: v }).tagColorCustom).toBeNull();
+    }
+  });
+
+  it('stores a custom tag colour already lightened, so the swatch, the wire and the tag agree', () => {
+    // Too dark to read on the dark pill: stored lifted, and neutral in stays neutral out.
+    const dark = normalizeSettings({ tagColorCustom: [0, 0, 0] }).tagColorCustom;
+    expect(dark).not.toBeNull();
+    expect(dark?.[0]).toBe(dark?.[1]);
+    expect(dark?.[0]).toBeGreaterThan(100);
+    // A colour that already reads is stored untouched.
+    expect(normalizeSettings({ tagColorCustom: [255, 255, 255] }).tagColorCustom).toEqual([255, 255, 255]);
   });
 
   it('sanitises the display name and falls back to the identity name', () => {
@@ -208,6 +257,11 @@ describe('emote settings', () => {
     ];
     expect(normalizeSettings({ customEmotes: raw }).customEmotes).toEqual([entry('a'), entry('e', 'Kept', true)]);
     expect(normalizeSettings({ customEmotes: 'nope' }).customEmotes).toEqual([]);
+  });
+
+  it('custom emotes keep a sound flag only when it is true', () => {
+    const list = normalizeSettings({ customEmotes: [{ ...entry('a'), sound: true }, { ...entry('b'), sound: 'yes' }] }).customEmotes;
+    expect(list).toEqual([{ ...entry('a'), sound: true }, entry('b')]);
   });
 
   it('custom emotes keep the first 24', () => {
@@ -398,10 +452,17 @@ describe('helpers', () => {
     expect(normalizeSettings({ trigger: 'win' }, 'mac').trigger).toBe('win');
   });
 
+  it('repairs custom Caps Lock triggers on Mac when loading or updating settings', () => {
+    const caps = { trigger: { vk: 0x14 }, emoteTrigger: { vk: 0x14 } };
+    expect(normalizeSettings(caps, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
+    expect(mergeSettings(DEFAULT_SETTINGS, caps, 'mac')).toMatchObject({ trigger: 'alt', emoteTrigger: 'ctrl' });
+    expect(normalizeSettings({ trigger: { vk: 0x14 }, emoteTrigger: 'off' }, 'win').trigger).toEqual({ vk: 0x14 });
+  });
+
   it('extracts overlay settings', () => {
     expect(overlaySettings(DEFAULT_SETTINGS)).toEqual({
-      pingSizePx: 110, pingDurationS: 3.2, volume: 70, muted: false, tickSound: true,
-      wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
+      pingSizePx: 110, pingDurationS: 3.2, keepLastPing: false, volume: 70, muted: false, tickSound: true,
+      wheelSizePx: 600, wheel: ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'], clickPingId: 'generic',
       emoteWheel: [...DEFAULT_EMOTE_WHEEL], clickEmoteId: DEFAULT_CLICK_EMOTE, emoteSizePx: 150, emoteSound: true, customEmotes: [],
     });
   });
@@ -441,5 +502,24 @@ describe('update settings', () => {
     const s = mergeSettings(DEFAULT_SETTINGS, { updateNotifiedVersion: '0.6.0', autoUpdateCheck: false });
     expect([s.autoUpdateCheck, s.updateNotifiedVersion]).toEqual([false, '0.6.0']);
     expect(mergeSettings(s, { updateNotifiedVersion: 'junk' }).updateNotifiedVersion).toBeNull();
+  });
+});
+
+describe('feature settings', () => {
+  it('loads a 0.5.2 settings file with every feature on', () => {
+    const { features: _features, ...old } = DEFAULT_SETTINGS;
+    expect(normalizeSettings(old).features).toEqual(DEFAULT_SETTINGS.features);
+    expect(Object.values(normalizeSettings(old).features).every((v) => v)).toBe(true);
+  });
+
+  it('keeps a switched-off feature', () => {
+    const s = normalizeSettings({ features: { ...DEFAULT_SETTINGS.features, emotes: false } });
+    expect(s.features.emotes).toBe(false);
+    expect(s.features.rooms).toBe(true);
+  });
+
+  it('falls back to every feature on when features is not an object', () => {
+    for (const raw of ['yes', 1, null, [true]]) expect(normalizeSettings({ features: raw }).features).toEqual(DEFAULT_SETTINGS.features);
+    expect(normalizeSettings({ features: { rooms: 1 } }).features.rooms).toBe(true);
   });
 });

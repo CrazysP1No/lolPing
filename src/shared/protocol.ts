@@ -1,3 +1,4 @@
+import { featureOn } from './features';
 import type { Settings } from './settings';
 
 /** Which wheel a gesture belongs to: the ping trigger's or the emote key's. */
@@ -5,7 +6,7 @@ export type WheelKind = 'ping' | 'emote';
 
 /**
  * Messages the hook helper writes to stdout, one JSON object per line.
- * Coordinates are physical pixels on Windows and global points (Electron DIPs) on macOS.
+ * Coordinates are physical pixels on Windows/Linux and global points (Electron DIPs) on macOS.
  */
 export type HelperEvent =
   | { type: 'ready'; version: number }
@@ -16,10 +17,10 @@ export type HelperEvent =
   | { type: 'error'; message: string; code?: string }
   | { type: 'sim'; swallow: boolean; inject: string };
 
-/** `noAccess`: macOS hasn't given lolPing Accessibility access, so the helper can't run. */
+/** `noAccess`: macOS Accessibility access or a supported Linux X11 session is missing. */
 export type HelperStatus = 'starting' | 'running' | 'failed' | 'noAccess';
 
-/** The helper's exit code when it can't create its event tap (macOS Accessibility access missing). */
+/** The helper's exit code when OS input is unavailable (macOS permissions / unsupported Linux session). */
 export const HELPER_EXIT_NO_ACCESS = 3;
 
 type PointType = 'wheelOpen' | 'wheelMove' | 'wheelRelease' | 'click';
@@ -88,7 +89,8 @@ export type HelperCommand =
 
 export function configCommand(s: Settings, enabled: boolean): HelperCommand {
   const t = s.trigger;
-  const e = s.emoteTrigger;
+  // With the Emotes feature off the helper gets no emote key, so no emote wheel or emote click.
+  const e = featureOn(s, 'emotes') ? s.emoteTrigger : 'off';
   return {
     type: 'config',
     trigger: typeof t === 'object' ? 'vk' : t,
@@ -97,7 +99,7 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
     gameCheck: s.gameCheck,
     emoteTrigger: typeof e === 'object' ? 'vk' : e,
     emoteTriggerVk: typeof e === 'object' ? e.vk : 0,
-    emoteClick: s.emoteClick,
+    emoteClick: s.emoteClick && e !== 'off',
     dragThresholdPx: s.dragThresholdPx,
     toggleMods: s.toggleHotkey.mods,
     toggleVk: s.toggleHotkey.vk,

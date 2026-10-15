@@ -1,8 +1,9 @@
-import type { EmoteArt, EmoteFile, EmoteRef, ImportResult } from './emotes';
+import type { EmoteArt, EmoteFile, EmoteRef, ImportResult, SoundResult } from './emotes';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
+import type { TagRgb } from './roomColors';
 import type { OverlaySettings, Settings } from './settings';
 import type { UpdateState } from './update';
 
@@ -11,10 +12,11 @@ export interface Point {
   y: number;
 }
 
-/** The name tag under a room member's ping. `color` indexes TAG_COLORS. */
+/** The name tag under a room member's ping. `color` indexes TAG_COLORS; `rgb` is a custom colour when set. */
 export interface PingTag {
   name: string;
   color: number;
+  rgb?: TagRgb | null;
 }
 
 /** main → overlay renderer messages. Points are CSS pixels inside that overlay. */
@@ -25,8 +27,10 @@ export interface OverlayEvents {
   'wheel:move': Point & { wheel?: WheelKind };
   'wheel:release': Point & { wheel?: WheelKind };
   'wheel:cancel': null;
-  /** `tag` marks a ping from another room member. */
-  'ping:spawn': Point & { id: PingId; tag?: PingTag };
+  /** `tag` marks a ping from another room member. `keep`: our own ping that stays until 'ping:unkeep' or our next one. */
+  'ping:spawn': Point & { id: PingId; tag?: PingTag; keep?: boolean };
+  /** Removes the ping kept on this display, if any: we pinged on another display, or paused. */
+  'ping:unkeep': null;
   /** `owner` is 'self', 'preview' or a room member: each owner has at most one emote on screen. */
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
@@ -37,7 +41,7 @@ export interface OverlayEvents {
 export type OverlayChannel = keyof OverlayEvents;
 
 export const OVERLAY_CHANNELS: readonly OverlayChannel[] = [
-  'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'emote:spawn', 'emote:clear',
+  'overlay:settings', 'wheel:open', 'wheel:move', 'wheel:release', 'wheel:cancel', 'ping:spawn', 'ping:unkeep', 'emote:spawn', 'emote:clear',
   'toast:show', 'text:spawn',
 ];
 
@@ -92,6 +96,8 @@ export interface SettingsApi {
   importEmote(file: EmoteFile): Promise<ImportResult>;
   /** Deletes an imported emote's files and entry; wheel slots that used it fall back. */
   removeEmote(id: EmoteRef): Promise<void>;
+  /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes), or takes it away with null. */
+  setEmoteSound(id: EmoteRef, sound: Uint8Array | null): Promise<SoundResult>;
   getAbout(): Promise<About>;
   openSettingsFolder(): Promise<void>;
   openProjectPage(): Promise<void>;

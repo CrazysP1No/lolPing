@@ -1,24 +1,31 @@
 import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { randomBytes, randomInt } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
+import { announcedEmoteHashes } from '../shared/emotes';
+import { featureOn } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
+import { sameTagRgb, tagWire } from '../shared/roomColors';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
 import { resolveTarget, toShared } from './displayNumbers';
+import { EmoteCache } from './emoteCache';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
+import { EmoteTransfer } from './emoteTransfer';
+import { isFile } from './fileState';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SharedEmote, type SharedPing, type SharedText } from './overlayManager';
-import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
+import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
@@ -30,8 +37,15 @@ import { trayUpdateHandlers } from './trayUpdate';
 import { MacBackend, RELEASES_API } from './updateMac';
 import { WinBackend } from './updateWin';
 import { Updater } from './updater';
+import { setLinuxAutostart } from './linuxAutostart';
 
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
+
+// X11 uses root-window pixels. Keep Electron in the same coordinate space on every monitor.
+if (IS_LINUX) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+  app.commandLine.appendSwitch('force-device-scale-factor', '1');
+}
 
 registerAppScheme();
 app.setAppUserModelId('com.lolping.app');
@@ -70,9 +84,11 @@ function setMacMenu(): void {
 
 function start(): void {
   const library = new EmoteLibrary(join(settingsDir(), 'emotes'));
+  const cache = new EmoteCache(join(settingsDir(), 'emote-cache'), Date.now);
+  void cache.present();
   serveAppScheme({
     rendererRoot: process.env.ELECTRON_RENDERER_URL ? null : join(__dirname, '../renderer'), // development pages come from Vite
-    emoteDirs: () => [library.dir],
+    emoteDirs: () => [library.dir, cache.dir], // the library wins; the cache only fills the gaps
   });
   if (IS_MAC) {
     app.dock?.hide(); // a menu bar app: the Dock icon only shows while settings are open
@@ -90,13 +106,22 @@ function start(): void {
   let capturing = false; // the settings page is listening for a key, so the helper must stay suspended
   let textOpen = false;
 
-  const overlays = new OverlayManager(overlaySettings(settings), (ref, remote) => resolveEmoteArt(ref, settings.customEmotes, remote));
+  const overlays = new OverlayManager(
+    overlaySettings(settings),
+    (ref, remote) =>
+      resolveEmoteArt(ref, settings.customEmotes, remote, (hash) => {
+        if (!settings.friendEmotes || !cache.has(hash)) return false; // off: friends' images show as the placeholder
+        cache.touch(hash); // a shown still is the most recently used at the next cache sweep
+        return true;
+      }),
+  );
   overlays.start();
   const bridge = new InputBridge({ command: helperExePath() });
 
   // Updates: only in an installed build, or in a development build pointed at a test server with LOLPING_UPDATE_TEST_URL.
   const testUrl = process.env.LOLPING_UPDATE_TEST_URL || undefined;
-  const updater = app.isPackaged || testUrl ? createUpdater() : null;
+  // Linux packages are updated manually until a Linux release feed is published.
+  const updater = !IS_LINUX && (app.isPackaged || testUrl) ? createUpdater() : null;
   function createUpdater(): Updater {
     const backend = IS_MAC
       ? new MacBackend({
@@ -138,12 +163,36 @@ function start(): void {
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
-    profile: () => ({ name: settings.displayName, color: settings.tagColor, limit: settings.incomingPingLimit }),
+    profile: () => ({ name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom), limit: settings.incomingPingLimit }),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
     },
+    announceEmotes: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
   });
+  // Custom emote stills travel both ways: this side asks for friends' hashes and answers wants for our own.
+  const transfer = new EmoteTransfer({
+    now: Date.now,
+    enabled: () => settings.friendEmotes && featureOn(settings, 'emotes'),
+    have: (hash) => isFile(join(library.dir, `${hash}.webp`), false) || cache.has(hash),
+    still: (hash) => {
+      try {
+        return new Uint8Array(readFileSync(join(library.dir, `${hash}.webp`)));
+      } catch {
+        return null;
+      }
+    },
+    announced: () => announcedEmoteHashes(settings.emoteWheel, settings.clickEmoteId),
+    put: (hash, bytes) => void cache.put(hash, bytes),
+    routeOf: (peer) => room.routeKind(peer),
+    sendToLan: (peer, body) => room.sendToLan(peer, body),
+    broadcastShared: (body) => room.broadcastShared(body),
+    spareSharedToken: (keep) => room.spareSharedToken(keep),
+  });
+  room.on('emotes', (peer: string, hashes: string[]) => transfer.announced(peer, hashes));
+  room.on('want', (w: Parameters<EmoteTransfer['onWant']>[0]) => transfer.onWant(w));
+  room.on('chunk', (c: Parameters<EmoteTransfer['onChunk']>[0]) => transfer.onChunk(c));
+  room.on('memberGone', (peer: string) => transfer.memberGone(peer));
   const roomState = (): RoomState => {
     const all = screen.getAllDisplays();
     return {
@@ -225,6 +274,7 @@ function start(): void {
     text(),
     IS_MAC ? { on: buildResourcePath('trayTemplate.png'), off: buildResourcePath('trayOffTemplate.png') } : undefined,
   );
+  tray.setRoomsShown(featureOn(settings, 'rooms'));
   /** Sends to the settings window if there is one that is still alive (the updater also reports while the app quits). */
   function sendToSettings(channel: string, payload: unknown): void {
     const w = settingsWindow();
@@ -255,7 +305,9 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendPing(p.id, shared);
   });
-  room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
+  room.on('remoteEmote', (p) => {
+    if (featureOn(settings, 'emotes')) overlays.spawnRemoteEmote(p);
+  });
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
@@ -299,6 +351,7 @@ function start(): void {
     if (on === enabled) return;
     enabled = on;
     bridge.send(configCommand(store.get(), enabled)); // also refreshes the config re-sent after restarts
+    if (!on) overlays.dropKeptPings();
     const t = text();
     overlays.toast(on ? t.toastOn : t.toastOff, t.toastToggleHint(hotkeyLabel(store.get().toggleHotkey, PLATFORM)));
     syncRoomFlags();
@@ -329,7 +382,7 @@ function start(): void {
   bridge.on('status', (s: HelperStatus) => {
     // A helper that is starting or has stopped can no longer send the cancel that dismisses a wheel left on screen.
     if (s !== 'running') overlays.cancelWheel();
-    if (s === 'noAccess') {
+    if (s === 'noAccess' && IS_MAC) {
       // Allowed but still refused is an entry left over from an earlier build. Otherwise wait for the user to allow it.
       if (trusted()) staleAccess = true;
       else waitForAccess();
@@ -347,7 +400,14 @@ function start(): void {
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
-    if (s.displayName !== previous.displayName || s.tagColor !== previous.tagColor) room.profileChanged();
+    if (
+      s.displayName !== previous.displayName || s.tagColor !== previous.tagColor
+      || !sameTagRgb(s.tagColorCustom, previous.tagColorCustom)
+    ) room.profileChanged();
+    if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
+      if (!featureOn(s, 'rooms')) room.leave();
+      tray.setRoomsShown(featureOn(s, 'rooms'));
+    }
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();
@@ -359,7 +419,14 @@ function start(): void {
     }
     if (app.isPackaged && s.launchAtStartup !== previous.launchAtStartup) {
       // macOS ignores args, and a Mac launch starts in the menu bar anyway.
-      app.setLoginItemSettings(IS_MAC ? { openAtLogin: s.launchAtStartup } : { openAtLogin: s.launchAtStartup, args: ['--hidden'] });
+      if (IS_LINUX) {
+        try { setLinuxAutostart(s.launchAtStartup); }
+        catch (err) {
+          console.error('[autostart]', err);
+          void dialog.showMessageBox({ type: 'error', message: String(err) });
+        }
+      }
+      else app.setLoginItemSettings(IS_MAC ? { openAtLogin: s.launchAtStartup } : { openAtLogin: s.launchAtStartup, args: ['--hidden'] });
     }
   });
 
@@ -377,6 +444,7 @@ function start(): void {
       syncSuspended();
     },
     openAccessibility: () => {
+      if (!IS_MAC) return;
       systemPreferences.isTrustedAccessibilityClient(true); // adds lolPing to the list and shows the system prompt
       void shell.openExternal(ACCESSIBILITY_PANE);
       if (!trusted()) waitForAccess();
@@ -411,7 +479,7 @@ function start(): void {
   syncRoomFlags();
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
-  if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
+  if (settings.rejoinRoom && settings.lastRoomCode && featureOn(settings, 'rooms')) void room.join(settings.lastRoomCode);
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
     if (store.firstRun || !trusted()) openSettingsWindow();
@@ -431,6 +499,7 @@ function start(): void {
     event.preventDefault();
     updater?.stop(); // aborts a download and drops a check in flight; an install that is quitting the app is left alone
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
+    transfer.stop();
     stopWaitingForAccess();
     tray.destroy();
     overlays.destroy();
