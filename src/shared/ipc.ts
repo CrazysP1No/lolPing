@@ -4,7 +4,7 @@ import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState } from './room';
 import type { TagRgb } from './roomColors';
-import type { OverlaySettings, Settings } from './settings';
+import type { OverlaySettings, RoomTextStyle, Settings } from './settings';
 import type { UpdateState } from './update';
 
 export interface Point {
@@ -35,7 +35,8 @@ export interface OverlayEvents {
   'emote:spawn': Point & { owner: string; art: EmoteArt; tag?: PingTag };
   'emote:clear': { owner: string };
   'toast:show': { title: string; body: string };
-  'text:spawn': Point & { text: string; tag?: PingTag };
+  /** `owner` is 'self' or a room member: each owner has at most 3 lines on screen. */
+  'text:spawn': Point & { text: string; owner: string; style: RoomTextStyle; tag?: PingTag };
 }
 
 export type OverlayChannel = keyof OverlayEvents;

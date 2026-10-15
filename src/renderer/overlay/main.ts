@@ -14,7 +14,7 @@ import { EmoteStage } from './emoteFx';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
-import { spawnText } from './textFx';
+import { TextStage } from './textFx';
 import { Wheel, type WheelItem } from './wheel';
 
 const pingLayer = document.getElementById('pings') as HTMLElement;
@@ -32,6 +32,7 @@ pingLayer.after(emoteLayer);
 
 const sounds = new SoundBank();
 const stage = new EmoteStage(emoteLayer);
+const texts = new TextStage(textLayer);
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
 const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
@@ -120,7 +121,7 @@ window.overlay.on('ping:unkeep', dropKeptPing);
 window.overlay.on('emote:spawn', (p) => emote(p.owner, p.art, p.x, p.y, p.tag));
 window.overlay.on('emote:clear', (p) => stage.clear(p.owner));
 window.overlay.on('toast:show', (t) => showToast(toastLayer, t.title, t.body));
-window.overlay.on('text:spawn', (t) => spawnText(textLayer, t.text, t.x, t.y, t.tag));
+window.overlay.on('text:spawn', (t) => texts.spawn(t));
 
 /** Resolves with `label` when the image at `url` doesn't load. */
 const probe = (url: string, label: string): Promise<string | null> =>

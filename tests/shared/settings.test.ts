@@ -538,3 +538,16 @@ describe('feature settings', () => {
     expect(normalizeSettings({ features: { rooms: 1 } }).features.rooms).toBe(true);
   });
 });
+
+describe('room text settings', () => {
+  it('defaults room text to the pointed spot', () => {
+    expect(DEFAULT_SETTINGS.roomTextStyle).toBe('spot');
+    const { roomTextStyle: _style, ...old } = DEFAULT_SETTINGS;
+    expect(normalizeSettings(old).roomTextStyle).toBe('spot');
+  });
+
+  it('keeps the scrolling style and falls back to the spot for a bad value', () => {
+    expect(normalizeSettings({ roomTextStyle: 'danmaku' }).roomTextStyle).toBe('danmaku');
+    for (const raw of ['scroll', 1, null, {}]) expect(normalizeSettings({ roomTextStyle: raw }).roomTextStyle).toBe('spot');
+  });
+});

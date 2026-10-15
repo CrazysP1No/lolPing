@@ -6,7 +6,7 @@ import {
 } from '../shared/ipc';
 import { isPingId, type PingId } from '../shared/pings';
 import type { HelperEvent, WheelKind } from '../shared/protocol';
-import type { OverlaySettings } from '../shared/settings';
+import type { OverlaySettings, RoomTextStyle } from '../shared/settings';
 import { physicalToLocal, type DisplayMap } from './coords';
 import { numberDisplays, type NumberedDisplay } from './displayNumbers';
 import { IS_LINUX, IS_MAC, loadPage, preloadPath } from './paths';
@@ -27,13 +27,6 @@ export interface SharedEmote {
   y: number;
 }
 
-export interface SharedText {
-  text: string;
-  displayId: number;
-  x: number;
-  y: number;
-}
-
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /**
@@ -44,7 +37,7 @@ export const overlayBounds = (d: Display): Rectangle =>
   IS_MAC || IS_LINUX ? d.bounds : { ...d.bounds, height: d.bounds.height - 1 };
 
 /** Messages that put something new on an overlay. */
-const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show']);
+const RAISING_CHANNELS: ReadonlySet<OverlayChannel> = new Set<OverlayChannel>(['wheel:open', 'ping:spawn', 'emote:spawn', 'toast:show', 'text:spawn']);
 
 /**
  * One transparent, click-through, always-on-top window per display.
@@ -162,18 +155,10 @@ export class OverlayManager extends EventEmitter {
     this.clearElsewhere(p.displayId, p.peer);
   }
 
-  /** Shows text at the current pointer and returns its room-shareable position. */
-  spawnText(text: string): void {
-    const point = screen.getCursorScreenPoint();
-    const display = screen.getDisplayNearestPoint(point);
-    const x = point.x - display.bounds.x;
-    const y = point.y - display.bounds.y;
-    this.send(display.id, 'text:spawn', { text, x, y });
-    this.emit('sharedText', { text, displayId: display.id, x, y } satisfies SharedText);
-  }
-
-  spawnRemoteText(p: { displayId: number; x: number; y: number; text: string; tag: PingTag }): void {
-    this.send(p.displayId, 'text:spawn', p);
+  /** A line of room text (ours, with no tag, or a member's), already mapped onto one of our displays. */
+  spawnText(p: { displayId: number; x: number; y: number; text: string; owner: string; style: RoomTextStyle; tag?: PingTag }): void {
+    const { displayId, ...line } = p;
+    this.send(displayId, 'text:spawn', line);
   }
 
   /** This machine's displays with their room numbers (#1 = primary). */

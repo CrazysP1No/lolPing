@@ -24,7 +24,7 @@ import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
 import { RELAYS } from './relays';
 import { RelayTransport } from './relayTransport';
-import { OverlayManager, type SharedEmote, type SharedPing, type SharedText } from './overlayManager';
+import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomManager, type RemoteText, type RoomToast } from './roomManager';
@@ -328,12 +328,10 @@ function start(): void {
   // Alive lines are shown by a later change; only text is drawn for now.
   room.on('remoteText', (p: RemoteText) => {
     if (p.kind === 'text' && p.text !== undefined && featureOn(settings, 'roomText')) {
-      overlays.spawnRemoteText({ displayId: p.displayId, x: p.x, y: p.y, text: p.text, tag: p.tag });
+      overlays.spawnText({
+        displayId: p.displayId, x: p.x, y: p.y, text: p.text, owner: p.peer, style: settings.roomTextStyle, tag: p.tag,
+      });
     }
-  });
-  overlays.on('sharedText', (p: SharedText) => {
-    const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
-    if (shared) room.sendText(p.text, shared);
   });
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
@@ -378,7 +376,15 @@ function start(): void {
   }
 
   const syncSuspended = (): void => bridge.send({ type: 'suspend', on: capturing || textOpen });
-  registerTextWindow((message) => overlays.spawnText(message));
+  registerTextWindow((message) => {
+    const point = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(point);
+    const x = point.x - display.bounds.x;
+    const y = point.y - display.bounds.y;
+    overlays.spawnText({ displayId: display.id, x, y, text: message, owner: 'self', style: settings.roomTextStyle });
+    const shared = toShared(overlays.numbered(), display.id, x, y);
+    if (shared) room.sendText(message, shared);
+  });
   onTextWindowGone(() => {
     textOpen = false;
     syncSuspended();

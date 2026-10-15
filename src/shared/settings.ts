@@ -25,6 +25,8 @@ export const NAMED_TRIGGERS: readonly NamedTrigger[] = ['alt', 'ctrl', 'shift', 
 export const keyboardTriggers = (platform: Platform): NamedTrigger[] =>
   platform !== 'win' ? ['alt', 'ctrl', 'shift', 'win'] : ['alt', 'ctrl', 'shift', 'win', 'capslock'];
 
+export type RoomTextStyle = 'spot' | 'danmaku';
+
 export interface Settings {
   version: 1;
   enabledOnStart: boolean;
@@ -83,6 +85,8 @@ export interface Settings {
   updateNotifiedVersion: string | null;
   /** Optional parts of the app that can be switched off; see features.ts. */
   features: Features;
+  /** How room text appears here: a bubble at the spot the sender pointed at, or a line scrolling across the top. */
+  roomTextStyle: RoomTextStyle;
 }
 
 /** Per-machine defaults for the room profile: the OS username and a random tag colour. */
@@ -130,6 +134,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoUpdateCheck: true,
   updateNotifiedVersion: null,
   features: { ...DEFAULT_FEATURES },
+  roomTextStyle: 'spot',
 };
 
 export const LIMITS = {
@@ -291,6 +296,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     autoUpdateCheck: bool(r.autoUpdateCheck, 'autoUpdateCheck'),
     updateNotifiedVersion: isVersion(r.updateNotifiedVersion) ? r.updateNotifiedVersion : null,
     features: normalizeFeatures(r.features),
+    roomTextStyle: r.roomTextStyle === 'danmaku' ? 'danmaku' : 'spot',
   };
 }
 
