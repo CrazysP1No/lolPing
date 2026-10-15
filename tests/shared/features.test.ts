@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FEATURES, featureOn, normalizeFeatures } from '../../src/shared/features';
+import { DEFAULT_FEATURES, featureOn, normalizeFeatures, roomFeaturesOff } from '../../src/shared/features';
 
 describe('features', () => {
   it('turns everything on by default', () => {
@@ -28,5 +28,12 @@ describe('features', () => {
     const s = { features: { ...DEFAULT_FEATURES, roomVotes: false } };
     expect(featureOn(s, 'roomVotes')).toBe(false);
     expect(featureOn(s, 'roomText')).toBe(true);
+  });
+
+  it('lists the room features that are off, and all of them when rooms are off', () => {
+    expect(roomFeaturesOff({ features: DEFAULT_FEATURES })).toEqual([]);
+    expect(roomFeaturesOff({ features: { ...DEFAULT_FEATURES, roomVotes: false } })).toEqual(['votes']);
+    expect(roomFeaturesOff({ features: { ...DEFAULT_FEATURES, roomText: false, roomVotes: false } })).toEqual(['text', 'votes']);
+    expect(roomFeaturesOff({ features: { ...DEFAULT_FEATURES, rooms: false } })).toEqual(['text', 'votes']);
   });
 });

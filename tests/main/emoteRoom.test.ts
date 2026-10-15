@@ -54,7 +54,7 @@ function side(port: number, other: number, name: string, announced: () => string
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: '0.6.0',
-    profile: () => ({ name, color: 1, rgb: null, limit: 0 }),
+    profile: () => ({ name, color: 1, rgb: null, limit: 0, nf: [] }),
     resolveTarget: () => ({ displayId: 1, width: 1000, height: 500 }),
     announceEmotes: announced,
   });

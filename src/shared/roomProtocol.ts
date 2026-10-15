@@ -5,6 +5,8 @@ import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
 export const PROTOCOL_VERSION = 1;
 export const MAX_NAME = 16;
+/** The first app version that sends and shows room text, alive lines and votes. */
+export const ROOM_CHAT_SINCE = '0.6.0';
 export const MAX_TEXT = 120;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;

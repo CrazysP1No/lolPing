@@ -1,3 +1,5 @@
+import type { RoomFeatureOff } from './roomProtocol';
+
 export type FeatureId = 'emotes' | 'rooms' | 'roomText' | 'roomVotes' | 'roomPanel';
 export type Features = Record<FeatureId, boolean>;
 
@@ -21,6 +23,11 @@ export function normalizeFeatures(raw: unknown): Features {
     if (typeof v === 'boolean') out[id] = v;
   }
   return out;
+}
+
+/** The room features this setup has switched off, as a room presence announces them. */
+export function roomFeaturesOff(s: { features: Features }): RoomFeatureOff[] {
+  return [...(featureOn(s, 'roomText') ? [] : ['text' as const]), ...(featureOn(s, 'roomVotes') ? [] : ['votes' as const])];
 }
 
 /** Whether a feature is in use: its own switch is on and so is the one it requires. */

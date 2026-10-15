@@ -198,7 +198,7 @@ describe('RelayTransport under RoomManager', () => {
     const net = new RelayTransport({ urls, socket: f.factory, random: () => 0.5 });
     const room = new RoomManager({
       transports: [net], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0x12),
-      deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => ({ name: 'Me', color: 1, rgb: null, limit: 5 }),
+      deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => ({ name: 'Me', color: 1, rgb: null, limit: 5, nf: [] }),
       resolveTarget: () => null,
       announceEmotes: () => [],
     });

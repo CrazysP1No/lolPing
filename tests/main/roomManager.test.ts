@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
-import { MAX_MEMBERS, RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
+import {
+  MAX_MEMBERS, RoomManager, type RemoteEmote, type RemotePing, type RemoteText, type RoomToast,
+} from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import type { TagRgb } from '../../src/shared/roomColors';
-import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
+import {
+  decodeMessage, encodeMessage, type BallotMsg, type RoomFeatureOff, type RoomMessage, type VoteMsg,
+} from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
 const KEYS: RoomKeys = { msgKey: Buffer.alloc(32, 1), relayTopic: 'room' };
@@ -26,6 +30,18 @@ class Remote {
   emote(extra: Record<string, unknown> = {}): void {
     this.lan.deliver(this.key, this.packet({ t: 'emote', e: 'gg', d: 1, x: 0.5, y: 0.25, ...extra }));
   }
+  text(extra: Record<string, unknown> = {}): void {
+    this.lan.deliver(this.key, this.packet({ t: 'text', text: 'push mid', d: 1, x: 0.5, y: 0.25, ...extra }));
+  }
+  alive(extra: Record<string, unknown> = {}): void {
+    this.lan.deliver(this.key, this.packet({ t: 'alive', who: this.peer, d: 1, x: 0.5, y: 0.25, ...extra }));
+  }
+  vote(extra: Record<string, unknown> = {}): void {
+    this.lan.deliver(this.key, this.packet({ t: 'vote', id: '0a1b2c3d', kind: 'ff', ...extra }));
+  }
+  ballot(extra: Record<string, unknown> = {}): void {
+    this.lan.deliver(this.key, this.packet({ t: 'ballot', id: '0a1b2c3d', yes: true, ...extra }));
+  }
   bye(): void {
     this.lan.deliver(this.key, this.packet({ t: 'bye' }));
   }
@@ -33,9 +49,10 @@ class Remote {
 
 let lan: FakeTransport;
 let room: RoomManager;
-let profile: { name: string; color: number; rgb: TagRgb | null; limit: number };
+let profile: { name: string; color: number; rgb: TagRgb | null; limit: number; nf: RoomFeatureOff[] };
 let pings: RemotePing[];
 let emotes: RemoteEmote[];
+let texts: RemoteText[];
 let toasts: RoomToast[];
 let saved: (string | null)[];
 
@@ -53,9 +70,10 @@ async function joinActive(): Promise<void> {
 beforeEach(() => {
   vi.useFakeTimers({ now: 1_780_000_000_000 });
   lan = new FakeTransport('lan');
-  profile = { name: 'Me', color: 1, rgb: null, limit: 5 };
+  profile = { name: 'Me', color: 1, rgb: null, limit: 5, nf: [] };
   pings = [];
   emotes = [];
+  texts = [];
   toasts = [];
   saved = [];
   room = new RoomManager({
@@ -70,6 +88,7 @@ beforeEach(() => {
   });
   room.on('remotePing', (p: RemotePing) => pings.push(p));
   room.on('remoteEmote', (p: RemoteEmote) => emotes.push(p));
+  room.on('remoteText', (p: RemoteText) => texts.push(p));
   room.on('toast', (t: RoomToast) => toasts.push(t));
   room.on('saveCode', (c: string | null) => saved.push(c));
 });
@@ -942,5 +961,170 @@ describe('emote transfer gating (audit regressions)', () => {
     room.setStatusFlags({ paused: false, roomMuted: false });
     alex.presence({ em: [hash] });
     expect(announced).toHaveLength(1); // the next presence after unpausing starts prefetch again
+  });
+});
+
+describe('room text and votes', () => {
+  let alex: Remote;
+  let votes: VoteMsg[];
+  let ballots: BallotMsg[];
+  beforeEach(async () => {
+    votes = [];
+    ballots = [];
+    room.on('vote', (m: VoteMsg) => votes.push(m));
+    room.on('ballot', (m: BallotMsg) => ballots.push(m));
+    await joinActive();
+    alex = new Remote('1111111111111111', 'lan:a', lan);
+    alex.presence({ name: 'Alex', color: 4, app: '0.6.0' });
+  });
+
+  it('passes text and alive through the ping gates', () => {
+    alex.text({ x: 0.5, y: 0.25 });
+    alex.alive({ who: room.self, x: 0.25, y: 0.5 });
+    const tag = { name: 'Alex', color: 4, rgb: null };
+    expect(texts).toEqual([
+      { kind: 'text', peer: alex.peer, tag, displayId: 100, x: 960, y: 270, text: 'push mid' },
+      { kind: 'alive', peer: alex.peer, tag, displayId: 100, x: 480, y: 540, who: room.self },
+    ]);
+    texts.length = 0;
+    new Remote('2222222222222222', 'lan:c', lan).text(); // a stranger
+    room.setStatusFlags({ paused: true, roomMuted: false });
+    alex.text();
+    alex.alive();
+    room.setStatusFlags({ paused: false, roomMuted: true });
+    alex.text();
+    room.setStatusFlags({ paused: false, roomMuted: false });
+    room.muteMember(alex.peer, true);
+    alex.text();
+    alex.alive();
+    room.muteMember(alex.peer, false);
+    alex.text({ d: 3 }); // no such display here
+    expect(texts).toHaveLength(0);
+    profile.limit = 1;
+    vi.advanceTimersByTime(2000);
+    alex.text();
+    alex.text();
+    alex.alive();
+    expect(texts).toHaveLength(1); // only the first of three in one second
+  });
+
+  it('drops alive about someone who is not in the room, and a member that needs an update', () => {
+    alex.alive({ who: '9999999999999999' });
+    expect(texts).toHaveLength(0);
+    alex.alive({ who: alex.peer });
+    expect(texts).toHaveLength(1);
+    alex.presence({ proto: 2 });
+    alex.text();
+    expect(texts).toHaveLength(1);
+  });
+
+  it('drops a vote from a muted member but keeps their ballots', () => {
+    alex.vote();
+    alex.vote({ id: '0a1b2c3e', kind: 'kick', target: room.self });
+    expect(votes.map((v) => [v.id, v.kind, v.target, v.peer])).toEqual([
+      ['0a1b2c3d', 'ff', undefined, alex.peer],
+      ['0a1b2c3e', 'kick', room.self, alex.peer],
+    ]);
+    room.muteMember(alex.peer, true);
+    alex.vote({ id: '0a1b2c3f' });
+    expect(votes).toHaveLength(2);
+    alex.ballot();
+    expect(ballots).toMatchObject([{ id: '0a1b2c3d', yes: true, peer: alex.peer }]);
+    room.setStatusFlags({ paused: true, roomMuted: true });
+    vi.advanceTimersByTime(2100);
+    alex.ballot({ yes: false });
+    expect(ballots).toHaveLength(2);
+    alex.presence({ proto: 2 });
+    vi.advanceTimersByTime(2100);
+    alex.ballot();
+    expect(ballots).toHaveLength(2); // a member that needs an update is still ignored
+  });
+
+  it('accepts at most one ballot every 2 s per member, beyond the incoming limit', () => {
+    profile.limit = 1;
+    alex.ballot({ yes: true });
+    vi.advanceTimersByTime(1000);
+    alex.ballot({ yes: false });
+    vi.advanceTimersByTime(1100);
+    alex.ballot({ yes: false });
+    expect(ballots.map((b) => b.yes)).toEqual([true, false]);
+    profile.limit = 0;
+    vi.advanceTimersByTime(2100);
+    alex.ballot();
+    alex.ballot();
+    expect(ballots).toHaveLength(3); // unlimited pings do not lift the ballot limit
+  });
+
+  it('ignores a kicked peer for the rest of the session', () => {
+    toasts.length = 0;
+    room.kick(alex.peer);
+    expect(room.state().members.map((m) => m.peer)).toEqual([SELF]);
+    expect(toasts).toEqual([{ kind: 'kicked', name: 'Alex' }]);
+    alex.presence({ name: 'Alex' });
+    alex.text();
+    expect(room.state().members).toHaveLength(1);
+    expect(texts).toHaveLength(0);
+    room.kick('3333333333333333'); // not a member: nothing happens
+    expect(toasts).toHaveLength(1);
+  });
+
+  it('flags members on older apps and members with text or votes off', () => {
+    const old = new Remote('2222222222222222', 'lan:b', lan);
+    const quiet = new Remote('3333333333333333', 'lan:c', lan);
+    const odd = new Remote('4444444444444444', 'lan:d', lan);
+    old.presence({ app: '0.5.2' });
+    quiet.presence({ app: '0.6.0', nf: ['votes'] });
+    odd.presence({ app: 'room-peer', nf: ['text', 'votes'] });
+    const flags = (peer: string): (boolean | undefined)[] => {
+      const m = room.state().members.find((x) => x.peer === peer);
+      return [m?.noChat, m?.textOff, m?.votesOff];
+    };
+    expect(flags(SELF)).toEqual([false, false, false]);
+    expect(flags(alex.peer)).toEqual([false, false, false]);
+    expect(flags(old.peer)).toEqual([true, false, false]);
+    expect(flags(quiet.peer)).toEqual([false, false, true]);
+    expect(flags(odd.peer)).toEqual([false, true, true]);
+    quiet.presence({ app: '0.6.0' }); // switched votes back on
+    expect(flags(quiet.peer)).toEqual([false, false, false]);
+  });
+
+  it('announces the switched-off room features', () => {
+    const lastPresence = (): Record<string, unknown> | undefined => {
+      const sent = lan.sent.filter((s) => s.to === '*').map((s) => JSON.parse(open(KEYS.msgKey, s.packet)?.toString('utf8') ?? 'null'));
+      return sent.filter((m) => m?.t === 'presence').at(-1);
+    };
+    lan.sent = [];
+    profile.nf = ['text'];
+    room.profileChanged();
+    expect(lastPresence()?.nf).toEqual(['text']);
+    expect(room.state().members[0]).toMatchObject({ textOff: true, votesOff: false });
+    lan.sent = [];
+    profile.nf = [];
+    room.profileChanged();
+    expect(lastPresence()).toBeDefined();
+    expect(lastPresence()).not.toHaveProperty('nf');
+  });
+
+  it('keeps an 0.5 peer as a member when we send text', async () => {
+    const old = new Remote('2222222222222222', 'lan:b', lan);
+    old.presence({ app: '0.5.2' });
+    lan.sent = [];
+    room.sendText('hello', { d: 1, x: 0.1, y: 0.2 });
+    room.sendAlive(old.peer, { d: 1, x: 0.1, y: 0.2 });
+    room.sendVote({ id: '0a1b2c3d', kind: 'kick', target: old.peer });
+    room.sendBallot('0a1b2c3d', false);
+    expect(sentMessages('lan:b').map((m) => m.t)).toEqual(['text', 'alive', 'vote', 'ballot']);
+    expect(sentMessages('lan:b')[2]).toMatchObject({ kind: 'kick', target: old.peer });
+    await vi.advanceTimersByTimeAsync(2000);
+    old.presence({ app: '0.5.2' });
+    expect(room.state().members.map((m) => m.peer)).toContain(old.peer);
+  });
+
+  it('sends nothing while paused', () => {
+    room.setStatusFlags({ paused: true, roomMuted: false });
+    lan.sent = [];
+    room.sendText('hello', { d: 1, x: 0, y: 0 });
+    room.sendBallot('0a1b2c3d', true);
+    expect(lan.sent).toHaveLength(0);
   });
 });

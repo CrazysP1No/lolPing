@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { announcedEmoteHashes } from '../shared/emotes';
-import { featureOn } from '../shared/features';
+import { featureOn, roomFeaturesOff } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
@@ -27,7 +27,7 @@ import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SharedEmote, type SharedPing, type SharedText } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
-import { RoomManager, type RoomToast } from './roomManager';
+import { RoomManager, type RemoteText, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
@@ -163,7 +163,10 @@ function start(): void {
     randomBytes: (n) => randomBytes(n),
     deriveKeys: deriveRoomKeys,
     appVersion: app.getVersion(),
-    profile: () => ({ name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom), limit: settings.incomingPingLimit }),
+    profile: () => ({
+      name: settings.displayName, ...tagWire(settings.tagColor, settings.tagColorCustom), limit: settings.incomingPingLimit,
+      nf: roomFeaturesOff(settings),
+    }),
     resolveTarget: (d) => {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
@@ -312,7 +315,12 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
   });
-  room.on('remoteText', (p) => overlays.spawnRemoteText(p));
+  // Alive lines are shown by a later change; only text is drawn for now.
+  room.on('remoteText', (p: RemoteText) => {
+    if (p.kind === 'text' && p.text !== undefined && featureOn(settings, 'roomText')) {
+      overlays.spawnRemoteText({ displayId: p.displayId, x: p.x, y: p.y, text: p.text, tag: p.tag });
+    }
+  });
   overlays.on('sharedText', (p: SharedText) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendText(p.text, shared);
@@ -325,6 +333,7 @@ function start(): void {
     else if (n.kind === 'full') overlays.toast(t.toastRoomFull, t.toastRoomFullBody);
     else if (n.kind === 'joined') overlays.toast(t.toastMemberJoined(n.name), code);
     else if (n.kind === 'left') overlays.toast(t.toastMemberLeft(n.name), code);
+    else if (n.kind === 'kicked') overlays.toast(t.toastMemberKicked(n.name), code);
     else overlays.toast(t.toastMemberLost(n.name), code);
   });
   powerMonitor.on('resume', () => {
@@ -403,6 +412,8 @@ function start(): void {
     if (
       s.displayName !== previous.displayName || s.tagColor !== previous.tagColor
       || !sameTagRgb(s.tagColorCustom, previous.tagColorCustom)
+      || featureOn(s, 'roomText') !== featureOn(previous, 'roomText')
+      || featureOn(s, 'roomVotes') !== featureOn(previous, 'roomVotes')
     ) room.profileChanged();
     if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
       if (!featureOn(s, 'rooms')) room.leave();

@@ -16,6 +16,12 @@ export interface RoomMember {
   needsUpdate: boolean;
   /** An app older than 0.5.0: it can't show our emotes. */
   noEmotes: boolean;
+  /** An app older than ROOM_CHAT_SINCE: it can't show our text, alive lines or votes. */
+  noChat: boolean;
+  /** They switched room text off: nothing to send them, and nothing from them. */
+  textOff: boolean;
+  /** They switched room votes off. */
+  votesOff: boolean;
   /** Muted by us, for this session. */
   muted: boolean;
   self: boolean;

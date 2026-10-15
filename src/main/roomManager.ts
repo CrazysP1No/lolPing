@@ -5,7 +5,8 @@ import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../share
 import type { TagRgb } from '../shared/roomColors';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
-  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, type MemberStatus, type PresenceMsg, type RoomMessage,
+  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, ROOM_CHAT_SINCE, type BallotMsg, type MemberStatus,
+  type PresenceMsg, type RoomFeatureOff, type RoomMessage, type VoteKind, type VoteMsg,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
 import { ReplayGuard } from './replayGuard';
@@ -26,6 +27,8 @@ const DROP_MS: Record<Transport['kind'], number> = { lan: 15_000, internet: 30_0
 /** Pings and emotes over relays, per sender: one publish reaches everyone, and public relays only tolerate so much (tools/relay-probe). */
 export const RELAY_PING_RATE = 5;
 export const RELAY_PING_BURST = 10;
+/** Ballots accepted per member: one every 2 s, far below the ping limit, which only guards against floods. */
+const BALLOT_RATE = 0.5;
 /** want/chunk messages accepted per member: a still's chunks arrive as a burst, so this bucket is wider than the ping one. */
 const TRANSFER_RATE = 60;
 /** Presence asked for on a shared transport (a change, a new link, a new member): at most this often. */
@@ -65,16 +68,21 @@ export interface RemoteEmote {
   tag: MemberTag;
 }
 
+/** A line a member posted: `text` carries `text`; `alive` carries `who`, the member they clicked in the panel. */
 export interface RemoteText {
+  kind: 'text' | 'alive';
+  /** The sender. */
+  peer: string;
+  tag: MemberTag;
   displayId: number;
   x: number;
   y: number;
-  text: string;
-  tag: { name: string; color: number };
+  text?: string;
+  who?: string;
 }
 
 export type RoomToast =
-  | { kind: 'joined' | 'left' | 'disconnected'; name: string }
+  | { kind: 'joined' | 'left' | 'disconnected' | 'kicked'; name: string }
   | { kind: 'joinedRoom'; code: string }
   | { kind: 'full' };
 
@@ -84,8 +92,11 @@ export interface RoomDeps {
   randomBytes(n: number): Uint8Array;
   deriveKeys(canonical: string): Promise<RoomKeys>;
   appVersion: string;
-  /** Read on every use, so settings changes apply at once. `limit`: incoming pings per second per member, 0 = unlimited. */
-  profile(): { name: string; color: number; rgb: TagRgb | null; limit: number };
+  /**
+   * Read on every use, so settings changes apply at once. `limit`: incoming pings per second per member, 0 = unlimited.
+   * `nf`: the room features we have switched off, announced in our presence.
+   */
+  profile(): { name: string; color: number; rgb: TagRgb | null; limit: number; nf: RoomFeatureOff[] };
   /** Display number → where a ping for it lands here, or null to drop it. The hook share mode will replace. */
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
   /** The 32-hex hashes our presence announces: the custom emotes on our wheel and centre. Read on every presence. */
@@ -100,6 +111,9 @@ interface Member {
   status: MemberStatus;
   needsUpdate: boolean;
   noEmotes: boolean;
+  noChat: boolean;
+  textOff: boolean;
+  votesOff: boolean;
   muted: boolean;
   /** The custom emote hashes their last presence announced. */
   em: string[];
@@ -115,7 +129,7 @@ const toHex = (b: Uint8Array): string => [...b].map((v) => v.toString(16).padSta
 /**
  * The room: who is in it, what we send, and what we let through. Talks to the network only through transports,
  * which carry sealed packets. Events: 'state' (RoomStateCore), 'remotePing' (RemotePing), 'remoteEmote' (RemoteEmote), 'toast' (RoomToast),
- * 'saveCode' (canonical code | null: what "rejoin last room" should remember), 'emotes' (peer, announced hashes),
+ * 'remoteText' (RemoteText: text and alive lines), 'vote' (VoteMsg), 'ballot' (BallotMsg), 'saveCode' (canonical code | null: what "rejoin last room" should remember), 'emotes' (peer, announced hashes),
  * 'want' (WantMsg), 'chunk' (ChunkMsg) and 'memberGone' (peer), which EmoteTransfer answers.
  */
 export class RoomManager extends EventEmitter {
@@ -135,6 +149,8 @@ export class RoomManager extends EventEmitter {
   private readonly limiter: RateLimiter;
   /** Emote stills (want/chunk) per member: their own, wider bucket, so a flood of wants still meets a wall. */
   private readonly transferLimiter: RateLimiter;
+  /** Ballots per member, apart from `limiter`: a vote needs every answer, but not a flood of them. */
+  private readonly ballotLimiter: RateLimiter;
   private paused = false;
   private roomMuted = false;
   private aloneSince: number | null = null;
@@ -161,6 +177,7 @@ export class RoomManager extends EventEmitter {
     this.guard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
     this.transferLimiter = new RateLimiter(deps.now);
+    this.ballotLimiter = new RateLimiter(deps.now);
     this.relayCap = new RateLimiter(deps.now);
     for (const t of deps.transports) {
       t.on('packet', (peer: PeerKey, packet: Uint8Array) => this.onPacket(t, peer, packet));
@@ -209,7 +226,28 @@ export class RoomManager extends EventEmitter {
     this.sendShared({ t: 'text', text, ...shared });
   }
 
-  /** A ping or an emote: each member gets it over its own route; shared transports get one send, within the relay cap. */
+  /** `who` is the member whose name the line shows; the receivers write the words themselves. */
+  sendAlive(who: string, shared: { d: number; x: number; y: number }): void {
+    this.sendShared({ t: 'alive', who, ...shared });
+  }
+
+  sendVote(v: { id: string; kind: VoteKind; target?: string }): void {
+    this.sendShared({ t: 'vote', ...v });
+  }
+
+  sendBallot(id: string, yes: boolean): void {
+    this.sendShared({ t: 'ballot', id, yes });
+  }
+
+  /** Removes a member and ignores that peer ID for the rest of the session, as if it had said bye. */
+  kick(peer: string): void {
+    const m = this.members.get(peer);
+    if (!m) return;
+    this.guard.markGone(peer);
+    this.remove(m, 'kicked');
+  }
+
+  /** A ping, an emote, text or a vote message: each member gets it over its own route; shared transports get one send, within the relay cap. */
   private sendShared(body: Record<string, unknown>): void {
     if (this.phase === 'idle' || !this.keys || this.paused) return;
     const packet = this.seal(body);
@@ -322,11 +360,13 @@ export class RoomManager extends EventEmitter {
     const members: RoomMember[] = this.phase === 'idle' ? [] : [
       {
         peer: this.self, name: p.name, color: p.color, rgb: p.rgb, path: 'lan', status: this.status(),
-        needsUpdate: false, noEmotes: false, muted: false, self: true,
+        needsUpdate: false, noEmotes: false, noChat: false, textOff: p.nf.includes('text'), votesOff: p.nf.includes('votes'),
+        muted: false, self: true,
       },
       ...[...this.members.values()].map((m) => ({
         peer: m.peer, name: m.name, color: m.color, rgb: m.rgb, path: this.path(m, now), status: m.status,
-        needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, muted: m.muted, self: false,
+        needsUpdate: m.needsUpdate, noEmotes: m.noEmotes, noChat: m.noChat, textOff: m.textOff, votesOff: m.votesOff,
+        muted: m.muted, self: false,
       })),
     ];
     return {
@@ -463,17 +503,32 @@ export class RoomManager extends EventEmitter {
       this.emit(msg.t, msg);
       return;
     }
-    if (msg.t === 'alive' || msg.t === 'vote' || msg.t === 'ballot') return; // not carried between members yet
-    // Pings, emotes and text pass the same gates and share one budget per member.
+    // A ballot is the one answer a vote waits for, so a muted member's still counts and so does our own pause;
+    // the vote unit decides. Only a member we can't read, and a ballot flood, are shut out.
+    if (msg.t === 'ballot') {
+      if (m.needsUpdate || !this.ballotLimiter.allow(m.peer, BALLOT_RATE, 1)) return;
+      this.emit('ballot', msg satisfies BallotMsg);
+      return;
+    }
+    // Pings, emotes, text, alive lines and votes pass the same gates and share one budget per member.
     if (this.paused || this.roomMuted || m.muted || m.needsUpdate) return;
     if (!this.limiter.allow(m.peer, this.deps.profile().limit)) return;
+    if (msg.t === 'vote') {
+      this.emit('vote', msg satisfies VoteMsg);
+      return;
+    }
+    if (msg.t === 'alive' && msg.who !== this.self && !this.members.has(msg.who)) return;
     const target = this.deps.resolveTarget(msg.d);
     if (!target) return;
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag: MemberTag = { name: m.name, color: m.color, rgb: m.rgb };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
     else if (msg.t === 'emote') this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
-    else this.emit('remoteText', { displayId: target.displayId, x, y, text: msg.text, tag } satisfies RemoteText);
+    else if (msg.t === 'text') {
+      this.emit('remoteText', { kind: 'text', peer: m.peer, tag, displayId: target.displayId, x, y, text: msg.text } satisfies RemoteText);
+    } else if (msg.t === 'alive') {
+      this.emit('remoteText', { kind: 'alive', peer: m.peer, tag, displayId: target.displayId, x, y, who: msg.who } satisfies RemoteText);
+    }
   }
 
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {
@@ -488,7 +543,7 @@ export class RoomManager extends EventEmitter {
       if (!t.shared && this.membersAt(t.kind, key) >= 2) return;
       m = {
         peer: msg.peer, name: msg.name, color: msg.color, rgb: msg.rgb ?? null, status: msg.status,
-        needsUpdate: false, noEmotes: false, muted: false, em: [],
+        needsUpdate: false, noEmotes: false, noChat: false, textOff: false, votesOff: false, muted: false, em: [],
         firstSeen: this.deps.now(), viaInternet: false, paths: {},
       };
       this.members.set(m.peer, m);
@@ -500,6 +555,9 @@ export class RoomManager extends EventEmitter {
     m.status = msg.status;
     m.needsUpdate = msg.proto !== PROTOCOL_VERSION;
     m.noEmotes = isOlderThan(msg.app, EMOTES_SINCE);
+    m.noChat = isOlderThan(msg.app, ROOM_CHAT_SINCE);
+    m.textOff = msg.nf.includes('text');
+    m.votesOff = msg.nf.includes('votes');
     m.em = msg.em;
     // Every presence, so a hash whose assembly gave up is asked for again: EmoteTransfer skips what is already here.
     // A paused lolPing neither fetches nor serves stills; the next presence after unpausing starts prefetch again.
@@ -536,9 +594,10 @@ export class RoomManager extends EventEmitter {
     if (t.kind === 'internet') m.viaInternet = true;
   }
 
-  private remove(m: Member, kind: 'left' | 'disconnected'): void {
+  private remove(m: Member, kind: 'left' | 'disconnected' | 'kicked'): void {
     this.members.delete(m.peer);
     this.limiter.forget(m.peer);
+    this.ballotLimiter.forget(m.peer);
     this.transferLimiter.forget(m.peer);
     for (const p of Object.values(m.paths)) this.answered.delete(p.key);
     if (this.members.size === 0 && this.phase !== 'idle') this.aloneSince = this.deps.now();
@@ -578,6 +637,8 @@ export class RoomManager extends EventEmitter {
     return this.seal({
       t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
       em: [...this.deps.announceEmotes()],
+      // Left out when nothing is off, so a 0.6 presence to a 0.5 peer carries nothing new.
+      ...(p.nf.length ? { nf: [...p.nf] } : {}),
       // Left out rather than sent as null: a peer on an older build ignores it either way, and this keeps the packet small.
       ...(p.rgb ? { rgb: p.rgb } : {}),
     });
