@@ -196,13 +196,31 @@ export function triggersClash(ping: TriggerKey, emote: EmoteTriggerKey, toggle: 
   return sameTrigger(ping, emote) || (vk !== null && vk === toggle.vk);
 }
 
+const pickKey = <K extends keyof Settings>(current: Settings, patch: Partial<Settings>, k: K): unknown =>
+  (k in patch ? patch[k] : current[k]);
+
+/**
+ * Whether applying `patch` leaves the panel key on the key of the ping trigger, emote key or a shortcut, judged as
+ * normalizeSettings will read them. Only judged when the patch touches one of those keys.
+ */
+export function panelKeyClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
+  if (!(['trigger', 'emoteTrigger', 'toggleHotkey', 'textHotkey', 'panelKey'] as const).some((k) => k in patch)) return false;
+  const pick = <K extends keyof Settings>(k: K): unknown => pickKey(current, patch, k);
+  const ping = trigger(pick('trigger'), platform);
+  const emote = emoteKey(pick('emoteTrigger'), platform);
+  const taken = [
+    triggerVk(ping), triggerVk(emote), hotkey(pick('toggleHotkey')).vk, hotkey(pick('textHotkey'), DEFAULT_SETTINGS.textHotkey).vk,
+  ];
+  return taken.includes(panelKey(pick('panelKey'), []));
+}
+
 /** Whether applying `patch` to `current` leaves those keys clashing, judged as normalizeSettings will read them. */
 export function patchClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey' | 'textHotkey'>(k: K): unknown =>
-    (k in patch ? patch[k] : current[k]);
+  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey' | 'textHotkey'>(k: K): unknown => pickKey(current, patch, k);
   const ping = trigger(pick('trigger'), platform);
   const emote = emoteKey(pick('emoteTrigger'), platform);
   if (triggersClash(ping, emote, hotkey(pick('toggleHotkey')))) return true;
+  if (panelKeyClashes(current, patch, platform)) return true;
   // A custom ping or emote key is swallowed by the helper, so the text key can't share it. Judged only when the patch
   // touches one of the three, so a setup that already clashes can still save unrelated settings.
   if (!('trigger' in patch || 'emoteTrigger' in patch || 'textHotkey' in patch)) return false;

@@ -405,6 +405,14 @@ describe('emote key clashes', () => {
     expect(patchClashes({ ...current, emoteTrigger: { vk: 0x54 } }, { volume: 3 })).toBe(false);
   });
 
+  it('patchClashes keeps the panel key off the other keys, whichever side the patch changes', () => {
+    expect(patchClashes(current, { panelKey: current.toggleHotkey.vk })).toBe(true);
+    expect(patchClashes(current, { toggleHotkey: { mods: MOD.ctrl, vk: current.panelKey } })).toBe(true);
+    expect(patchClashes(current, { trigger: { vk: current.panelKey } })).toBe(true);
+    expect(patchClashes(current, { panelKey: 0x51 })).toBe(false);
+    expect(patchClashes({ ...current, panelKey: 0x51 }, { volume: 3 })).toBe(false);
+  });
+
   it('patchClashes judges the merged result, so swapping both keys at once is fine', () => {
     expect(patchClashes(current, { trigger: 'ctrl', emoteTrigger: 'alt' })).toBe(false);
     expect(patchClashes(current, { trigger: 'shift', emoteTrigger: 'shift' })).toBe(true);

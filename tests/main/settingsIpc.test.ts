@@ -62,6 +62,18 @@ describe('settings IPC', () => {
     expect(store.get().textHotkey).toEqual({ mods: MOD.alt, vk: 0x54 });
   });
 
+  it('refuses a panel key that another shortcut uses', async () => {
+    const result = await call(SETTINGS_CH.set, { panelKey: store.get().toggleHotkey.vk });
+    expect(result).toMatchObject({ ok: false, error: strings('en').panelKeyClash });
+    expect(store.get().panelKey).toBe(0x09);
+  });
+
+  it('refuses a custom emote key that is the panel key', async () => {
+    expect(await call(SETTINGS_CH.set, { panelKey: 0x51 })).toMatchObject({ ok: true });
+    expect(await call(SETTINGS_CH.set, { emoteTrigger: { vk: 0x51 } })).toMatchObject({ ok: false });
+    expect(store.get().emoteTrigger).not.toEqual({ vk: 0x51 });
+  });
+
   it('setSettings ignores customEmotes from the window', async () => {
     const forged = [{ id: `c:${'ab'.repeat(16)}`, name: 'forged', animated: true }];
     const result = await call(SETTINGS_CH.set, { volume: 12, customEmotes: forged });
