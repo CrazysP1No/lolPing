@@ -54,10 +54,15 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ textHotkey: null }).textHotkey).toEqual(DEFAULT_SETTINGS.textHotkey);
   });
 
-  it('keeps the enable shortcut and moves text to a safe fallback when they clash', () => {
-    expect(normalizeSettings({ toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 } })).toMatchObject({
-      toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 },
-      textHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x59 },
+  it('defaults the text shortcut to Alt+T', () => {
+    expect(DEFAULT_SETTINGS.textHotkey).toEqual({ mods: MOD.alt, vk: 0x54 });
+    expect(normalizeSettings({}).textHotkey).toEqual({ mods: MOD.alt, vk: 0x54 });
+  });
+
+  it('moves the text shortcut off the pause shortcut', () => {
+    expect(normalizeSettings({ toggleHotkey: { mods: MOD.alt, vk: 0x54 } })).toMatchObject({
+      toggleHotkey: { mods: MOD.alt, vk: 0x54 },
+      textHotkey: { mods: MOD.alt, vk: 0x59 },
     });
     expect(normalizeSettings({
       toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x58 },
@@ -363,8 +368,18 @@ describe('emote key clashes', () => {
     expect(patchClashes(current, { emoteTrigger: 'shift' })).toBe(false);
     expect(patchClashes(current, { emoteTrigger: 'off' })).toBe(false);
     expect(patchClashes(current, { volume: 3 })).toBe(false);
-    expect(patchClashes({ ...current, emoteTrigger: { vk: 84 } }, { toggleHotkey: { mods: 3, vk: 84 } })).toBe(true);
-    expect(patchClashes({ ...current, emoteTrigger: { vk: 84 } }, { toggleHotkey: { mods: 3, vk: 85 } })).toBe(false);
+    expect(patchClashes({ ...current, emoteTrigger: { vk: 86 } }, { toggleHotkey: { mods: 3, vk: 86 } })).toBe(true);
+    expect(patchClashes({ ...current, emoteTrigger: { vk: 86 } }, { toggleHotkey: { mods: 3, vk: 87 } })).toBe(false);
+  });
+
+  it('patchClashes rejects a text shortcut on a custom ping or emote key', () => {
+    expect(patchClashes({ ...current, trigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x56 } })).toBe(true);
+    expect(patchClashes({ ...current, emoteTrigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x56 } })).toBe(true);
+    expect(patchClashes({ ...current, emoteTrigger: { vk: 0x56 } }, { textHotkey: { mods: MOD.alt, vk: 0x57 } })).toBe(false);
+    expect(patchClashes({ ...current, trigger: { vk: 0x56 } }, { trigger: 'alt' })).toBe(false);
+    expect(patchClashes({ ...current, textHotkey: { mods: MOD.alt, vk: 0x56 } }, { emoteTrigger: { vk: 0x56 } })).toBe(true);
+    // A setup that already clashes can still save a setting that touches none of the keys.
+    expect(patchClashes({ ...current, emoteTrigger: { vk: 0x54 } }, { volume: 3 })).toBe(false);
   });
 
   it('patchClashes judges the merged result, so swapping both keys at once is fine', () => {

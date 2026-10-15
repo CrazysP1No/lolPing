@@ -35,3 +35,13 @@ export function featureOn(s: { features: Features }, id: FeatureId): boolean {
   const entry = FEATURES.find((f) => f.id === id);
   return s.features[id] && (entry?.requires === undefined || s.features[entry.requires]);
 }
+
+/** Which room keys the helper listens for: they exist only in an active room, so Alt+T and Tab reach other apps otherwise. */
+export function liveKeys(
+  s: { features: Features },
+  room: { active: boolean },
+  enabled: boolean,
+): { text: boolean; panel: boolean } {
+  const live = enabled && room.active;
+  return { text: live && featureOn(s, 'roomText'), panel: live && featureOn(s, 'roomPanel') };
+}

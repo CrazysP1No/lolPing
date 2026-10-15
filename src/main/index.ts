@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { announcedEmoteHashes } from '../shared/emotes';
-import { featureOn, roomFeaturesOff } from '../shared/features';
+import { featureOn, liveKeys, roomFeaturesOff } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
@@ -302,6 +302,16 @@ function start(): void {
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
+  // The room keys (Alt+T now, the panel key later) are the helper's only while a room is active, so they reach other apps otherwise.
+  let live = liveKeys(settings, { active: false }, enabled);
+  const sendConfig = (): void => {
+    live = liveKeys(settings, { active: room.state().phase === 'active' }, enabled);
+    bridge.send(configCommand(settings, enabled, live));
+  };
+  room.on('state', () => {
+    const next = liveKeys(settings, { active: room.state().phase === 'active' }, enabled);
+    if (next.text !== live.text || next.panel !== live.panel) sendConfig();
+  });
   overlays.on('displays', pushRoom);
   room.on('remotePing', (p) => overlays.spawnRemote(p));
   overlays.on('shared', (p: SharedPing) => {
@@ -359,7 +369,7 @@ function start(): void {
   function setEnabled(on: boolean): void {
     if (on === enabled) return;
     enabled = on;
-    bridge.send(configCommand(store.get(), enabled)); // also refreshes the config re-sent after restarts
+    sendConfig(); // also refreshes the config re-sent after restarts
     if (!on) overlays.dropKeptPings();
     const t = text();
     overlays.toast(on ? t.toastOn : t.toastOff, t.toastToggleHint(hotkeyLabel(store.get().toggleHotkey, PLATFORM)));
@@ -374,7 +384,7 @@ function start(): void {
     syncSuspended();
   });
   const openText = (): void => {
-    if (!enabled || textOpen || capturing) return;
+    if (!live.text || textOpen || capturing) return;
     textOpen = true;
     syncSuspended();
     openTextWindow();
@@ -405,7 +415,7 @@ function start(): void {
   store.on('change', (s: Settings) => {
     const previous = settings;
     settings = s;
-    bridge.send(configCommand(s, enabled));
+    sendConfig();
     overlays.updateSettings(overlaySettings(s));
     settingsWindow()?.webContents.send(SETTINGS_CH.changed, s);
     if (s.language !== previous.language) tray.setText(text());
@@ -483,7 +493,7 @@ function start(): void {
     syncSuspended();
   });
 
-  bridge.send(configCommand(settings, enabled));
+  sendConfig();
   if (trusted()) bridge.start();
   else waitForAccess();
   pushStatus();

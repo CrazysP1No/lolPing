@@ -421,6 +421,69 @@ static void test_text_hotkey_ignored_while_suspended() {
   CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
 }
 
+static Decision withAltText(uint32_t textVk = KEY_T) {
+  Config c;
+  c.trigger = Trigger::Alt;
+  c.textMods = ModAlt;
+  c.textVk = textVk;
+  Decision d;
+  d.setConfig(c);
+  return d;
+}
+
+static void test_text_hotkey_fires_with_alt_trigger() {
+  Decision d = withAltText();
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(r.swallow);
+  CHECK(findEmit(r, Emit::Kind::TextRequested) != nullptr);
+  CHECK(d.onEvent(ku(KEY_T)).swallow);
+  r = d.onEvent(ku(ALT));
+  CHECK(findEmit(r, Emit::Kind::Click) == nullptr && findEmit(r, Emit::Kind::WheelOpen) == nullptr);
+  CHECK(d.state() == S::Idle);
+}
+
+static void test_text_hotkey_masks_alt_menu() {
+  Decision d = withAltText();
+  d.onEvent(kd(ALT));
+  d.onEvent(kd(KEY_T));
+  d.onEvent(ku(KEY_T));
+  Result r = d.onEvent(ku(ALT));
+  CHECK(r.swallow);
+  CHECK(r.injects.size() == 3);
+  CHECK(injectIs(r.injects[0], InjectKind::KeyDown, Btn::None, kMaskVk));
+  CHECK(injectIs(r.injects[1], InjectKind::KeyUp, Btn::None, kMaskVk));
+  CHECK(injectIs(r.injects[2], InjectKind::KeyUp, Btn::None, ALT));
+}
+
+static void test_alt_drag_still_opens_wheel_with_text_hotkey() {
+  Decision d = withAltText();
+  d.onEvent(kd(ALT));
+  d.onEvent(md(Btn::Left, 100, 100));
+  d.onEvent(mv(130, 100));
+  CHECK(d.state() == S::Wheel);
+  Result r = d.onEvent(mu(Btn::Left, 130, 100));
+  CHECK(findEmit(r, Emit::Kind::WheelRelease) != nullptr);
+  CHECK(findEmit(r, Emit::Kind::TextRequested) == nullptr);
+}
+
+static void test_text_hotkey_off_when_vk_zero() {
+  Decision d = withAltText(0);
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+  CHECK(!d.onEvent(ku(KEY_T)).swallow);
+}
+
+static void test_text_hotkey_ignored_while_paused() {
+  Decision d = withAltText();
+  d.setEnabled(false);
+  d.onEvent(kd(ALT));
+  Result r = d.onEvent(kd(KEY_T));
+  CHECK(!r.swallow && findEmit(r, Emit::Kind::TextRequested) == nullptr);
+  CHECK(!d.onEvent(ku(KEY_T)).swallow);
+}
+
 static void test_disabling_mid_drag_cancels_and_swallows_up() {
   Decision d;
   openWheel(d);
@@ -1059,6 +1122,11 @@ int main() {
   test_hotkey_ignored_while_suspended();
   test_text_hotkey_requests_once();
   test_text_hotkey_ignored_while_suspended();
+  test_text_hotkey_fires_with_alt_trigger();
+  test_text_hotkey_masks_alt_menu();
+  test_alt_drag_still_opens_wheel_with_text_hotkey();
+  test_text_hotkey_off_when_vk_zero();
+  test_text_hotkey_ignored_while_paused();
   test_disabling_mid_drag_cancels_and_swallows_up();
   test_config_change_mid_drag_cancels();
   test_lost_up_recovers_on_next_press();

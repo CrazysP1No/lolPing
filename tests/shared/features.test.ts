@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FEATURES, featureOn, normalizeFeatures, roomFeaturesOff } from '../../src/shared/features';
+import { DEFAULT_FEATURES, featureOn, liveKeys, normalizeFeatures, roomFeaturesOff } from '../../src/shared/features';
 
 describe('features', () => {
   it('turns everything on by default', () => {
@@ -35,5 +35,18 @@ describe('features', () => {
     expect(roomFeaturesOff({ features: { ...DEFAULT_FEATURES, roomVotes: false } })).toEqual(['votes']);
     expect(roomFeaturesOff({ features: { ...DEFAULT_FEATURES, roomText: false, roomVotes: false } })).toEqual(['text', 'votes']);
     expect(roomFeaturesOff({ features: { ...DEFAULT_FEATURES, rooms: false } })).toEqual(['text', 'votes']);
+  });
+
+  it('turns the text key on only in an active room with text on', () => {
+    const on = { features: DEFAULT_FEATURES };
+    expect(liveKeys(on, { active: true }, true)).toEqual({ text: true, panel: true });
+    expect(liveKeys(on, { active: false }, true)).toEqual({ text: false, panel: false });
+    expect(liveKeys(on, { active: true }, false)).toEqual({ text: false, panel: false });
+    expect(liveKeys({ features: { ...DEFAULT_FEATURES, roomText: false } }, { active: true }, true))
+      .toEqual({ text: false, panel: true });
+    expect(liveKeys({ features: { ...DEFAULT_FEATURES, roomPanel: false } }, { active: true }, true))
+      .toEqual({ text: true, panel: false });
+    expect(liveKeys({ features: { ...DEFAULT_FEATURES, rooms: false } }, { active: true }, true))
+      .toEqual({ text: false, panel: false });
   });
 });

@@ -248,7 +248,7 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
     }
     return;
   }
-  if (active() && vk == cfg_.textVk && mods() == cfg_.textMods) {
+  if (active() && cfg_.textVk != 0 && vk == cfg_.textVk && mods() == cfg_.textMods) {
     r.swallow = true;
     swallowKeyUps_.insert(vk);
     markSwallow();

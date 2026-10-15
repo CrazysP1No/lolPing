@@ -102,7 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wheelSizePx: WHEEL.size,
   wheel: [...DEFAULT_WHEEL],
   toggleHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x50 },
-  textHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x54 },
+  textHotkey: { mods: MOD.alt, vk: 0x54 },
   pingSizePx: 110,
   pingDurationS: 3.2,
   keepLastPing: false,
@@ -188,10 +188,18 @@ export function triggersClash(ping: TriggerKey, emote: EmoteTriggerKey, toggle: 
   return sameTrigger(ping, emote) || (vk !== null && vk === toggle.vk);
 }
 
-/** Whether applying `patch` to `current` leaves those three keys clashing, judged as normalizeSettings will read them. */
+/** Whether applying `patch` to `current` leaves those keys clashing, judged as normalizeSettings will read them. */
 export function patchClashes(current: Settings, patch: Partial<Settings>, platform: Platform = 'win'): boolean {
-  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey'>(k: K): unknown => (k in patch ? patch[k] : current[k]);
-  return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), hotkey(pick('toggleHotkey')));
+  const pick = <K extends 'trigger' | 'emoteTrigger' | 'toggleHotkey' | 'textHotkey'>(k: K): unknown =>
+    (k in patch ? patch[k] : current[k]);
+  const ping = trigger(pick('trigger'), platform);
+  const emote = emoteKey(pick('emoteTrigger'), platform);
+  if (triggersClash(ping, emote, hotkey(pick('toggleHotkey')))) return true;
+  // A custom ping or emote key is swallowed by the helper, so the text key can't share it. Judged only when the patch
+  // touches one of the three, so a setup that already clashes can still save unrelated settings.
+  if (!('trigger' in patch || 'emoteTrigger' in patch || 'textHotkey' in patch)) return false;
+  const textVk = hotkey(pick('textHotkey'), DEFAULT_SETTINGS.textHotkey).vk;
+  return triggerVk(ping) === textVk || triggerVk(emote) === textVk;
 }
 
 function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey): Hotkey {
@@ -206,7 +214,7 @@ function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey):
 }
 
 const hotkeysEqual = (a: Hotkey, b: Hotkey): boolean => a.mods === b.mods && a.vk === b.vk;
-const TEXT_HOTKEY_FALLBACK: Hotkey = { mods: MOD.ctrl | MOD.alt, vk: 0x59 }; // Ctrl+Alt+Y when Ctrl+Alt+T is taken
+const TEXT_HOTKEY_FALLBACK: Hotkey = { mods: MOD.alt, vk: 0x59 }; // Alt+Y when Alt+T is taken
 
 function roomCode(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;

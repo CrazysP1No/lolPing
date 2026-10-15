@@ -87,7 +87,12 @@ export type HelperCommand =
   | { type: 'suspend'; on: boolean }
   | { type: 'shutdown' };
 
-export function configCommand(s: Settings, enabled: boolean): HelperCommand {
+/** `live.text` is false outside a room: textVk 0 tells the helper to leave the text shortcut to other apps. */
+export function configCommand(
+  s: Settings,
+  enabled: boolean,
+  live: { text: boolean; panel: boolean } = { text: false, panel: false },
+): HelperCommand {
   const t = s.trigger;
   // With the Emotes feature off the helper gets no emote key, so no emote wheel or emote click.
   const e = featureOn(s, 'emotes') ? s.emoteTrigger : 'off';
@@ -104,7 +109,7 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
     toggleMods: s.toggleHotkey.mods,
     toggleVk: s.toggleHotkey.vk,
     textMods: s.textHotkey.mods,
-    textVk: s.textHotkey.vk,
+    textVk: live.text ? s.textHotkey.vk : 0,
     enabled,
   };
 }

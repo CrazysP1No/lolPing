@@ -65,7 +65,7 @@ Updating from v0.4 or earlier: download the new version by hand once. From v0.5 
 | Emote | Hold **Ctrl**, drag, and let go on an emote |
 | Cancel | Let go in the centre, right-click, or press **Esc** |
 | Pause or resume pinging | **Ctrl + Alt + P** |
-| Open the custom text popup | **Ctrl + Alt + T**, type, then press **Enter** |
+| Open the custom text popup (in a room) | **Alt + T**, type, then press **Enter** |
 | Open settings | Click the tray icon |
 | Quit, or restart the input helper | Right-click the tray icon |
 
@@ -81,7 +81,7 @@ The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist
 - **Alt + click places a ping:** off by default, so ordinary Alt + click shortcuts keep working. The ping is the one in the centre of the wheel editor (Generic unless you change it).
 - **Pause in fullscreen apps:** on by default. A fullscreen game keeps every click — trigger + click does nothing there — and gestures resume on the desktop and on other monitors. Windowed games aren't detected, and with an auto-hiding taskbar only borderless fullscreen counts. Windows only for now.
 - **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
-- **Text popup shortcut:** opens a small dialog; send any custom text to pop it up at the pointer. Room members see it too.
+- **Text popup shortcut:** opens a small dialog; send any custom text to pop it up at the pointer. Room members see it too. It works only while you are in a room, so Alt + T reaches other apps the rest of the time.
 - **Pings and sound:** size, duration, volume, mute and the wheel's tick sound. **Keep my last ping on screen** leaves your newest ping up until your next one or until you pause lolPing, for example to mark where you stopped reading.
 - **Wheel:** adjust the size of both the ping and emote wheels, without changing placed pings or emotes. Drag any ping onto any slice, including Bait, Vision Cleared and the upside-down Enemy Missing, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
 - **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only. The speaker on one of your images gives it a sound (MP3, OGG or WAV, up to 1 MB and 5 seconds), which plays on your computer only.

@@ -59,7 +59,7 @@ describe('settings IPC', () => {
   it('refuses to make the text and enable shortcuts identical', async () => {
     const result = await call(SETTINGS_CH.set, { textHotkey: store.get().toggleHotkey });
     expect(result).toMatchObject({ ok: false, error: strings('en').shortcutClash });
-    expect(store.get().textHotkey).toEqual({ mods: MOD.ctrl | MOD.alt, vk: 0x54 });
+    expect(store.get().textHotkey).toEqual({ mods: MOD.alt, vk: 0x54 });
   });
 
   it('setSettings ignores customEmotes from the window', async () => {

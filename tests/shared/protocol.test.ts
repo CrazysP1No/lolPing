@@ -41,8 +41,16 @@ describe('commands', () => {
     expect(configCommand(DEFAULT_SETTINGS, true)).toEqual({
       type: 'config', trigger: 'alt', triggerVk: 0, clickPing: false, gameCheck: true,
       emoteTrigger: 'ctrl', emoteTriggerVk: 0, emoteClick: false, dragThresholdPx: 8,
-      toggleMods: 3, toggleVk: 0x50, textMods: 3, textVk: 0x54, enabled: true,
+      toggleMods: 3, toggleVk: 0x50, textMods: 2, textVk: 0, enabled: true,
     });
+  });
+
+  it('sends textVk 0 outside a room', () => {
+    expect(configCommand(DEFAULT_SETTINGS, true, { text: false, panel: false })).toMatchObject({ textMods: 2, textVk: 0 });
+  });
+
+  it('sends the text shortcut while the text key is live', () => {
+    expect(configCommand(DEFAULT_SETTINGS, true, { text: true, panel: false })).toMatchObject({ textMods: 2, textVk: 0x54 });
   });
 
   it('builds a config command for a custom key trigger', () => {
