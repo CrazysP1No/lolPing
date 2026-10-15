@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import {
   allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl,
-  emoteName, emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote, normalizeEmoteWheel, type CustomEmote,
+  EMOTE_FX_VARIANTS, emoteName, emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote,
+  normalizeEmoteWheel, type CustomEmote,
 } from '../../src/shared/emotes';
 
 const HASH = 'a'.repeat(32);
@@ -172,3 +173,4 @@ describe('announcedEmoteHashes', () => {
     expect(announcedEmoteHashes(many.slice(1), many[0])).toHaveLength(9);
   });
 });
+

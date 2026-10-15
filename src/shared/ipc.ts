@@ -91,6 +91,8 @@ export interface SettingsApi {
   removeEmote(id: EmoteRef): Promise<void>;
   /** Gives one of our imported emotes a sound (OGG, MP3 or WAV bytes), or takes it away with null. */
   setEmoteSound(id: EmoteRef, sound: Uint8Array | null): Promise<SoundResult>;
+  /** Stores which signature effect the emote plays; undefined puts it back to the plain pop. */
+  setEmoteFx(id: EmoteRef, fx: number | undefined): Promise<void>;
   getAbout(): Promise<About>;
   openSettingsFolder(): Promise<void>;
   openProjectPage(): Promise<void>;

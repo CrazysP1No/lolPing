@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EmoteStage } from '../../src/renderer/overlay/emoteFx';
+import { emoteFxContent } from '../../src/renderer/shared/emoteFx';
+import { EmoteStage } from '../../src/renderer/overlay/emoteStage';
 
 /** Just enough of the DOM for EmoteStage: elements with classes, children, text and a src. */
 class FakeElement {
@@ -144,5 +145,114 @@ describe('EmoteStage', () => {
     fail(new Error('404'));
     await flush();
     expect(layer.find('emote')).toHaveLength(0);
+  });
+});
+
+describe('custom emote effects', () => {
+  it('plays an imported emote in the envelope its entry picks', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    const hash = '000a' + '0'.repeat(28);
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 1 }, 10, 20, { sizePx: 150 });
+    const [emote] = layer.find('emote');
+    const [fx] = emote.find('fx');
+    expect(fx.className.split(' ')).toEqual(['fx', 'v1']);
+    expect(fx.children[0].tagName).toBe('img'); // the fake DOM finds by class only, so check the tag
+    stage.clear('self');
+
+    const other = '000b' + '0'.repeat(28);
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${other}.anim`, animated: true, fx: 2 }, 10, 20, { sizePx: 150 });
+    expect(layer.find('emote')[0].find('fx')[0].className.split(' ')).toEqual(['fx', 'v2']);
+    stage.clear('self');
+  });
+
+  it('keeps the plain envelope for the placeholder, whatever the URL looks like', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', { kind: 'placeholder' }, 10, 20, { sizePx: 150 });
+    const [fx] = layer.find('emote')[0].find('fx');
+    expect(fx.className.split(' ')).toEqual(['fx', 'v0']);
+    expect(fx.find('bubble')).toHaveLength(1);
+    stage.clear('self');
+  });
+});
+
+describe('ornamented effects (glow sprites)', () => {
+  it('surrounds a bloom emote with tinted glow sprites, a shockwave and a sparkle', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    const hash = 'aabb' + '0'.repeat(28); // the hash no longer picks the effect: the fx field does
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 6 }, 10, 20, { sizePx: 150 });
+    const [fx] = layer.find('emote')[0].find('fx');
+    expect(fx.className.split(' ')).toEqual(['fx', 'v6']);
+    const glows = fx.children.filter((c) => c.className === 'blob');
+    expect(glows).toHaveLength(3);
+    expect(glows[0].style.backgroundImage).toContain('../fx/light_01.png'); // a real sprite, not a CSS shape
+    expect(glows[0].style.filter).toContain('sepia'); // tinted gold by sepia + hue-rotate, not a background colour
+    expect(fx.children.filter((c) => c.className === 'ring')).toHaveLength(1);
+    const sparks = fx.children.filter((c) => c.className === 'spark');
+    expect(sparks).toHaveLength(1);
+    expect(sparks[0].style.backgroundImage).toContain('../fx/star_08.png');
+    stage.clear('self');
+  });
+
+  it('the blast throws the most glows and a jagged muzzle-flash sparkle', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${'dd'.repeat(16)}.webp`, animated: false, fx: 8 }, 10, 20, { sizePx: 150 });
+    const [fx] = layer.find('emote')[0].find('fx');
+    expect(fx.children.filter((c) => c.className === 'blob')).toHaveLength(4);
+    expect(fx.children.filter((c) => c.className === 'spark')[0].style.backgroundImage).toContain('muzzle_03');
+    stage.clear('self');
+  });
+
+  it('the unornamented effects and the placeholder stay clean', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    for (let n = 0; n < 6; n++) {
+      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: 0 }, 10, 20, { sizePx: 150 });
+      const [fx] = layer.find('emote')[0].find('fx');
+      expect(fx.children.filter((c) => c.tagName === 'i')).toHaveLength(0);
+      stage.clear('self');
+    }
+    stage.spawn('self', { kind: 'placeholder' }, 10, 20, { sizePx: 150 });
+    expect(layer.find('emote')[0].find('fx')[0].children.filter((c) => c.tagName === 'i')).toHaveLength(0);
+    stage.clear('self');
+  });
+});
+
+describe('emoteFxContent (the effect picker builds the same nodes)', () => {
+  const url = 'lolping://emotes/still/0123456789abcdef0123456789abcdef.webp';
+
+  it('variant 0 is just the art in the plain envelope, with no ornaments', () => {
+    const fx = emoteFxContent(0, url, 100) as unknown as FakeElement;
+    expect(fx.className).toBe('fx v0');
+    expect(fx.children).toHaveLength(1); // the art, nothing else
+    expect(fx.find('blob')).toHaveLength(0);
+    expect(fx.find('ring')).toHaveLength(0);
+    expect(fx.find('spark')).toHaveLength(0);
+  });
+
+  it('an ornamented variant carries its art, its blots, the shockwave ring and the spark', () => {
+    const fx = emoteFxContent(6, url, 100) as unknown as FakeElement;
+    expect(fx.children[0].src).toBe(url);
+    expect(fx.find('blob')).toHaveLength(3);
+    expect(String(fx.find('blob')[0].style.backgroundImage)).toContain('../fx/light_01.png');
+    expect(String(fx.find('blob')[0].style.filter)).toContain('sepia');
+    expect(fx.find('ring')).toHaveLength(1);
+    expect(fx.find('spark')).toHaveLength(1);
+  });
+
+  it('builds the same ornaments for a url without a hash (the seed just falls back to 0)', () => {
+    const fx = emoteFxContent(6, 'https://example.com/cat.png', 100) as unknown as FakeElement;
+    expect(fx.find('blob')).toHaveLength(3);
+    expect(fx.find('ring')).toHaveLength(1);
+    expect(fx.find('spark')).toHaveLength(1);
+  });
+
+  it('an art that cannot load falls back to the placeholder bubble', () => {
+    const fx = emoteFxContent(6, url, 100) as unknown as FakeElement;
+    fx.children[0].dispatch('error');
+    expect(fx.find('bubble')).toHaveLength(1);
   });
 });

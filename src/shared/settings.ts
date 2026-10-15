@@ -1,6 +1,6 @@
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL } from './emoteCatalog';
 import {
-  CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, normalizeClickEmote, normalizeEmoteWheel,
+  CUSTOM_NAME_MAX, MAX_CUSTOM_EMOTES, customHash, isCustomRef, isEmoteFx, normalizeClickEmote, normalizeEmoteWheel,
   type CustomEmote, type EmoteRef,
 } from './emotes';
 import { WHEEL } from './geometry';
@@ -215,7 +215,11 @@ function customEmotes(raw: unknown): CustomEmote[] {
     if (out.some((c) => c.id === id)) continue;
     // A name with nothing left shows the first characters of its id, which reads the same in every language.
     const name = sanitizeName(e.name.slice(0, 256), customHash(id).slice(0, 6), CUSTOM_NAME_MAX);
-    out.push({ id, name, animated: e.animated, ...(e.sound === true ? { sound: true } : {}) });
+    out.push({
+      id, name, animated: e.animated,
+      ...(e.sound === true ? { sound: true } : {}),
+      ...(isEmoteFx(e.fx) ? { fx: e.fx } : {}),
+    });
   }
   return out;
 }

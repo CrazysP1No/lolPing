@@ -11,12 +11,18 @@ export interface CustomEmote {
   animated: boolean;
   /** Has a `.sound` file: it plays when we place the emote, on this computer only (rooms never get it). */
   sound?: boolean;
+  /** Which signature effect it plays when it lands: 0–12. Nothing stored (an entry from an older version) plays the plain pop. */
+  fx?: number;
 }
+
+/** A stored effect: an integer within EMOTE_FX_VARIANTS. Anything else means the plain pop. */
+export const isEmoteFx = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < EMOTE_FX_VARIANTS;
 
 /** What an emote looks like on screen. A placeholder stands in for a custom emote whose files are missing. */
 export type EmoteArt =
   | { kind: 'bundled'; slug: string }
-  | { kind: 'custom'; url: string; animated: boolean; sound?: string }
+  | { kind: 'custom'; url: string; animated: boolean; sound?: string; /** The signature effect it plays; 0 is the plain pop. */ fx: number }
   | { kind: 'placeholder' };
 
 export type ImportError = 'type' | 'size' | 'animSize' | 'detail' | 'full' | 'duplicate' | 'disk';
@@ -44,6 +50,14 @@ export const ANIM_MAX_SIDE = 1024;
 /** An imported emote's sound: OGG, MP3 or WAV, at most this many bytes and seconds. */
 export const SOUND_MAX_BYTES = 1_048_576;
 export const SOUND_MAX_S = 5;
+/**
+ * The signature effects a custom emote can play when it lands (13 of them). 0 is the plain pop; the rest replay the
+ * grammar the bundled emotes are baked with — a flash or a ring to land, the art popping in, blots of light drifting
+ * around a glow, and a burst goodbye: spin-in, bounce drop, flash focus, pendulum swing, heartbeat, golden bloom,
+ * verdant burst, blast, warp, thunderclap, splash, confetti. Which one an image plays is stored on its entry
+ * (`CustomEmote.fx`, picked by right-clicking it in the settings window); nothing stored plays the plain pop.
+ */
+export const EMOTE_FX_VARIANTS = 13;
 
 const SLUG = /^[a-z0-9_]{1,40}$/;
 const CUSTOM = /^c:[0-9a-f]{32}$/;

@@ -64,9 +64,10 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
   if (emote) {
     const animated = emote.animated && !remote;
     const sound = emote.sound && !remote ? { sound: customSoundUrl(hash) } : {};
-    return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated, ...sound };
+    return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated, ...sound, fx: emote.fx ?? 0 };
   }
-  return remote && cacheHas(hash) ? { kind: 'custom', url: customStillUrl(hash), animated: false } : { kind: 'placeholder' };
+  // A friend's cached still has no entry here, so it plays the plain pop: the effect lives on the owner's machine.
+  return remote && cacheHas(hash) ? { kind: 'custom', url: customStillUrl(hash), animated: false, fx: 0 } : { kind: 'placeholder' };
 }
 
 /**

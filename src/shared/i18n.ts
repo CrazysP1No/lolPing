@@ -95,6 +95,10 @@ const en = {
   soundErrType: (file: string) => `${file} isn’t an MP3, OGG or WAV sound.`,
   soundErrSize: (file: string) => `${file} is too big: a sound can be up to 1 MB.`,
   soundErrLong: (file: string) => `${file} is too long: a sound can be up to 5 seconds.`,
+  fxHint: 'Tip: right-click one of your images to pick the effect it plays',
+  fxMenuTitle: 'Effect',
+  /** The signature effects' names, by variant number, as the picker lists them. */
+  fxNames: ['Plain pop', 'Spin-in', 'Bounce drop', 'Flash focus', 'Pendulum swing', 'Heartbeat', 'Golden bloom', 'Verdant burst', 'Blast', 'Warp', 'Thunderclap', 'Splash', 'Confetti'],
   yourImages: (n: number, max: number) => `Your images: ${n} of ${max}`,
   importErrType: (file: string) => `${file} isn’t a PNG, JPG, GIF or WebP image.`,
   importErrSize: (file: string) => `${file} is too big: an image can be up to 8 MB and 8192 pixels on its longest side.`,
@@ -354,6 +358,10 @@ const zh: Strings = {
   soundErrType: (file) => `“${file}”不是 MP3、OGG 或 WAV 声音。`,
   soundErrSize: (file) => `“${file}”太大：声音最大 1 MB。`,
   soundErrLong: (file) => `“${file}”太长：声音最长 5 秒。`,
+  fxHint: '提示：右键你自己的图片可以选择它的登场特效',
+  fxMenuTitle: '登场特效',
+  /** 特效名字，按变体序号排列，即选择器宫格里的顺序。 */
+  fxNames: ['经典弹出', '螺旋登场', '落地弹跳', '闪现聚焦', '摆锤摆入', '心跳律动', '金光绽放', '翠绿萌发', '轰然炸开', '传送登场', '雷霆一击', '破水而出', '礼花绽放'],
   yourImages: (n, max) => `我的图片：${n}/${max}`,
   importErrType: (file) => `“${file}”不是 PNG、JPG、GIF 或 WebP 图片。`,
   importErrSize: (file) => `“${file}”太大：图片最大 8 MB，最长边不超过 8192 像素。`,
