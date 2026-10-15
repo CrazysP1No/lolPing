@@ -22,6 +22,11 @@ export function voteLeft(v: VoteView, now: number): number {
   return Math.min(1, Math.max(0, (v.endsAt - now) / VOTE_MS[v.kind]));
 }
 
+/** Whether the buttons work: we are a voter who hasn't answered, and the vote is neither over nor out of time. */
+export function canAnswer(v: VoteView, me: string | undefined, over: boolean, now: number): boolean {
+  return me !== undefined && !over && now < v.endsAt && v.voters.includes(me) && !(me in v.ballots);
+}
+
 export function voteTitle(v: VoteView, members: readonly RoomMember[], t: Strings): string {
   if (v.kind === 'ff') return t.voteTitleFf;
   if (v.kind === 'ready') return t.voteTitleReady;
@@ -51,7 +56,7 @@ function boxRow(boxes: readonly VoteBox[]): HTMLElement {
 }
 
 /** What the countdown moves: set on every draw, updated by `tick`. */
-let countdown: { vote: VoteView; bar: HTMLElement | null; ring: SVGCircleElement | null; seconds: HTMLElement | null } | null = null;
+let countdown: { vote: VoteView; over: boolean; bar: HTMLElement | null; ring: SVGCircleElement | null; seconds: HTMLElement | null } | null = null;
 
 let ticking = false;
 
@@ -60,12 +65,13 @@ function tick(): void {
     ticking = false;
     return;
   }
-  const { vote, bar, ring, seconds } = countdown;
+  const { vote, over, bar, ring, seconds } = countdown;
   const left = voteLeft(vote, Date.now());
   if (bar) bar.style.transform = `scaleX(${left})`;
   if (ring) ring.setAttribute('stroke-dashoffset', String(RING_LENGTH * (1 - left)));
   if (seconds) seconds.textContent = String(Math.ceil((left * VOTE_MS[vote.kind]) / 1000));
-  requestAnimationFrame(tick);
+  if (over) ticking = false; // drawn once more, now that the result is in
+  else requestAnimationFrame(tick);
 }
 
 /** Draws the open vote into `root`: the surrender and kick widget, or the ready check card. */
@@ -80,7 +86,7 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
   const members = state.room.members;
   const me = members.find((m) => m.self)?.peer;
   const mine = me === undefined ? undefined : v.ballots[me];
-  const canAnswer = me !== undefined && v.voters.includes(me) && mine === undefined && Date.now() < v.endsAt;
+  const answerable = canAnswer(v, me, state.voteOver, Date.now());
   const ready = v.kind === 'ready';
 
   const card = el('section', `vote ${ready ? 'ready' : 'surrender'}`);
@@ -94,7 +100,7 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
     const b = el('button', `${className}${mine === yes ? ' chosen' : ''}`, label);
     b.type = 'button';
     b.setAttribute('aria-label', name);
-    b.disabled = !canAnswer;
+    b.disabled = !answerable;
     b.addEventListener('click', () => act({ t: 'ballot', yes }));
     return b;
   };
@@ -126,7 +132,7 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
     card.append(boxes, track, buttons);
   }
   root.replaceChildren(card);
-  countdown = { vote: v, bar, ring, seconds };
+  countdown = { vote: v, over: state.voteOver, bar, ring, seconds };
   if (!ticking) {
     ticking = true;
     requestAnimationFrame(tick);

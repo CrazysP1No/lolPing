@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { RoomHistory, type HistoryLine } from '../../src/main/roomHistory';
+import { RoomHistory } from '../../src/main/roomHistory';
+import type { HistoryLine } from '../../src/shared/roomHistory';
 
 const line = (n: number): HistoryLine => ({ at: n, kind: 'text', tag: null, text: `line ${n}` });
 

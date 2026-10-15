@@ -87,7 +87,10 @@ export class PanelWindows extends EventEmitter {
   private hide(view: View): void {
     const slot = this.slots[view];
     slot.shown = false;
-    if (slot.win && !slot.win.isDestroyed()) slot.win.hide();
+    if (!slot.win || slot.win.isDestroyed()) return;
+    // The window is reused: clear what it drew, so the next show can't flash this vote's card before its own.
+    if (view === 'vote' && slot.state) slot.win.webContents.send(PANEL_CH.state, { ...slot.state, vote: null, voteOver: false });
+    slot.win.hide();
   }
 
   private push(slot: Slot): void {

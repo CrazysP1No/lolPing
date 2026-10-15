@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { voteBoxes, voteLeft, voteTitle } from '../../src/renderer/panel/vote';
+import { canAnswer, voteBoxes, voteLeft, voteTitle } from '../../src/renderer/panel/vote';
 import { strings } from '../../src/shared/i18n';
 import type { RoomMember } from '../../src/shared/room';
 import { VOTE_MS, type VoteView } from '../../src/shared/voteTally';
@@ -40,5 +40,24 @@ describe('voteTitle', () => {
     expect(voteTitle(view({ kind: 'ready' }), members, strings('zh-CN'))).toBe('准备确认');
     expect(voteTitle(view({ kind: 'kick', target: 'bb' }), members, strings('en'))).toBe('Remove Alex?');
     expect(voteTitle(view({ kind: 'kick', target: 'bb' }), members, strings('zh-CN'))).toBe('移出 Alex？');
+  });
+});
+
+describe('canAnswer', () => {
+  const v = view();
+
+  it('lets a voter who has not answered press a button while the vote is open', () => {
+    expect(canAnswer(v, 'cc', false, 50_000)).toBe(true);
+  });
+
+  it('turns the buttons off once the result is in, even with time left', () => {
+    expect(canAnswer(v, 'cc', true, 50_000)).toBe(false);
+  });
+
+  it('turns them off after we answered, after the end, and for a member who is not a voter', () => {
+    expect(canAnswer(v, 'aa', false, 50_000)).toBe(false);
+    expect(canAnswer(v, 'cc', false, 100_000)).toBe(false);
+    expect(canAnswer(v, 'zz', false, 50_000)).toBe(false);
+    expect(canAnswer(v, undefined, false, 50_000)).toBe(false);
   });
 });

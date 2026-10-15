@@ -9,8 +9,8 @@ export interface RoomVotesDeps {
   now(): number;
   /** A fresh vote ID (8 hex characters). */
   randomId(): string;
-  /** The open vote as it stands, or null once its widget should go. */
-  onView(v: VoteView | null): void;
+  /** The open vote as it stands, or null once its widget should go. `over`: this is its last state, the result is in. */
+  onView(v: VoteView | null, over?: boolean): void;
   /** The result, once; for a kick it comes before the member is removed, so their name can still be looked up. */
   onResult(o: VoteOutcome): void;
   /** A kick against us passed: the caller leaves the room. */
@@ -103,6 +103,7 @@ export class RoomVotes {
   }
 
   private settle(): void {
+    const last = this.tally.view();
     const o = this.tally.check();
     if (!o) return;
     this.clearTimers();
@@ -111,6 +112,11 @@ export class RoomVotes {
       this.closeTimer = null;
       this.hide();
     }, RESULT_SHOW_MS);
+    // Before onResult: leaving the room in onKicked closes the widget, and this must not bring it back.
+    if (last) {
+      this.shown = true;
+      this.d.onView(last, true);
+    }
     this.d.onResult(o);
     if (o.passed && o.kind === 'kick' && o.target) {
       if (o.target === this.d.room.self) this.d.onKicked();

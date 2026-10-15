@@ -1,7 +1,8 @@
 import type { Strings } from '../shared/i18n';
 import type { PingTag } from '../shared/ipc';
 import type { MemberTag, RemoteText, RoomManager } from './roomManager';
-import type { HistoryLine, RoomHistory } from './roomHistory';
+import type { HistoryLine } from '../shared/roomHistory';
+import type { RoomHistory } from './roomHistory';
 
 export interface RoomTextDeps {
   room: Pick<RoomManager, 'on' | 'off' | 'state'>;

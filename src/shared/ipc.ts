@@ -1,4 +1,3 @@
-import type { HistoryLine } from '../main/roomHistory';
 import type { EmoteArt, EmoteFile, EmoteRef, ImportResult, SoundResult } from './emotes';
 import type { Lang } from './i18n';
 import type { PingId } from './pings';
@@ -6,6 +5,7 @@ import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
 import type { JoinResult, RoomState, RoomStateCore } from './room';
 import type { TagRgb } from './roomColors';
+import type { HistoryLine } from './roomHistory';
 import { PEER_RE } from './roomProtocol';
 import type { OverlaySettings, RoomTextStyle, Settings } from './settings';
 import type { UpdateState } from './update';
@@ -84,6 +84,8 @@ export interface PanelState {
   room: RoomStateCore;
   history: readonly HistoryLine[];
   vote: VoteView | null;
+  /** The vote's result is in: its widget stays a moment with the buttons off and the countdown stopped. */
+  voteOver: boolean;
   /** The room text and room votes feature switches. */
   textOn: boolean;
   votesOn: boolean;

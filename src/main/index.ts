@@ -359,9 +359,9 @@ function start(): void {
   });
   // The vote widget (and, later, the roster) live in their own windows that never take focus.
   const panels = new PanelWindows();
-  const panelState = (view: PanelState['view'], vote: PanelState['vote']): PanelState => ({
+  const panelState = (view: PanelState['view'], vote: PanelState['vote'], voteOver = false): PanelState => ({
     view, lang: resolveLang(settings.language, app.getLocale()), max: MAX_MEMBERS, room: room.state(), history: history.lines(),
-    vote, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
+    vote, voteOver, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
   });
   panels.on('action', (a: PanelAction) => {
     if (a.t === 'ballot') roomVotes?.answer(a.yes);
@@ -375,7 +375,7 @@ function start(): void {
         room,
         now: Date.now,
         randomId: () => randomBytes(4).toString('hex'),
-        onView: (v) => (v ? panels.showVote(panelState('vote', v)) : panels.hideVote()),
+        onView: (v, over) => (v ? panels.showVote(panelState('vote', v, over)) : panels.hideVote()),
         onResult: (o) => {
           const display = screen.getPrimaryDisplay();
           postLine(lineDeps, {

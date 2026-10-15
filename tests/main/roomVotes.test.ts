@@ -50,6 +50,7 @@ const ballotFrom = (peer: string, yes: boolean, id = 'abcdef01'): BallotMsg => (
 function setup() {
   const room = new FakeRoom();
   const views: (VoteView | null)[] = [];
+  const overs: boolean[] = [];
   const results: VoteOutcome[] = [];
   let kickedYou = 0;
   let n = 0;
@@ -57,12 +58,15 @@ function setup() {
     room: room as unknown as RoomVotesDeps['room'],
     now: () => Date.now(),
     randomId: () => String(++n).padStart(8, '0'),
-    onView: (v) => views.push(v),
+    onView: (v, over) => {
+      views.push(v);
+      overs.push(over ?? false);
+    },
     onResult: (o) => results.push(o),
     onKicked: () => { kickedYou++; },
   };
   const votes = new RoomVotes(deps);
-  return { room, votes, views, results, kickedYou: () => kickedYou };
+  return { room, votes, views, overs, results, kickedYou: () => kickedYou };
 }
 
 beforeEach(() => {
@@ -198,6 +202,17 @@ describe('RoomVotes', () => {
     vi.advanceTimersByTime(2999);
     expect(views.at(-1)).not.toBeNull();
     vi.advanceTimersByTime(1);
+    expect(views.at(-1)).toBeNull();
+  });
+
+  it('sends the vote once more, marked over, when its result is in', () => {
+    const { votes, views, overs } = setup();
+    votes.start('ready');
+    expect(overs.every((o) => !o)).toBe(true);
+    vi.advanceTimersByTime(15_000);
+    expect(overs.at(-1)).toBe(true);
+    expect(views.at(-1)).toMatchObject({ kind: 'ready', ballots: { me: true } });
+    vi.advanceTimersByTime(3000);
     expect(views.at(-1)).toBeNull();
   });
 
