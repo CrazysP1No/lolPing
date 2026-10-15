@@ -1,3 +1,4 @@
+import type { FeatureId } from './features';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { MemberPath } from './room';
@@ -26,6 +27,7 @@ const en = {
   navWheel: 'Wheel',
   navEmotes: 'Emotes',
   navRoom: 'Room',
+  navFeatures: 'Features',
   navApp: 'App',
   tagline: 'Ping anywhere',
   pageTitle: 'Settings',
@@ -183,6 +185,21 @@ const en = {
   roomLimitDesc: 'Pings and emotes together, per person. Unlimited lets friends spam you',
   roomLimitValue: (n: number) => (n === 0 ? 'Unlimited' : `${n} / s`),
   roomRejoin: 'Rejoin last room on launch',
+  featureTitle: {
+    emotes: 'Emotes',
+    rooms: 'Rooms',
+    roomText: 'Room text',
+    roomVotes: 'Votes',
+    roomPanel: 'Room panel',
+  } satisfies Record<FeatureId, string>,
+  featureDesc: {
+    emotes: 'The emote wheel and emotes from friends.',
+    rooms: 'Ping with friends in a room.',
+    roomText: 'Send short text to the room.',
+    roomVotes: 'Surrender, ready check and kick votes in a room.',
+    roomPanel: 'A panel of room members you hold a key to show.',
+  } satisfies Record<FeatureId, string>,
+  featureNeedsRooms: 'Needs Rooms to be on.',
   friendEmotes: 'Show friends’ custom emotes',
   friendEmotesDesc: 'Their still images travel through the room into a small local cache. Animations never leave their computer.',
   roomInternet: 'Allow internet connections',
@@ -288,6 +305,7 @@ const zh: Strings = {
   navWheel: '轮盘',
   navEmotes: '表情',
   navRoom: '房间',
+  navFeatures: '功能',
   navApp: '应用',
   tagline: '随处发信号',
   pageTitle: '设置',
@@ -440,6 +458,21 @@ const zh: Strings = {
   roomLimitDesc: '信号和表情合计，按每人计算。选择“不限”时朋友可以随意刷屏',
   roomLimitValue: (n) => (n === 0 ? '不限' : `${n} 次/秒`),
   roomRejoin: '启动时重新加入上次的房间',
+  featureTitle: {
+    emotes: '表情',
+    rooms: '房间',
+    roomText: '房间文字',
+    roomVotes: '投票',
+    roomPanel: '房间面板',
+  } satisfies Record<FeatureId, string>,
+  featureDesc: {
+    emotes: '表情轮盘和好友发来的表情。',
+    rooms: '在房间里和好友一起发信号。',
+    roomText: '向房间发送简短的文字。',
+    roomVotes: '房间里的投降、准备确认和踢人投票。',
+    roomPanel: '按住一个键显示的房间成员面板。',
+  } satisfies Record<FeatureId, string>,
+  featureNeedsRooms: '需要先打开房间。',
   friendEmotes: '显示好友的自定义表情',
   friendEmotesDesc: '好友的静态图会通过房间传到一个很小的本地缓存。动图永远不会离开对方的电脑。',
   roomInternet: '允许互联网连接',

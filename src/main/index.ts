@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
 import { announcedEmoteHashes } from '../shared/emotes';
+import { featureOn } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
@@ -170,7 +171,7 @@ function start(): void {
   // Custom emote stills travel both ways: this side asks for friends' hashes and answers wants for our own.
   const transfer = new EmoteTransfer({
     now: Date.now,
-    enabled: () => settings.friendEmotes,
+    enabled: () => settings.friendEmotes && featureOn(settings, 'emotes'),
     have: (hash) => isFile(join(library.dir, `${hash}.webp`), false) || cache.has(hash),
     still: (hash) => {
       try {
@@ -271,6 +272,7 @@ function start(): void {
     text(),
     IS_MAC ? { on: buildResourcePath('trayTemplate.png'), off: buildResourcePath('trayOffTemplate.png') } : undefined,
   );
+  tray.setRoomsShown(featureOn(settings, 'rooms'));
   /** Sends to the settings window if there is one that is still alive (the updater also reports while the app quits). */
   function sendToSettings(channel: string, payload: unknown): void {
     const w = settingsWindow();
@@ -301,7 +303,9 @@ function start(): void {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendPing(p.id, shared);
   });
-  room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
+  room.on('remoteEmote', (p) => {
+    if (featureOn(settings, 'emotes')) overlays.spawnRemoteEmote(p);
+  });
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
@@ -380,6 +384,10 @@ function start(): void {
       s.displayName !== previous.displayName || s.tagColor !== previous.tagColor
       || !sameTagRgb(s.tagColorCustom, previous.tagColorCustom)
     ) room.profileChanged();
+    if (featureOn(s, 'rooms') !== featureOn(previous, 'rooms')) {
+      if (!featureOn(s, 'rooms')) room.leave();
+      tray.setRoomsShown(featureOn(s, 'rooms'));
+    }
     if (s.autoUpdateCheck !== previous.autoUpdateCheck) updater?.setAutoCheck(s.autoUpdateCheck);
     if (s.roomMuted !== previous.roomMuted) {
       syncRoomFlags();
@@ -451,7 +459,7 @@ function start(): void {
   syncRoomFlags();
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
-  if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
+  if (settings.rejoinRoom && settings.lastRoomCode && featureOn(settings, 'rooms')) void room.join(settings.lastRoomCode);
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
     if (store.firstRun || !trusted()) openSettingsWindow();

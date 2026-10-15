@@ -1,3 +1,4 @@
+import { featureOn } from './features';
 import type { Settings } from './settings';
 
 /** Which wheel a gesture belongs to: the ping trigger's or the emote key's. */
@@ -83,7 +84,8 @@ export type HelperCommand =
 
 export function configCommand(s: Settings, enabled: boolean): HelperCommand {
   const t = s.trigger;
-  const e = s.emoteTrigger;
+  // With the Emotes feature off the helper gets no emote key, so no emote wheel or emote click.
+  const e = featureOn(s, 'emotes') ? s.emoteTrigger : 'off';
   return {
     type: 'config',
     trigger: typeof t === 'object' ? 'vk' : t,
@@ -92,7 +94,7 @@ export function configCommand(s: Settings, enabled: boolean): HelperCommand {
     gameCheck: s.gameCheck,
     emoteTrigger: typeof e === 'object' ? 'vk' : e,
     emoteTriggerVk: typeof e === 'object' ? e.vk : 0,
-    emoteClick: s.emoteClick,
+    emoteClick: s.emoteClick && e !== 'off',
     dragThresholdPx: s.dragThresholdPx,
     toggleMods: s.toggleHotkey.mods,
     toggleVk: s.toggleHotkey.vk,
