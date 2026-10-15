@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
-import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
+import { SETTINGS_CH, type About, type AppStatus, type PanelAction, type PanelState } from '../shared/ipc';
 import { announcedEmoteHashes } from '../shared/emotes';
 import { featureOn, liveKeys, roomFeaturesOff } from '../shared/features';
 import { hotkeyLabel } from '../shared/keys';
@@ -29,7 +29,8 @@ import { OverlayManager, type SharedEmote, type SharedPing } from './overlayMana
 import { assetPath, buildResourcePath, helperExePath, IS_LINUX, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
 import { RoomHistory } from './roomHistory';
-import { RoomManager, type RoomToast } from './roomManager';
+import { PanelWindows } from './panelWindows';
+import { MAX_MEMBERS, RoomManager, type RoomToast } from './roomManager';
 import { postLine, startRoomText, type RoomTextDeps } from './roomText';
 import { RoomVotes, voteResultLine } from './roomVotes';
 import { registerSettingsIpc } from './settingsIpc';
@@ -356,6 +357,15 @@ function start(): void {
     }
     for (const m of s.members) memberNames.set(m.peer, m.name);
   });
+  // The vote widget (and, later, the roster) live in their own windows that never take focus.
+  const panels = new PanelWindows();
+  const panelState = (view: PanelState['view'], vote: PanelState['vote']): PanelState => ({
+    view, lang: resolveLang(settings.language, app.getLocale()), max: MAX_MEMBERS, room: room.state(), history: history.lines(),
+    vote, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
+  });
+  panels.on('action', (a: PanelAction) => {
+    if (a.t === 'ballot') roomVotes?.answer(a.yes);
+  });
   // Votes run while the feature is on; with it off, members' votes and ballots are ignored here.
   let roomVotes: RoomVotes | null = null;
   const syncRoomVotes = (): void => {
@@ -365,7 +375,7 @@ function start(): void {
         room,
         now: Date.now,
         randomId: () => randomBytes(4).toString('hex'),
-        onView: () => {}, // the vote widget is drawn by a later change
+        onView: (v) => (v ? panels.showVote(panelState('vote', v)) : panels.hideVote()),
         onResult: (o) => {
           const display = screen.getPrimaryDisplay();
           postLine(lineDeps, {
@@ -618,6 +628,7 @@ function start(): void {
     transfer.stop();
     stopWaitingForAccess();
     tray.destroy();
+    panels.destroy();
     overlays.destroy();
     void Promise.allSettled([bridge.stop(), store.flush(), lan.whenClosed(), relay.whenClosed()]).then(() => app.exit(0));
   });

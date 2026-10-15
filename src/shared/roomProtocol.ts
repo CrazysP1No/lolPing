@@ -129,7 +129,8 @@ export function sanitizeText(raw: string): string {
   return [...raw.replace(UNSAFE_CHARS, '').trim()].slice(0, MAX_TEXT).join('').trim();
 }
 
-const PEER_RE = /^[0-9a-f]{16}$/;
+/** A peer id: 16 lowercase hex digits. */
+export const PEER_RE = /^[0-9a-f]{16}$/;
 const VOTE_ID_RE = /^[0-9a-f]{8}$/;
 /** A vote id: 8 lower-case hex characters. */
 export const isVoteId = (v: unknown): v is string => typeof v === 'string' && VOTE_ID_RE.test(v);

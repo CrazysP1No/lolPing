@@ -1,0 +1,45 @@
+:root { color-scheme: dark; font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+main { height: 100%; color: #f0e6d2; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+
+/* League look: a dark fill with a thin gold edge. Layout follows the in-game surrender widget and the client's ready check. */
+.vote { display: flex; flex-direction: column; height: 100%; padding: 10px 12px 12px; border: 1px solid #c8aa6e; border-radius: 4px; background: rgba(10, 20, 28, .95); }
+.title { margin: 0 0 8px; font-size: 15px; font-weight: 700; letter-spacing: .02em; color: #f0e6d2; }
+
+.boxes { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; }
+.box { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid rgba(200, 170, 110, .5); background: rgba(1, 10, 19, .8); font-size: 17px; font-weight: 700; line-height: 1; }
+.box.yes { color: #0ac8b9; border-color: #0ac8b9; }
+.box.no { color: #e84057; border-color: #e84057; }
+
+.surrender .boxes { flex: 1; }
+.surrender .track { height: 6px; margin: 8px 0 10px; background: rgba(240, 230, 210, .15); overflow: hidden; }
+.surrender .bar { height: 100%; background: #c8aa6e; transform-origin: left center; }
+.buttons { display: flex; gap: 8px; }
+.buttons button { flex: 1; height: 32px; border: 1px solid #785a28; background: #1e2328; font-size: 18px; font-weight: 700; }
+.buttons button:not(:disabled):hover { border-color: #c8aa6e; background: #2b3138; }
+.buttons .yes { color: #0ac8b9; }
+.buttons .no { color: #e84057; }
+.buttons button:disabled { opacity: .55; }
+.buttons button.chosen { opacity: 1; border-color: #c8aa6e; }
+
+.ready { align-items: center; text-align: center; }
+.ready .boxes { justify-content: center; margin-top: 10px; }
+.ready .box { width: 20px; height: 20px; font-size: 13px; }
+.dial { position: relative; width: 60px; height: 60px; margin-bottom: 10px; }
+.dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.dial circle { fill: none; stroke-width: 4; }
+.dial .track { stroke: rgba(240, 230, 210, .15); }
+.dial .ring { stroke: #c8aa6e; stroke-linecap: round; }
+.dial .seconds { position: absolute; inset: 0; display: grid; place-items: center; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.accept { width: 100%; height: 40px; border: 1px solid #c8aa6e; background: linear-gradient(#1e2328, #0a1428); font-size: 16px; font-weight: 700; letter-spacing: .12em; color: #c8aa6e; }
+.accept:not(:disabled):hover { color: #f0e6d2; border-color: #f0e6d2; }
+.accept:disabled, .decline:disabled { opacity: .55; }
+.accept.chosen { opacity: 1; color: #0ac8b9; border-color: #0ac8b9; }
+.decline { margin-top: 6px; border: 0; background: transparent; font-size: 12px; color: rgba(240, 230, 210, .6); }
+.decline:not(:disabled):hover { color: #e84057; }
+.decline.chosen { opacity: 1; color: #e84057; }
+
+.roster-head { padding: 10px 12px; border: 1px solid #c8aa6e; border-radius: 4px; background: rgba(10, 20, 28, .95); font-weight: 700; }

@@ -279,6 +279,10 @@ const en = {
   voteTitleReady: 'Ready check',
   voteTitleKick: (name: string) => `Remove ${name}?`,
   voteBusy: 'A vote is already running',
+  voteYes: 'Yes',
+  voteNo: 'No',
+  voteAccept: 'ACCEPT',
+  voteDecline: 'Decline',
   voteResultFf: (passed: boolean, yes: number, voters: number) =>
     `Surrender vote ${passed ? 'passed' : 'failed'} (${yes} / ${voters})`,
   voteResultKick: (passed: boolean, name: string, yes: number, voters: number) =>
@@ -574,6 +578,10 @@ const zh: Strings = {
   voteTitleReady: '准备确认',
   voteTitleKick: (name) => `移出 ${name}？`,
   voteBusy: '已有投票在进行',
+  voteYes: '同意',
+  voteNo: '反对',
+  voteAccept: '接受',
+  voteDecline: '拒绝',
   voteResultFf: (passed, yes, voters) => `投降投票${passed ? '通过' : '失败'}（${yes} / ${voters}）`,
   voteResultKick: (passed, name, yes, voters) => `移出 ${name} 的投票${passed ? '通过' : '失败'}（${yes} / ${voters}）`,
   readyAll: '所有人都准备好了',

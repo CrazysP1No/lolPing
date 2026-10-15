@@ -1,11 +1,15 @@
+import type { HistoryLine } from '../main/roomHistory';
 import type { EmoteArt, EmoteFile, EmoteRef, ImportResult, SoundResult } from './emotes';
+import type { Lang } from './i18n';
 import type { PingId } from './pings';
 import type { Platform } from './platform';
 import type { HelperStatus, WheelKind } from './protocol';
-import type { JoinResult, RoomState } from './room';
+import type { JoinResult, RoomState, RoomStateCore } from './room';
 import type { TagRgb } from './roomColors';
+import { PEER_RE } from './roomProtocol';
 import type { OverlaySettings, RoomTextStyle, Settings } from './settings';
 import type { UpdateState } from './update';
+import type { VoteView } from './voteTally';
 
 export interface Point {
   x: number;
@@ -67,6 +71,58 @@ export interface TextApi {
   submit(text: string): Promise<TextAnswer>;
   cancel(): void;
   strings(): Promise<TextBoxText | null>;
+}
+
+export const PANEL_CH = { state: 'panel:state', action: 'panel:action' } as const;
+
+/** Everything a panel window draws. The roster and the vote widget get the same shape, so one message feeds either. */
+export interface PanelState {
+  view: 'roster' | 'vote';
+  lang: Lang;
+  /** The room's member limit. */
+  max: number;
+  room: RoomStateCore;
+  history: readonly HistoryLine[];
+  vote: VoteView | null;
+  /** The room text and room votes feature switches. */
+  textOn: boolean;
+  votesOn: boolean;
+}
+
+/** What a click in a panel window asks for. `x`, `y` of `alive` are the click's screen point in DIPs. */
+export type PanelAction =
+  | { t: 'alive'; peer: string; x: number; y: number }
+  | { t: 'mute'; peer: string; on: boolean }
+  | { t: 'kick'; peer: string }
+  | { t: 'vote'; kind: 'ff' | 'ready' }
+  | { t: 'ballot'; yes: boolean };
+
+export interface PanelApi {
+  /** Calls `cb` with every state the main process sends; returns the way to stop. */
+  on(cb: (state: PanelState) => void): () => void;
+  act(action: PanelAction): void;
+}
+
+/** A panel window is only a view: whatever it sends is checked here from `unknown`, field by field. */
+export function parsePanelAction(raw: unknown): PanelAction | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const a = raw as Record<string, unknown>;
+  const isPeer = (v: unknown): v is string => typeof v === 'string' && PEER_RE.test(v);
+  const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  switch (a.t) {
+    case 'alive':
+      return isPeer(a.peer) && isNum(a.x) && isNum(a.y) ? { t: 'alive', peer: a.peer, x: a.x, y: a.y } : null;
+    case 'mute':
+      return isPeer(a.peer) && typeof a.on === 'boolean' ? { t: 'mute', peer: a.peer, on: a.on } : null;
+    case 'kick':
+      return isPeer(a.peer) ? { t: 'kick', peer: a.peer } : null;
+    case 'vote':
+      return a.kind === 'ff' || a.kind === 'ready' ? { t: 'vote', kind: a.kind } : null;
+    case 'ballot':
+      return typeof a.yes === 'boolean' ? { t: 'ballot', yes: a.yes } : null;
+    default:
+      return null;
+  }
 }
 
 /** overlay renderer → main: string[] of asset files that failed to load. */
