@@ -40,7 +40,7 @@ export class DanmakuLanes {
   }
 
   /** The lowest free lane for a line `widthPx` wide, or null when every lane is busy. Lines start at the screen's right edge. */
-  take(widthPx: number, _screenWidthPx: number, speedPxS: number): number | null {
+  take(widthPx: number, speedPxS: number): number | null {
     const t = this.now();
     const lane = this.freeAt.findIndex((at) => at <= t);
     if (lane < 0) return null;

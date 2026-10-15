@@ -88,7 +88,7 @@ export class TextStage {
     }
     const lanes = this.lanesFor(window.innerHeight);
     for (let next = this.waiting[0]; next !== undefined; next = this.waiting[0]) {
-      const lane = lanes.take(next.widthPx, window.innerWidth, DANMAKU_SPEED_PX_S);
+      const lane = lanes.take(next.widthPx, DANMAKU_SPEED_PX_S);
       if (lane === null) {
         this.pumpTimer = setTimeout(() => this.pump(), lanes.nextFreeMs() + 1);
         return;

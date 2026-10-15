@@ -54,30 +54,30 @@ describe('roomTextLayout', () => {
   describe('DanmakuLanes', () => {
     it('gives each simultaneous line its own lane and then none', () => {
       const lanes = new DanmakuLanes(2, () => 0);
-      expect(lanes.take(300, 1920, 160)).toBe(0);
-      expect(lanes.take(300, 1920, 160)).toBe(1);
-      expect(lanes.take(300, 1920, 160)).toBeNull();
+      expect(lanes.take(300, 160)).toBe(0);
+      expect(lanes.take(300, 160)).toBe(1);
+      expect(lanes.take(300, 160)).toBeNull();
     });
 
     it('frees a lane once the line tail plus a 24 px gap has entered the screen', () => {
       let t = 0;
       const lanes = new DanmakuLanes(1, () => t);
-      expect(lanes.take(296, 1920, 160)).toBe(0);
+      expect(lanes.take(296, 160)).toBe(0);
       t = 1999;
-      expect(lanes.take(296, 1920, 160)).toBeNull();
+      expect(lanes.take(296, 160)).toBeNull();
       t = 2000; // (296 + 24) px at 160 px/s
-      expect(lanes.take(296, 1920, 160)).toBe(0);
+      expect(lanes.take(296, 160)).toBe(0);
     });
 
     it('reuses the lowest free lane and says how long until one frees', () => {
       let t = 0;
       const lanes = new DanmakuLanes(2, () => t);
-      lanes.take(136, 1920, 160); // busy for 1000 ms
-      lanes.take(456, 1920, 160); // busy for 3000 ms
+      lanes.take(136, 160); // busy for 1000 ms
+      lanes.take(456, 160); // busy for 3000 ms
       expect(lanes.nextFreeMs()).toBe(1000);
       t = 1500;
       expect(lanes.nextFreeMs()).toBe(0);
-      expect(lanes.take(100, 1920, 160)).toBe(0);
+      expect(lanes.take(100, 160)).toBe(0);
     });
   });
 });
