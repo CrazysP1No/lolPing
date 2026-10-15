@@ -637,6 +637,19 @@ static void test_panel_hides_when_repeats_stop() {
   CHECK(r.swallow && panelShows(r, true));
 }
 
+static void test_panel_stays_shown_while_another_key_is_pressed() {
+  Decision d = withPanel();
+  InputEvent down = kd(TAB);
+  down.timeMs = 0;
+  d.onEvent(down);
+  // Windows stops Tab's repeats once Shift or W goes down: those presses keep the panel up.
+  InputEvent other = kd(0x57);
+  other.timeMs = 1000;
+  CHECK(!d.onEvent(other).swallow);
+  CHECK(d.tick(2000).emits.empty());
+  CHECK(panelShows(d.tick(2600), false));
+}
+
 static void test_panel_repeats_keep_it_shown() {
   Decision d = withPanel();
   InputEvent down = kd(TAB);
@@ -1361,6 +1374,7 @@ int main() {
   test_panel_key_up_after_config_change_is_swallowed();
   test_panel_key_up_while_paused_is_swallowed();
   test_panel_hides_when_repeats_stop();
+  test_panel_stays_shown_while_another_key_is_pressed();
   test_panel_repeats_keep_it_shown();
   test_panel_with_no_repeat_watchdog_stays_shown_through_a_long_hold();
   test_panel_repeat_gap_is_a_setting();

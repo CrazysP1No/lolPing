@@ -251,6 +251,9 @@ void Decision::onKeyDown(const InputEvent& e, Result& r) {
   const uint32_t vk = e.vk & 0xFF;
   const bool repeat = keyDown_[vk];
   keyDown_[vk] = true;
+  // Windows stops a key's auto-repeat once another key goes down, so a key press while the panel key is held
+  // is proof it is still held: keep the repeat watchdog from hiding the panel.
+  if (panelDown_ != 0 && vk != panelDown_) lastPanelMs_ = e.timeMs;
 
   // Another program's chord is starting (Alt+Tab's switcher, Win+Tab's task view, Alt+F4...):
   // until every trigger is released, clicks belong to that context and must not open a wheel.
