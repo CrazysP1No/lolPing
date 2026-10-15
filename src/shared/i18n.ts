@@ -239,7 +239,7 @@ const en = {
   toastMemberLeft: (name: string) => `${name} left`,
   toastMemberLost: (name: string) => `${name} disconnected`,
   toastRoomFull: 'Room is full',
-  toastRoomFullBody: 'A room holds up to 8 people',
+  toastRoomFullBody: 'A room holds up to 16 people',
   toastNoCode: 'No room code on the clipboard',
   toastNoCodeBody: 'Copy a code like PING-XXXXX-XXXXX first',
 
@@ -493,7 +493,7 @@ const zh: Strings = {
   toastMemberLeft: (name) => `${name} 离开了房间`,
   toastMemberLost: (name) => `${name} 已断开连接`,
   toastRoomFull: '房间已满',
-  toastRoomFullBody: '一个房间最多 8 人',
+  toastRoomFullBody: '一个房间最多 16 人',
   toastNoCode: '剪贴板中没有房间码',
   toastNoCodeBody: '请先复制形如 PING-XXXXX-XXXXX 的房间码',
 

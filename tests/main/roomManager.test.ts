@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
-import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
+import { MAX_MEMBERS, RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
@@ -100,9 +100,11 @@ describe('joining', () => {
     expect(room.state().phase).toBe('idle');
   });
 
-  it('leaves a room that already has 8 other members', async () => {
+  it(`leaves a room that already has ${MAX_MEMBERS} other members`, async () => {
     await room.join(CODE);
-    for (let i = 0; i < 8; i++) new Remote(`${i}`.repeat(16), `lan:10.0.0.${i}:47474`, lan).presence();
+    for (let i = 0; i < MAX_MEMBERS; i++) {
+      new Remote(i.toString(16).repeat(16), `lan:10.0.0.${i}:47474`, lan).presence();
+    }
     await vi.advanceTimersByTimeAsync(3000);
     expect(room.state().phase).toBe('idle');
     expect(toasts).toEqual([{ kind: 'full' }]);

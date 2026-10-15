@@ -11,7 +11,7 @@ import { ReplayGuard } from './replayGuard';
 import { open, seal, type RoomKeys } from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
-export const MAX_MEMBERS = 8;
+export const MAX_MEMBERS = 16;
 const SETTLE_MS = 3000;
 /** Relays can take a while to answer: the "room full" check never waits longer than this after joining. */
 const SETTLE_CAP_MS = 15_000;
