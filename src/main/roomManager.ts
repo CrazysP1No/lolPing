@@ -63,7 +63,7 @@ export interface RemoteEmote {
   x: number;
   y: number;
   ref: EmoteRef;
-  /** The sender's chosen effect for a custom emote; undefined is the plain pop (an app before 0.5.3, or none stored). */
+  /** The sender's chosen effect for a custom emote; undefined is the plain pop (an app before 0.5.2, or none stored). */
   fx?: number;
   /** The sender, so their earlier emote can be replaced: everyone has one on screen at a time. */
   peer: string;

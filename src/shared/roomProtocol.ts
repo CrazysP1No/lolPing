@@ -54,7 +54,7 @@ export interface EmoteMsg extends Base {
   t: 'emote';
   /** A bundled slug (possibly one only a newer app has) or 'c:' + hash of an imported emote. */
   e: EmoteRef;
-  /** The sender's chosen effect for a custom emote, 0–12; absent is the plain pop. An app before 0.5.3 leaves it out. */
+  /** The sender's chosen effect for a custom emote, 0–12; absent is the plain pop. Added in 0.5.2; older apps leave it out. */
   fx?: number;
   d: number;
   x: number;
