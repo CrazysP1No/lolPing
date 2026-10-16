@@ -293,6 +293,11 @@ const en = {
   voteNo: 'No',
   voteAccept: 'ACCEPT',
   voteDecline: 'Decline',
+  voteYouYes: 'You voted yes.',
+  voteYouNo: 'You voted no.',
+  voteEnded: 'The vote is over.',
+  voteStartedBy: (name: string) => `Started by ${name}`,
+  readyAccepted: 'Accepted',
   voteResultFf: (passed: boolean, yes: number, voters: number) =>
     `Surrender vote ${passed ? 'passed' : 'failed'} (${yes} / ${voters})`,
   voteResultKick: (passed: boolean, name: string, yes: number, voters: number) =>
@@ -619,6 +624,11 @@ const zh: Strings = {
   voteNo: '反对',
   voteAccept: '接受',
   voteDecline: '拒绝',
+  voteYouYes: '你投了同意。',
+  voteYouNo: '你投了反对。',
+  voteEnded: '投票已结束。',
+  voteStartedBy: (name) => `由 ${name} 发起`,
+  readyAccepted: '已接受',
   voteResultFf: (passed, yes, voters) => `投降投票${passed ? '通过' : '失败'}（${yes} / ${voters}）`,
   voteResultKick: (passed, name, yes, voters) => `移出 ${name} 的投票${passed ? '通过' : '失败'}（${yes} / ${voters}）`,
   readyAll: '所有人都准备好了',

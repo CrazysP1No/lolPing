@@ -2,9 +2,9 @@ import type { VoteKind } from '../shared/roomProtocol';
 import type { Rect } from './coords';
 
 /** Window sizes in DIPs. A kick uses the surrender widget. */
-export const SURRENDER_SIZE = { width: 300, height: 170 };
-export const READY_SIZE = { width: 240, height: 250 };
-export const ROSTER_SIZE = { width: 340, height: 460 };
+export const SURRENDER_SIZE = { width: 240, height: 110 };
+export const READY_SIZE = { width: 300, height: 330 };
+export const ROSTER_SIZE = { width: 720, height: 470 };
 
 const EDGE_GAP = 16;
 /** How far down the display the surrender widget starts, like League's. */

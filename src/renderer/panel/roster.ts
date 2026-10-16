@@ -37,6 +37,18 @@ export function rowActions(m: RoomMember, s: Pick<PanelState, 'textOn' | 'votesO
 
 export const memberCount = (s: Pick<PanelState, 'room' | 'max'>): string => `${s.room.members.length} / ${s.max}`;
 
+/**
+ * The scoreboard's cells, filled down the left column and then the right, like League's two teams.
+ * A room of `max` has a cell for everyone who could join; an empty one is null.
+ */
+export function boardSlots(members: readonly RoomMember[], max: number): (RoomMember | null)[] {
+  const cells = Math.max(2, Math.ceil(Math.max(max, members.length) / 2) * 2);
+  return Array.from({ length: cells }, (_, i) => members[i] ?? null);
+}
+
+/** The letter on a member's portrait: the first character of the name, as one code point. */
+export const initial = (name: string): string => ([...name.trim()][0] ?? '?').toUpperCase();
+
 /** Whether a list scrolled to `top` shows its end, so a new line should keep it pinned there. */
 export const atBottom = (top: number, clientHeight: number, scrollHeight: number): boolean =>
   scrollHeight - top - clientHeight <= 8;
@@ -65,45 +77,57 @@ function speakerIcon(muted: boolean): SVGSVGElement {
   return svg;
 }
 
+function iconButton(className: string, label: string, onClick: () => void): HTMLButtonElement {
+  const b = el('button', `icon ${className}`);
+  b.type = 'button';
+  b.title = label;
+  b.setAttribute('aria-label', label);
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** A scoreboard row: the portrait with its status badge, the name tag and how they're connected, then mute and kick. */
 function memberRow(m: RoomMember, state: PanelState, t: Strings, act: (a: PanelAction) => void): HTMLElement {
   const can = rowActions(m, state);
-  const row = el('div', `member${m.muted ? ' muted' : ''}`);
+  const color = tagColorCss(m.color, m.rgb);
+  const row = el('div', `member${m.muted ? ' muted' : ''}${m.self ? ' me' : ''}`);
+  row.style.setProperty('--tag', color);
 
   const flags = memberFlags(m);
-  const status = el('span', `status ${flags[0]}`, FLAG_GLYPH[flags[0]]);
-  status.title = statusTip(flags, t);
+  const portrait = el('span', 'portrait', initial(m.name));
+  const badge = el('span', `badge ${flags[0]}`, FLAG_GLYPH[flags[0]]);
+  badge.title = statusTip(flags, t);
+  portrait.append(badge);
 
+  const who = el('div', 'who');
   const tag = el(can.alive ? 'button' : 'span', 'tag', m.name);
-  tag.style.setProperty('--tag', tagColorCss(m.color, m.rgb));
   if (tag instanceof HTMLButtonElement) {
     tag.type = 'button';
     tag.title = t.aliveLine(m.name);
     // The app puts the line at the cursor: the page's own screen point is not in DIPs on every display setup.
     tag.addEventListener('click', () => act({ t: 'alive', peer: m.peer }));
   }
-  row.append(status, tag);
-  if (m.self) row.append(el('span', 'self', t.roomYou));
-  row.append(el('span', 'path', m.self ? '' : t.roomPath[m.path]));
+  who.append(tag, el('span', 'path', m.self ? t.roomYou : t.roomPath[m.path]));
 
+  const icons = el('div', 'icons');
   if (can.mute) {
-    const label = m.muted ? t.roomUnmuteMember : t.roomMuteMember;
-    const mute = el('button', `icon speaker${m.muted ? ' on' : ''}`);
-    mute.type = 'button';
-    mute.title = label;
-    mute.setAttribute('aria-label', label);
+    const mute = iconButton(`speaker${m.muted ? ' on' : ''}`, m.muted ? t.roomUnmuteMember : t.roomMuteMember,
+      () => act({ t: 'mute', peer: m.peer, on: !m.muted }));
     mute.append(speakerIcon(m.muted));
-    mute.addEventListener('click', () => act({ t: 'mute', peer: m.peer, on: !m.muted }));
-    row.append(mute);
+    icons.append(mute);
   }
   if (can.kick) {
-    const label = t.panelKick(m.name);
-    const kick = el('button', 'icon kick', '✕');
-    kick.type = 'button';
-    kick.title = label;
-    kick.setAttribute('aria-label', label);
-    kick.addEventListener('click', () => act({ t: 'kick', peer: m.peer }));
-    row.append(kick);
+    const kick = iconButton('kick', t.panelKick(m.name), () => act({ t: 'kick', peer: m.peer }));
+    kick.textContent = '✕';
+    icons.append(kick);
   }
+  row.append(portrait, who, icons);
+  return row;
+}
+
+function emptyRow(): HTMLElement {
+  const row = el('div', 'member open');
+  row.append(el('span', 'portrait'));
   return row;
 }
 
@@ -119,13 +143,13 @@ function historyLine(line: HistoryLine): HTMLElement {
 }
 
 function footerButton(label: string, kind: 'ff' | 'ready', act: (a: PanelAction) => void): HTMLButtonElement {
-  const b = el('button', `vote-btn ${kind}`, label);
+  const b = el('button', `lol-button ${kind}`, label);
   b.type = 'button';
   b.addEventListener('click', () => act({ t: 'vote', kind }));
   return b;
 }
 
-/** Draws the room panel: the header, the players or the history, and the vote buttons. */
+/** Draws the room panel after League's Tab scoreboard: the tabs on its cap, the players or the history, and the vote buttons. */
 export function renderRoster(root: HTMLElement, state: PanelState, act: (a: PanelAction) => void): void {
   const t = strings(state.lang);
   // Redrawing rebuilds the list: keep where it was scrolled, and keep the history pinned to its newest line.
@@ -134,36 +158,39 @@ export function renderRoster(root: HTMLElement, state: PanelState, act: (a: Pane
   const wasAtBottom = before ? atBottom(before.scrollTop, before.clientHeight, before.scrollHeight) : true;
   const wasTop = before?.scrollTop ?? 0;
 
-  const card = el('section', 'roster');
-  const head = el('header', 'roster-head');
-  head.append(el('span', 'code', state.room.code ?? ''), el('span', 'count', memberCount(state)));
-
-  const tabs = el('nav', 'tabs');
-  for (const [id, label] of [['members', t.panelMembers], ['history', t.panelHistory]] as const) {
+  const cap = el('header', 'cap');
+  const tabButton = (id: Tab, label: string): HTMLButtonElement => {
     const b = el('button', `tab${tab === id ? ' current' : ''}`, label);
     b.type = 'button';
     b.addEventListener('click', () => {
       tab = id;
       renderRoster(root, state, act);
     });
-    tabs.append(b);
-  }
+    return b;
+  };
+  const gem = el('div', 'gem');
+  gem.append(el('span', 'count', memberCount(state)));
+  cap.append(tabButton('members', t.panelMembers), gem, tabButton('history', t.panelHistory));
 
-  const list = el('div', `list ${tab}`);
+  const board = el('section', 'board lol-frame');
+  board.append(el('div', 'board-head', state.room.code ?? ''));
+  const list = el('div', `list lol-scroll ${tab}`);
   if (tab === 'members') {
-    for (const m of state.room.members) list.append(memberRow(m, state, t, act));
+    const slots = boardSlots(state.room.members, state.max);
+    list.style.setProperty('--rows', String(slots.length / 2));
+    for (const m of slots) list.append(m ? memberRow(m, state, t, act) : emptyRow());
   } else if (state.history.length === 0) {
     list.append(el('div', 'empty', t.panelHistoryEmpty));
   } else {
     for (const line of state.history) list.append(historyLine(line));
   }
-  card.append(head, tabs, list);
+  board.append(list);
 
   if (state.votesOn) {
-    const foot = el('footer', 'roster-foot');
+    const foot = el('footer', 'board-foot');
     foot.append(footerButton(t.panelSurrender, 'ff', act), footerButton(t.panelReadyCheck, 'ready', act));
-    card.append(foot);
+    board.append(foot);
   }
-  root.replaceChildren(card);
+  root.replaceChildren(cap, board);
   list.scrollTop = tab === 'history' && wasAtBottom ? list.scrollHeight : wasTop;
 }

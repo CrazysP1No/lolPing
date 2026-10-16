@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atBottom, memberCount, memberFlags, rowActions, statusTip } from '../../src/renderer/panel/roster';
+import { atBottom, boardSlots, initial, memberCount, memberFlags, rowActions, statusTip } from '../../src/renderer/panel/roster';
 import { strings } from '../../src/shared/i18n';
 import type { RoomMember, RoomStateCore } from '../../src/shared/room';
 
@@ -65,5 +65,32 @@ describe('atBottom', () => {
 
   it('is true for a list that fits without scrolling', () => {
     expect(atBottom(0, 400, 300)).toBe(true);
+  });
+});
+
+describe('boardSlots', () => {
+  it('gives the room limit in cells, members first and the rest empty', () => {
+    const slots = boardSlots([member(), member({ peer: 'cc' }), member({ peer: 'dd' })], 16);
+    expect(slots).toHaveLength(16);
+    expect(slots.slice(0, 3).map((m) => m?.peer)).toEqual(['bb', 'cc', 'dd']);
+    expect(slots.slice(3).every((m) => m === null)).toBe(true);
+  });
+
+  it('keeps the two columns even, and never drops a member past the limit', () => {
+    expect(boardSlots([member()], 5)).toHaveLength(6);
+    const many = Array.from({ length: 5 }, (_, i) => member({ peer: `p${i}` }));
+    expect(boardSlots(many, 4).map((m) => m?.peer)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', undefined]);
+  });
+});
+
+describe('initial', () => {
+  it('takes the first character of the name as one code point, upper-cased', () => {
+    expect(initial('alex')).toBe('A');
+    expect(initial(' 小明')).toBe('小');
+    expect(initial('😀 grin')).toBe('😀');
+  });
+
+  it('falls back to a question mark for an empty name', () => {
+    expect(initial('  ')).toBe('?');
   });
 });

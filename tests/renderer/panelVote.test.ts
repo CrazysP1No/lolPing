@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canAnswer, voteBoxes, voteLeft, voteTitle } from '../../src/renderer/panel/vote';
+import { canAnswer, voteBoxes, voteLeft, voteStatus, voteTitle } from '../../src/renderer/panel/vote';
 import { strings } from '../../src/shared/i18n';
 import type { RoomMember } from '../../src/shared/room';
 import { VOTE_MS, type VoteView } from '../../src/shared/voteTally';
@@ -59,5 +59,19 @@ describe('canAnswer', () => {
     expect(canAnswer(v, 'cc', false, 100_000)).toBe(false);
     expect(canAnswer(v, 'zz', false, 50_000)).toBe(false);
     expect(canAnswer(v, undefined, false, 50_000)).toBe(false);
+  });
+});
+
+describe('voteStatus', () => {
+  const en = strings('en');
+
+  it('says what we answered, even once the vote is over', () => {
+    expect(voteStatus(true, false, en)).toBe('You voted yes.');
+    expect(voteStatus(false, true, en)).toBe('You voted no.');
+  });
+
+  it('says the vote is over when we never answered, and gives no line while the buttons still work', () => {
+    expect(voteStatus(undefined, true, en)).toBe('The vote is over.');
+    expect(voteStatus(undefined, false, en)).toBeNull();
   });
 });

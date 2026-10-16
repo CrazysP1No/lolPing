@@ -1,13 +1,15 @@
-:root { color-scheme: dark; font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, sans-serif; }
+@import '../league.css';
+
+:root { color-scheme: dark; font-family: var(--sans); }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-/* The League chat look: a dark translucent fill with a thin gold edge. */
-main { height: 100%; padding: 6px 10px 4px; border: 1px solid #c8aa6e; border-radius: 6px; background: rgba(10, 20, 28, .94); color: #f0e6d2; }
-.row { display: flex; align-items: center; gap: 8px; height: 34px; }
-input { flex: 1; min-width: 0; height: 100%; border: 0; border-bottom: 1px solid rgba(200, 170, 110, .35); padding: 0 2px; background: transparent; color: inherit; font: 600 15px/1 inherit; outline: none; }
-input::placeholder { color: rgba(240, 230, 210, .45); font-weight: 400; }
-input:focus { border-bottom-color: #c8aa6e; }
-#count { flex: none; color: rgba(240, 230, 210, .6); font-size: 12px; font-variant-numeric: tabular-nums; }
-#count.full { color: #ff8a65; }
-small { display: block; height: 18px; margin-top: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: rgba(240, 230, 210, .5); font-size: 11px; line-height: 18px; }
-small.warn { color: #ff8a65; }
+/* The in-game options look: a gold-edged dark blue frame around a sunken field. */
+main { height: 100%; padding: 6px 8px 3px; color: var(--gold-1); }
+.row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border: 1px solid var(--gold-5); background: var(--hextech); }
+.row:focus-within { border-color: var(--gold-3); box-shadow: 0 0 6px rgba(200, 170, 110, .3); }
+input { flex: 1; min-width: 0; height: 100%; border: 0; padding: 0; background: transparent; color: inherit; font: 600 15px/1 var(--sans); outline: none; }
+input::placeholder { color: var(--grey-2); font-weight: 400; }
+#count { flex: none; color: var(--grey-1); font-size: 12px; font-variant-numeric: tabular-nums; }
+#count.full { color: var(--red); }
+small { display: block; height: 18px; margin-top: 1px; padding: 0 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--grey-1); font-size: 11px; line-height: 18px; }
+small.warn { color: var(--red); }
