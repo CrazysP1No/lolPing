@@ -66,7 +66,7 @@ export function resolveEmoteArt(ref: EmoteRef, custom: readonly CustomEmote[], r
     const sound = emote.sound && !remote ? { sound: customSoundUrl(hash) } : {};
     return { kind: 'custom', url: animated ? customAnimUrl(hash) : customStillUrl(hash), animated, ...sound, fx: emote.fx ?? 0 };
   }
-  // A friend's cached still has no entry here, so it plays the plain pop: the effect lives on the owner's machine.
+  // A friend's cached still has no entry here, so the plain pop is its default; the sender's message can still carry their fx.
   return remote && cacheHas(hash) ? { kind: 'custom', url: customStillUrl(hash), animated: false, fx: 0 } : { kind: 'placeholder' };
 }
 

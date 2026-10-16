@@ -99,6 +99,18 @@ describe('emote messages', () => {
     }
   });
 
+  it('carries the sender’s chosen effect through', () => {
+    const m: EmoteMsg = { ...emote, fx: 6 };
+    expect(validateMessage(m)).toEqual(m);
+    expect(decodeMessage(encodeMessage(m))).toEqual(m);
+  });
+
+  it('drops a malformed effect rather than the emote, which then plays the plain pop', () => {
+    for (const fx of [13, -1, 1.5, '6', null]) {
+      expect(validateMessage({ ...emote, fx })).toEqual(emote);
+    }
+  });
+
   it('accepts a well-formed slug this version does not know (a newer peer’s emote)', () => {
     expect(validateMessage({ ...emote, e: 'brand_new_2' })).toEqual({ ...emote, e: 'brand_new_2' });
   });

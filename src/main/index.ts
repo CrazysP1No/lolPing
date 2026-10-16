@@ -304,7 +304,9 @@ function start(): void {
   room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
-    if (shared) room.sendEmote(p.ref, shared);
+    // The effect rides on the message, so friends see the one its sender picked even before they have the image.
+    const fx = settings.customEmotes.find((c) => c.id === p.ref)?.fx;
+    if (shared) room.sendEmote(p.ref, shared, fx);
   });
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {

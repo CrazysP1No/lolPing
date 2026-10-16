@@ -150,8 +150,12 @@ export class OverlayManager extends EventEmitter {
   }
 
   /** A room member's emote, already mapped onto one of our displays. It replaces their earlier one, whichever display that was on. */
-  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; peer: string; tag: PingTag }): void {
-    this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: this.resolveArt(p.ref, true), x: p.x, y: p.y, tag: p.tag });
+  spawnRemoteEmote(p: { displayId: number; x: number; y: number; ref: EmoteRef; fx?: number; peer: string; tag: PingTag }): void {
+    const art = this.resolveArt(p.ref, true);
+    // The effect is the sender's choice, so the one on their message wins — over a cached still's plain pop, and over
+    // the effect we picked if we happen to have the same image imported.
+    const withFx = art.kind === 'custom' ? { ...art, fx: p.fx ?? 0 } : art;
+    this.send(p.displayId, 'emote:spawn', { owner: p.peer, art: withFx, x: p.x, y: p.y, tag: p.tag });
     this.clearElsewhere(p.displayId, p.peer);
   }
 

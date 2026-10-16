@@ -60,6 +60,8 @@ export interface RemoteEmote {
   x: number;
   y: number;
   ref: EmoteRef;
+  /** The sender's chosen effect for a custom emote; undefined is the plain pop (an app before 0.5.3, or none stored). */
+  fx?: number;
   /** The sender, so their earlier emote can be replaced: everyone has one on screen at a time. */
   peer: string;
   tag: MemberTag;
@@ -193,8 +195,9 @@ export class RoomManager extends EventEmitter {
     this.sendShared({ t: 'ping', ping, ...shared });
   }
 
-  sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }): void {
-    this.sendShared({ t: 'emote', e, ...shared });
+  /** `fx` is the effect stored on the emote's entry here; absent (the plain pop) leaves the field out for the older peers. */
+  sendEmote(e: EmoteRef, shared: { d: number; x: number; y: number }, fx?: number): void {
+    this.sendShared({ t: 'emote', e, ...shared, ...(fx !== undefined ? { fx } : {}) });
   }
 
   /** A ping or an emote: each member gets it over its own route; shared transports get one send, within the relay cap. */
@@ -459,7 +462,7 @@ export class RoomManager extends EventEmitter {
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag: MemberTag = { name: m.name, color: m.color, rgb: m.rgb };
     if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
-    else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
+    else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, fx: msg.fx, peer: m.peer, tag } satisfies RemoteEmote);
   }
 
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {

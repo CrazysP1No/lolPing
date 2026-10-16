@@ -1,4 +1,4 @@
-import { ANNOUNCED_MAX, HASH_RE, isEmoteRefShape, type EmoteRef } from './emotes';
+import { ANNOUNCED_MAX, HASH_RE, isEmoteFx, isEmoteRefShape, type EmoteRef } from './emotes';
 import { isPingId, type PingId } from './pings';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 
@@ -45,6 +45,8 @@ export interface EmoteMsg extends Base {
   t: 'emote';
   /** A bundled slug (possibly one only a newer app has) or 'c:' + hash of an imported emote. */
   e: EmoteRef;
+  /** The sender's chosen effect for a custom emote, 0–12; absent is the plain pop. An app before 0.5.3 leaves it out. */
+  fx?: number;
   d: number;
   x: number;
   y: number;
@@ -132,10 +134,12 @@ export function validateMessage(raw: unknown): RoomMessage | null {
       return { t, ...base, ping, d: d as number, x, y };
     }
     case 'emote': {
-      const { e, d, x, y } = raw;
+      const { e, fx, d, x, y } = raw;
       if (!isEmoteRefShape(e) || !Number.isInteger(d) || (d as number) < 1 || (d as number) > MAX_DISPLAY) return null;
       if (!isUnit(x) || !isUnit(y)) return null;
-      return { t, ...base, e, d: d as number, x, y };
+      // A malformed effect is dropped rather than the whole emote, the way a malformed tag colour is: the sender's
+      // moment still plays, as the plain pop.
+      return { t, ...base, e, d: d as number, x, y, ...(isEmoteFx(fx) ? { fx } : {}) };
     }
     case 'want': {
       const { to, h, need } = raw;
