@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { emoteFxContent } from '../../src/renderer/shared/emoteFx';
+import { emoteFxContent, warmFx } from '../../src/renderer/shared/emoteFx';
 import { EmoteStage } from '../../src/renderer/overlay/emoteStage';
 
 /** Just enough of the DOM for EmoteStage: elements with classes, children, text and a src. */
@@ -254,5 +254,36 @@ describe('emoteFxContent (the effect picker builds the same nodes)', () => {
     const fx = emoteFxContent(6, url, 100) as unknown as FakeElement;
     fx.children[0].dispatch('error');
     expect(fx.find('bubble')).toHaveLength(1);
+  });
+});
+
+describe('warmFx', () => {
+  const decoded: string[] = [];
+  class FakeImage {
+    src = '';
+    decode(): Promise<void> {
+      decoded.push(this.src);
+      return Promise.resolve();
+    }
+  }
+
+  beforeEach(() => {
+    decoded.length = 0;
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag), body: new FakeElement('body') });
+    vi.stubGlobal('Image', FakeImage);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+  });
+
+  it('decodes every glow sprite the effects draw, once each, and cleans its warm frame away', () => {
+    warmFx();
+    expect(new Set(decoded).size).toBe(decoded.length); // no sprite asked for twice
+    for (const name of ['light_01', 'light_02', 'flare_01', 'spark_03', 'muzzle_03', 'star_05', 'star_08', 'twirl_01', 'circle_03', 'circle_05']) {
+      expect(decoded).toContain(`../fx/${name}.png`);
+    }
+    const document_ = globalThis.document as unknown as { body: FakeElement };
+    expect(document_.body.children).toHaveLength(0); // the off-screen frame painted and left
   });
 });

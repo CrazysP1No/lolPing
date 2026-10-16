@@ -157,3 +157,31 @@ export function emoteFxContent(variant: number, url: string, sizePx: number): HT
   for (const o of ornaments(variant, sizePx, seedFromUrl(url))) fx.append(o);
   return fx;
 }
+
+/**
+ * Pays what the first effect on a page would otherwise pay mid-gesture: decoding every glow sprite, and painting one
+ * off-screen frame of the tint-filter + screen-blend pipeline (a filter chain compiles its shaders the first time it
+ * is painted, not loaded). Call once from a page that can show effects; after it, the picker opens and the first
+ * ornamented emote lands without the hitch.
+ */
+export function warmFx(): void {
+  const urls = new Set<string>();
+  for (const spec of Object.values(FX_SPECS)) {
+    for (const s of spec.blobs.sprites) urls.add(fxSprite(s));
+    urls.add(fxSprite(spec.spark));
+  }
+  for (const url of urls) {
+    const img = new Image();
+    img.src = url;
+    void img.decode().catch(() => undefined); // a missing sprite is the placeholder's business, not a crash here
+  }
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:0;top:0;width:8px;height:8px;opacity:.01;pointer-events:none;';
+  const root = document.createElement('div');
+  root.className = 'emote';
+  root.style.setProperty('--size', '8px');
+  root.append(emoteFxContent(6, 'data:,', 8)); // the golden bloom: blobs, ring and spark in one go
+  stage.append(root);
+  document.body.append(stage);
+  requestAnimationFrame(() => requestAnimationFrame(() => stage.remove())); // two frames: one to paint, one to be sure
+}
