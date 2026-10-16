@@ -60,11 +60,17 @@ export class TextStage {
     if (line.tag) root.append(this.nameOf('text-name', line.tag));
     root.append(el('text-body', line.text));
     this.layer.append(root);
-    // The bubble is centred above the point, so near an edge it would be cut off: measure it, then move it in.
-    const at = keepOnScreen(
-      line, { width: root.offsetWidth, height: root.offsetHeight },
-      { width: window.innerWidth, height: window.innerHeight }, SPOT_MARGIN_PX,
-    );
+    // The bubble is centred above the point, so near an edge it would be cut off. Its width depends on where it
+    // sits (it shrinks to fit the space right of `left`), so measure at the point, move it in, and measure again.
+    let at = { x: line.x, y: line.y };
+    for (let pass = 0; pass < 2; pass++) {
+      root.style.left = `${at.x}px`;
+      root.style.top = `${at.y}px`;
+      at = keepOnScreen(
+        line, { width: root.offsetWidth, height: root.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight }, SPOT_MARGIN_PX,
+      );
+    }
     root.style.left = `${at.x}px`;
     root.style.top = `${at.y}px`;
     this.shown.set(id, { owner: line.owner, root, timer: setTimeout(() => this.drop(id), ms) });

@@ -65,6 +65,23 @@ describe('TextStage', () => {
     expect(layer.children[0].style.top).toBe('68px'); // the 60 px bubble sits above the point
   });
 
+  it('measures a spot bubble where it will sit, since it shrinks and grows taller near the right edge', () => {
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const e = new FakeElement();
+        // Like shrink-to-fit: right of x = 1500 the bubble is narrow, and a narrow bubble wraps to a taller one.
+        Object.defineProperty(e, 'offsetWidth', { get: () => (parseFloat(String(e.style.left)) > 1500 ? 100 : 296) });
+        Object.defineProperty(e, 'offsetHeight', { get: () => (parseFloat(String(e.style.left)) > 1500 ? 120 : 60) });
+        return e;
+      },
+    });
+    const shownLayer = new FakeElement();
+    stage = new TextStage(shownLayer as unknown as HTMLElement, () => Date.now());
+    stage.spawn(line({ x: 1900, y: 80 }));
+    expect(shownLayer.children[0].style.left).toBe('1862px');
+    expect(shownLayer.children[0].style.top).toBe('128px');
+  });
+
   it('keeps three lines per owner and drops the oldest of a fourth', () => {
     for (const text of ['1', '2', '3', '4']) stage.spawn(line({ text }));
     expect(layer.children).toHaveLength(3);
