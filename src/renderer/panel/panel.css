@@ -36,7 +36,7 @@ h1, p { margin: 0; }
 /* ---------- ready check: the client's, with its sizes from rcp-fe-lol-navigation.css ---------- */
 /* Drawn at the client's own scale and zoomed to the window. The 530 px body sits 11 px in, because the timer video is
    552 x 554 and spills past the frame. */
-.vote.ready { position: relative; width: 552px; height: 565px; zoom: .6; }
+.vote.ready { position: relative; width: 552px; height: 565px; zoom: .8; }
 .body {
   position: absolute; left: 11px; top: 12px; width: 530px; height: 530px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--gold-1);
@@ -63,7 +63,7 @@ h1, p { margin: 0; }
 .pips .no { border-color: var(--red); background: var(--red); }
 .buttons { position: absolute; bottom: -11px; left: calc(50% - 150px); width: 300px; display: flex; flex-direction: column; align-items: center; }
 .accept {
-  width: 212px; height: 70px; padding: 20px 0 0; border: 0; background: url("/ui/ready-accept.png") 50% / contain no-repeat;
+  width: 212px; height: 70px; padding: 0 0 8px; border: 0; background: url("/ui/ready-accept.png") 50% / contain no-repeat;
   font: 700 18px/22px var(--serif); letter-spacing: .05em; text-transform: uppercase; color: #a3c7c7;
 }
 .accept:not(:disabled):hover { background-image: url("/ui/ready-accept-hover.png"); color: #cdfafa; }
