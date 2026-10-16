@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { emoteFxContent, warmFx } from '../../src/renderer/shared/emoteFx';
+import { emoteFxContent } from '../../src/renderer/shared/emoteFx';
 import { EmoteStage } from '../../src/renderer/overlay/emoteStage';
 
 /** Just enough of the DOM for EmoteStage: elements with classes, children, text and a src. */
@@ -177,40 +177,12 @@ describe('custom emote effects', () => {
   });
 });
 
-describe('ornamented effects (glow sprites)', () => {
-  it('surrounds a bloom emote with tinted glow sprites, a shockwave and a sparkle', () => {
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    const hash = 'aabb' + '0'.repeat(28); // the hash no longer picks the effect: the fx field does
-    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 6 }, 10, 20, { sizePx: 150 });
-    const [fx] = layer.find('emote')[0].find('fx');
-    expect(fx.className.split(' ')).toEqual(['fx', 'v6']);
-    const glows = fx.children.filter((c) => c.className === 'blob');
-    expect(glows).toHaveLength(3);
-    expect(glows[0].style.backgroundImage).toContain('../fx/light_01.png'); // a real sprite, not a CSS shape
-    expect(glows[0].style.filter).toContain('sepia'); // tinted gold by sepia + hue-rotate, not a background colour
-    expect(fx.children.filter((c) => c.className === 'ring')).toHaveLength(1);
-    const sparks = fx.children.filter((c) => c.className === 'spark');
-    expect(sparks).toHaveLength(1);
-    expect(sparks[0].style.backgroundImage).toContain('../fx/star_08.png');
-    stage.clear('self');
-  });
-
-  it('the blast throws the most glows and a jagged muzzle-flash sparkle', () => {
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${'dd'.repeat(16)}.webp`, animated: false, fx: 8 }, 10, 20, { sizePx: 150 });
-    const [fx] = layer.find('emote')[0].find('fx');
-    expect(fx.children.filter((c) => c.className === 'blob')).toHaveLength(4);
-    expect(fx.children.filter((c) => c.className === 'spark')[0].style.backgroundImage).toContain('muzzle_03');
-    stage.clear('self');
-  });
-
-  it('the unornamented effects and the placeholder stay clean', () => {
+describe('plain effects', () => {
+  it('add nothing around the art, and neither does the placeholder', () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement);
     for (let n = 0; n < 6; n++) {
-      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: 0 }, 10, 20, { sizePx: 150 });
+      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: n }, 10, 20, { sizePx: 150 });
       const [fx] = layer.find('emote')[0].find('fx');
       expect(fx.children.filter((c) => c.tagName === 'i')).toHaveLength(0);
       stage.clear('self');
@@ -225,7 +197,7 @@ describe('emoteFxContent (the effect picker builds the same nodes)', () => {
   const url = 'lolping://emotes/still/0123456789abcdef0123456789abcdef.webp';
 
   it('variant 0 is just the art in the plain envelope, with no ornaments', () => {
-    const fx = emoteFxContent(0, url, 100) as unknown as FakeElement;
+    const fx = emoteFxContent(0, url) as unknown as FakeElement;
     expect(fx.className).toBe('fx v0');
     expect(fx.children).toHaveLength(1); // the art, nothing else
     expect(fx.find('blob')).toHaveLength(0);
@@ -233,57 +205,9 @@ describe('emoteFxContent (the effect picker builds the same nodes)', () => {
     expect(fx.find('spark')).toHaveLength(0);
   });
 
-  it('an ornamented variant carries its art, its blots, the shockwave ring and the spark', () => {
-    const fx = emoteFxContent(6, url, 100) as unknown as FakeElement;
-    expect(fx.children[0].src).toBe(url);
-    expect(fx.find('blob')).toHaveLength(3);
-    expect(String(fx.find('blob')[0].style.backgroundImage)).toContain('../fx/light_01.png');
-    expect(String(fx.find('blob')[0].style.filter)).toContain('sepia');
-    expect(fx.find('ring')).toHaveLength(1);
-    expect(fx.find('spark')).toHaveLength(1);
-  });
-
-  it('builds the same ornaments for a url without a hash (the seed just falls back to 0)', () => {
-    const fx = emoteFxContent(6, 'https://example.com/cat.png', 100) as unknown as FakeElement;
-    expect(fx.find('blob')).toHaveLength(3);
-    expect(fx.find('ring')).toHaveLength(1);
-    expect(fx.find('spark')).toHaveLength(1);
-  });
-
   it('an art that cannot load falls back to the placeholder bubble', () => {
-    const fx = emoteFxContent(6, url, 100) as unknown as FakeElement;
+    const fx = emoteFxContent(5, url) as unknown as FakeElement;
     fx.children[0].dispatch('error');
     expect(fx.find('bubble')).toHaveLength(1);
-  });
-});
-
-describe('warmFx', () => {
-  const decoded: string[] = [];
-  class FakeImage {
-    src = '';
-    decode(): Promise<void> {
-      decoded.push(this.src);
-      return Promise.resolve();
-    }
-  }
-
-  beforeEach(() => {
-    decoded.length = 0;
-    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag), body: new FakeElement('body') });
-    vi.stubGlobal('Image', FakeImage);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
-  });
-
-  it('decodes every glow sprite the effects draw, once each, and cleans its warm frame away', () => {
-    warmFx();
-    expect(new Set(decoded).size).toBe(decoded.length); // no sprite asked for twice
-    for (const name of ['light_01', 'light_02', 'flare_01', 'spark_03', 'muzzle_03', 'star_05', 'star_08', 'twirl_01', 'circle_03', 'circle_05']) {
-      expect(decoded).toContain(`../fx/${name}.png`);
-    }
-    const document_ = globalThis.document as unknown as { body: FakeElement };
-    expect(document_.body.children).toHaveLength(0); // the off-screen frame painted and left
   });
 });

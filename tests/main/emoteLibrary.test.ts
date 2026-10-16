@@ -250,8 +250,8 @@ describe('resolveEmoteArt', () => {
   });
 
   it('carries the stored effect through to the art', () => {
-    const picked: CustomEmote = { id: `c:${hash}`, name: 'm', animated: false, fx: 6 };
-    expect(resolveEmoteArt(picked.id, [picked], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 6 });
+    const picked: CustomEmote = { id: `c:${hash}`, name: 'm', animated: false, fx: 5 };
+    expect(resolveEmoteArt(picked.id, [picked], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 5 });
   });
 
   it('plays our own emote’s sound, never a room member’s', () => {
@@ -377,9 +377,9 @@ describe('resolveEmoteArt with the cache', () => {
   });
 
   it('never serves own emotes from the cache, and the library still wins with its animation and its effect', () => {
-    const mine = [{ id: `c:${HASH}`, name: 'Mine', animated: true, fx: 6 }];
-    expect(resolveEmoteArt(`c:${HASH}`, mine, false, () => true)).toEqual({ kind: 'custom', url: customAnimUrl(HASH), animated: true, fx: 6 });
-    expect(resolveEmoteArt(`c:${HASH}`, mine, true, () => true)).toEqual({ kind: 'custom', url: customStillUrl(HASH), animated: false, fx: 6 });
+    const mine = [{ id: `c:${HASH}`, name: 'Mine', animated: true, fx: 5 }];
+    expect(resolveEmoteArt(`c:${HASH}`, mine, false, () => true)).toEqual({ kind: 'custom', url: customAnimUrl(HASH), animated: true, fx: 5 });
+    expect(resolveEmoteArt(`c:${HASH}`, mine, true, () => true)).toEqual({ kind: 'custom', url: customStillUrl(HASH), animated: false, fx: 5 });
   });
 
   it('keeps the placeholder for a malformed ref', () => {

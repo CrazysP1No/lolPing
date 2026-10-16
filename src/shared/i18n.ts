@@ -108,7 +108,7 @@ const en = {
   fxHint: 'Tip: right-click one of your images to pick the effect it plays',
   fxMenuTitle: 'Effect',
   /** The signature effects' names, by variant number, as the picker lists them. */
-  fxNames: ['Plain pop', 'Spin-in', 'Bounce drop', 'Flash focus', 'Pendulum swing', 'Heartbeat', 'Golden bloom', 'Verdant burst', 'Blast', 'Warp', 'Thunderclap', 'Splash', 'Confetti'],
+  fxNames: ['Plain pop', 'Spin-in', 'Bounce drop', 'Flash focus', 'Pendulum swing', 'Heartbeat'],
   yourImages: (n: number, max: number) => `Your images: ${n} of ${max}`,
   importErrType: (file: string) => `${file} isn’t a PNG, JPG, GIF or WebP image.`,
   importErrSize: (file: string) => `${file} is too big: an image can be up to 8 MB and 8192 pixels on its longest side.`,
@@ -450,7 +450,7 @@ const zh: Strings = {
   fxHint: '提示：右键你自己的图片可以选择它的登场特效',
   fxMenuTitle: '登场特效',
   /** 特效名字，按变体序号排列，即选择器宫格里的顺序。 */
-  fxNames: ['经典弹出', '螺旋登场', '落地弹跳', '闪现聚焦', '摆锤摆入', '心跳律动', '金光绽放', '翠绿萌发', '轰然炸开', '传送登场', '雷霆一击', '破水而出', '礼花绽放'],
+  fxNames: ['经典弹出', '螺旋登场', '落地弹跳', '闪现聚焦', '摆锤摆入', '心跳律动'],
   yourImages: (n, max) => `我的图片：${n}/${max}`,
   importErrType: (file) => `“${file}”不是 PNG、JPG、GIF 或 WebP 图片。`,
   importErrSize: (file) => `“${file}”太大：图片最大 8 MB，最长边不超过 8192 像素。`,

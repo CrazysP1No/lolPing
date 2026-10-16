@@ -11,7 +11,7 @@ export interface CustomEmote {
   animated: boolean;
   /** Has a `.sound` file: it plays when we place the emote, on this computer only (rooms never get it). */
   sound?: boolean;
-  /** Which signature effect it plays when it lands: 0–12. Nothing stored (an entry from an older version) plays the plain pop. */
+  /** Which signature effect it plays when it lands: 0–5. Nothing stored (an entry from an older version) plays the plain pop. */
   fx?: number;
 }
 
@@ -51,13 +51,11 @@ export const ANIM_MAX_SIDE = 1024;
 export const SOUND_MAX_BYTES = 1_048_576;
 export const SOUND_MAX_S = 5;
 /**
- * The signature effects a custom emote can play when it lands (13 of them). 0 is the plain pop; the rest replay the
- * grammar the bundled emotes are baked with — a flash or a ring to land, the art popping in, blots of light drifting
- * around a glow, and a burst goodbye: spin-in, bounce drop, flash focus, pendulum swing, heartbeat, golden bloom,
- * verdant burst, blast, warp, thunderclap, splash, confetti. Which one an image plays is stored on its entry
- * (`CustomEmote.fx`, picked by right-clicking it in the settings window); nothing stored plays the plain pop.
+ * The signature effects a custom emote can play when it lands: 0 is the plain pop, then spin-in, bounce drop, flash
+ * focus, pendulum swing and heartbeat. Which one an image plays is stored on its entry (`CustomEmote.fx`, picked by
+ * right-clicking it in the settings window); nothing stored plays the plain pop.
  */
-export const EMOTE_FX_VARIANTS = 13;
+export const EMOTE_FX_VARIANTS = 6;
 
 const SLUG = /^[a-z0-9_]{1,40}$/;
 const CUSTOM = /^c:[0-9a-f]{32}$/;

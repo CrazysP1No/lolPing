@@ -365,10 +365,10 @@ describe('incoming emotes', () => {
   });
 
   it('carries the sender’s effect on the emote, and nothing when they left it out', () => {
-    alex.emote({ fx: 6 });
-    alex.emote({ fx: 13 }); // out of range: dropped, not the emote
+    alex.emote({ fx: 5 });
+    alex.emote({ fx: 6 }); // out of range: dropped, not the emote
     alex.emote({});
-    expect(emotes.map((e) => e.fx)).toEqual([6, undefined, undefined]);
+    expect(emotes.map((e) => e.fx)).toEqual([5, undefined, undefined]);
   });
 
   it('keeps an emote at the very edge of the display inside it', () => {
@@ -431,8 +431,8 @@ describe('outgoing', () => {
     expect(sentMessages('lan:a')[0]).toMatchObject({ t: 'emote', e: 'gg', d: 1, x: 0.1, y: 0.2, peer: SELF });
     expect(sentMessages('lan:a')[0]).not.toHaveProperty('fx'); // the plain pop leaves the field out
     lan.sent = [];
-    room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 }, 6);
-    expect(sentMessages('lan:a')[0]).toMatchObject({ t: 'emote', e: 'gg', fx: 6, peer: SELF });
+    room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 }, 5);
+    expect(sentMessages('lan:a')[0]).toMatchObject({ t: 'emote', e: 'gg', fx: 5, peer: SELF });
     room.setStatusFlags({ paused: true, roomMuted: false });
     lan.sent = [];
     room.sendEmote('gg', { d: 1, x: 0.1, y: 0.2 });

@@ -54,7 +54,7 @@ export class EmoteStage {
     this.live.set(owner, live);
 
     if (art.kind === 'bundled') this.showBundled(live, art.slug);
-    else if (art.kind === 'custom') root.append(emoteFxContent(art.fx, art.url, opts.sizePx));
+    else if (art.kind === 'custom') root.append(emoteFxContent(art.fx, art.url));
     else root.append(envelope(bubble(), 0));
 
     if (opts.tag) {

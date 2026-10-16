@@ -233,9 +233,9 @@ describe('OverlayManager remote and preview emotes', () => {
     const cached: EmoteArt = { kind: 'custom', url, animated: false, fx: 0 };
     const mine: EmoteArt = { kind: 'custom', url, animated: false, fx: 2 };
     resolveArt.mockReturnValueOnce(cached).mockReturnValueOnce(mine);
-    mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, fx: 6, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
+    mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, fx: 5, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
     mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
-    expect(sent(0)[0][1]).toMatchObject({ art: { kind: 'custom', fx: 6 } }); // the sender's pick, not the cache's plain pop
+    expect(sent(0)[0][1]).toMatchObject({ art: { kind: 'custom', fx: 5 } }); // the sender's pick, not the cache's plain pop
     expect(sent(0)[1][1]).toMatchObject({ art: { kind: 'custom', fx: 0 } }); // no fx on the message: the sender's plain pop, whatever we stored
   });
 

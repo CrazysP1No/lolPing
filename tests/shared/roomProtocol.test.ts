@@ -189,13 +189,13 @@ describe('emote messages', () => {
   });
 
   it('carries the sender’s chosen effect through', () => {
-    const m: EmoteMsg = { ...emote, fx: 6 };
+    const m: EmoteMsg = { ...emote, fx: 5 };
     expect(validateMessage(m)).toEqual(m);
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
   it('drops a malformed effect rather than the emote, which then plays the plain pop', () => {
-    for (const fx of [13, -1, 1.5, '6', null]) {
+    for (const fx of [6, -1, 1.5, '5', null]) {
       expect(validateMessage({ ...emote, fx })).toEqual(emote);
     }
   });

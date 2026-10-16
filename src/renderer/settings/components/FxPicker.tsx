@@ -101,7 +101,7 @@ function FxStage({ v, url, tick }: { v: number; url: string; tick: number }) {
     root.style.top = '50%';
     root.style.setProperty('--size', `${ART_PX}px`);
     root.style.setProperty('--dur', `${EMOTE_DURATION_S}s`);
-    root.append(emoteFxContent(v, url, ART_PX));
+    root.append(emoteFxContent(v, url));
     el.replaceChildren(root);
   }, [v, url, tick]);
   return <span className="fxStage" style={{ width: STAGE_PX, height: STAGE_PX }} ref={stage} aria-hidden />;

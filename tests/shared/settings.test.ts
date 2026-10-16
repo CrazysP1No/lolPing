@@ -608,13 +608,13 @@ describe('soundLevel', () => {
 describe('custom emote effects', () => {
   it('keeps a stored effect through normalization, drops a malformed one to the plain pop', () => {
     const raw = { customEmotes: [
-      { id: `c:${'ab'.repeat(16)}`, name: 'A', animated: false, fx: 6 },
-      { id: `c:${'cd'.repeat(16)}`, name: 'B', animated: true, fx: 13 },
+      { id: `c:${'ab'.repeat(16)}`, name: 'A', animated: false, fx: 5 },
+      { id: `c:${'cd'.repeat(16)}`, name: 'B', animated: true, fx: 6 },
       { id: `c:${'ef'.repeat(16)}`, name: 'C', animated: false },
     ] };
     const s = normalizeSettings(raw);
-    expect(s.customEmotes[0]).toMatchObject({ fx: 6 });
-    expect(s.customEmotes[1].fx).toBeUndefined(); // 13 is out of range: the plain pop
+    expect(s.customEmotes[0]).toMatchObject({ fx: 5 });
+    expect(s.customEmotes[1].fx).toBeUndefined(); // 6 is out of range: the plain pop
     expect(s.customEmotes[2].fx).toBeUndefined();
   });
 });

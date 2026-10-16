@@ -10,7 +10,6 @@ import {
 import type { PingTag } from '../../shared/ipc';
 import type { WheelKind } from '../../shared/protocol';
 import { DEFAULT_SETTINGS, overlaySettings, soundLevel, type OverlaySettings } from '../../shared/settings';
-import { warmFx } from '../shared/emoteFx';
 import '../shared/emoteFx.css';
 import { EmoteStage } from './emoteStage';
 import { spawnPing } from './pingFx';
@@ -158,7 +157,6 @@ const assetName = (url: string): string => url.replace(/^(?:\.{1,2}\/)+/, '');
 
 // The same startup warm the sounds and sheets get: without it, the first ornamented emote pays for the glow
 // sprites' decode and shader compile mid-gesture.
-warmFx();
 
 void Promise.all([sounds.load(soundEntries), checkImages()]).then(([missingSounds, missingImages]) => {
   const missing = [...missingSounds.map(assetName), ...missingImages];
