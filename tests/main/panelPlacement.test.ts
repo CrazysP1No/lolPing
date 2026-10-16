@@ -11,7 +11,7 @@ describe('votePlacement', () => {
   });
 
   it('centres the ready check', () => {
-    expect(votePlacement('ready', area)).toEqual({ ...READY_SIZE, x: 100 + (1920 - READY_SIZE.width) / 2, y: 50 + (1000 - READY_SIZE.height) / 2 });
+    expect(votePlacement('ready', area)).toEqual({ ...READY_SIZE, x: 100 + Math.round((1920 - READY_SIZE.width) / 2), y: 50 + Math.round((1000 - READY_SIZE.height) / 2) });
   });
 });
 

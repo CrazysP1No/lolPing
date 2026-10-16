@@ -142,14 +142,14 @@ function historyLine(line: HistoryLine): HTMLElement {
   return row;
 }
 
-function footerButton(label: string, kind: 'ff' | 'ready', act: (a: PanelAction) => void): HTMLButtonElement {
+function voteButton(label: string, kind: 'ff' | 'ready', act: (a: PanelAction) => void): HTMLButtonElement {
   const b = el('button', `lol-button ${kind}`, label);
   b.type = 'button';
   b.addEventListener('click', () => act({ t: 'vote', kind }));
   return b;
 }
 
-/** Draws the room panel after League's Tab scoreboard: the tabs on its cap, the players or the history, and the vote buttons. */
+/** Draws the room panel on League's Tab scoreboard: the tabs on its cap, the vote buttons in its header, then the players or the history. */
 export function renderRoster(root: HTMLElement, state: PanelState, act: (a: PanelAction) => void): void {
   const t = strings(state.lang);
   // Redrawing rebuilds the list: keep where it was scrolled, and keep the history pinned to its newest line.
@@ -172,8 +172,13 @@ export function renderRoster(root: HTMLElement, state: PanelState, act: (a: Pane
   gem.append(el('span', 'count', memberCount(state)));
   cap.append(tabButton('members', t.panelMembers), gem, tabButton('history', t.panelHistory));
 
-  const board = el('section', 'board lol-frame');
-  board.append(el('div', 'board-head', state.room.code ?? ''));
+  // The vote buttons sit either side of the room code, where the scoreboard shows the team scores.
+  const board = el('section', 'board');
+  const head = el('div', 'board-head');
+  if (state.votesOn) head.append(voteButton(t.panelSurrender, 'ff', act));
+  head.append(el('span', 'code', state.room.code ?? ''));
+  if (state.votesOn) head.append(voteButton(t.panelReadyCheck, 'ready', act));
+  board.append(head);
   const list = el('div', `list lol-scroll ${tab}`);
   if (tab === 'members') {
     const slots = boardSlots(state.room.members, state.max);
@@ -185,12 +190,6 @@ export function renderRoster(root: HTMLElement, state: PanelState, act: (a: Pane
     for (const line of state.history) list.append(historyLine(line));
   }
   board.append(list);
-
-  if (state.votesOn) {
-    const foot = el('footer', 'board-foot');
-    foot.append(footerButton(t.panelSurrender, 'ff', act), footerButton(t.panelReadyCheck, 'ready', act));
-    board.append(foot);
-  }
   root.replaceChildren(cap, board);
   list.scrollTop = tab === 'history' && wasAtBottom ? list.scrollHeight : wasTop;
 }

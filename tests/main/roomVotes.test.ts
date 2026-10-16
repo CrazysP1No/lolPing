@@ -277,7 +277,7 @@ describe('voteResultLine', () => {
     expect(voteResultLine(ready, nameOf, strings('en'))).toBe('Everyone is ready');
     const notReady = outcome({ kind: 'ready', declined: ['a'], missing: ['c'] });
     expect(voteResultLine(notReady, nameOf, strings('en'))).toBe('Not ready: Alex, Cy');
-    expect(voteResultLine(notReady, nameOf, strings('zh-CN'))).toBe('未准备：Alex、Cy');
+    expect(voteResultLine(notReady, nameOf, strings('zh-CN'))).toBe('未就位：Alex、Cy');
   });
 
   it('names the member a kick vote was about', () => {

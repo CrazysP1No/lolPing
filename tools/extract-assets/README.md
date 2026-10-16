@@ -1,6 +1,6 @@
 # Asset extraction
 
-`assets/sounds`, `assets/textures` and `assets/emotes` were extracted from a local League of Legends install. This tool regenerates them after a League patch changes the pings or emotes.
+`assets/sounds`, `assets/textures`, `assets/emotes` and `assets/ui` were extracted from a local League of Legends install. This tool regenerates them after a League patch changes the pings or emotes.
 
 ## Sounds
 
@@ -36,6 +36,19 @@ py -3.14 tools/extract-assets/extract_assets.py --derived
 No game file says which sound those two pings play: `SRP_11` (Bait) and `SRP_6` (Vision Cleared) were identified by listening. `SRP_13` is the structure-defend ping.
 
 Never reference the colourblind (`*_cb*`) files in the app.
+
+## Room UI art
+
+`assets/ui` holds the art the room panel, the vote widgets and the text box are drawn with. `UI_ART` in the script lists each file: where it comes from and, for an atlas, the box cut out of it. Needs Pillow.
+
+```bash
+py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --ui
+```
+
+- In-game, from `Game/DATA/FINAL/UI.wad.client`: the surrender widget (`SurrenderAtlas.tex`), the Tab scoreboard (`ScoreboardAtlas.tex`), the options window and its buttons (`OptionsMenuAtlas.tex`). League's fonts are not taken: they are licensed from a type foundry.
+- Client, from the plugin WADs: the ready check frame (`rcp-fe-lol-static-assets`), the Summoner's Rift scene and map icon (`rcp-be-lol-game-data`), and the lock-in button used as Accept (`rcp-fe-lol-champ-select`).
+
+The crop boxes were measured from the decoded atlases. After a patch that moves things in an atlas, decode it again and check each piece.
 
 ## Emotes
 

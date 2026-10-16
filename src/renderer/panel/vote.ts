@@ -40,10 +40,6 @@ export function voteTitle(v: VoteView, members: readonly RoomMember[], t: String
 }
 
 const MARK = { yes: '✓', no: '✗' } as const;
-/** The ready check's timer runs round the edge of its disc. */
-const RING_RADIUS = 128;
-const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K, className: string, text?: string,
@@ -54,13 +50,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
-function svg(tag: string, attrs: Record<string, string | number>): SVGElement {
-  const e = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  return e;
-}
-
-/** One mark per voter: the surrender widget's bar segments, or the ready check's diamonds. */
+/** One mark per voter: the surrender widget's bar segments. */
 function marks(className: string, boxes: readonly VoteBox[]): HTMLElement {
   const row = el('div', className);
   for (const b of boxes) {
@@ -71,44 +61,8 @@ function marks(className: string, boxes: readonly VoteBox[]): HTMLElement {
   return row;
 }
 
-/** The ready check's disc: gold rings, the timer arc, and a dark blue face. */
-function disc(): { face: SVGSVGElement; ring: SVGElement } {
-  const face = document.createElementNS(SVG_NS, 'svg');
-  face.setAttribute('class', 'disc');
-  face.setAttribute('viewBox', '0 0 300 300');
-  const defs = svg('defs', {});
-  const glow = svg('radialGradient', { id: 'face', cx: '50%', cy: '42%', r: '60%' });
-  glow.append(svg('stop', { offset: '0%', 'stop-color': '#1b4150' }), svg('stop', { offset: '100%', 'stop-color': '#050f16' }));
-  defs.append(glow);
-  const ring = svg('circle', {
-    class: 'timer', cx: 150, cy: 150, r: RING_RADIUS, 'stroke-dasharray': RING_LENGTH, transform: 'rotate(-90 150 150)',
-  });
-  face.append(
-    defs,
-    svg('circle', { class: 'rim', cx: 150, cy: 150, r: 142 }),
-    svg('circle', { class: 'track', cx: 150, cy: 150, r: RING_RADIUS }),
-    ring,
-    svg('circle', { class: 'band', cx: 150, cy: 150, r: 118 }),
-    svg('circle', { class: 'face', cx: 150, cy: 150, r: 110 }),
-  );
-  return { face, ring };
-}
-
-/** A gold frame with a slash through it, after the client's match-found crest. */
-function crest(): SVGSVGElement {
-  const icon = document.createElementNS(SVG_NS, 'svg');
-  icon.setAttribute('class', 'crest');
-  icon.setAttribute('viewBox', '0 0 48 48');
-  icon.append(
-    svg('rect', { x: 4, y: 4, width: 40, height: 40, rx: 11, 'stroke-width': 3 }),
-    svg('rect', { x: 10, y: 10, width: 28, height: 28, rx: 6, 'stroke-width': 1.5 }),
-    svg('path', { d: 'M15 33L33 15', 'stroke-width': 3 }),
-  );
-  return icon;
-}
-
 /** What the countdown moves: set on every draw, updated by `tick`. */
-let countdown: { vote: VoteView; over: boolean; bar: HTMLElement | null; ring: SVGElement | null } | null = null;
+let countdown: { vote: VoteView; over: boolean; bar: HTMLElement } | null = null;
 
 let ticking = false;
 
@@ -117,15 +71,13 @@ function tick(): void {
     ticking = false;
     return;
   }
-  const { vote, over, bar, ring } = countdown;
-  const left = voteLeft(vote, Date.now());
-  if (bar) bar.style.transform = `scaleX(${left})`;
-  if (ring) ring.setAttribute('stroke-dashoffset', String(RING_LENGTH * (1 - left)));
+  const { vote, over, bar } = countdown;
+  bar.style.transform = `scaleX(${voteLeft(vote, Date.now())})`;
   if (over) ticking = false; // drawn once more, now that the result is in
   else requestAnimationFrame(tick);
 }
 
-/** Draws the open vote into `root`: League's surrender widget (also used for a kick), or the client's ready check. */
+/** Draws a surrender or kick vote into `root` as League's in-game surrender widget. The ready check is `readyCheck.ts`. */
 export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelAction) => void): void {
   const v = state.vote;
   if (!v) {
@@ -138,11 +90,9 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
   const me = members.find((m) => m.self)?.peer;
   const mine = me === undefined ? undefined : v.ballots[me];
   const answerable = canAnswer(v, me, state.voteOver, Date.now());
-  const boxes = voteBoxes(v, members);
 
-  const answerButton = (yes: boolean, className: string, label: string, name = label): HTMLButtonElement => {
-    const b = el('button', `${className}${mine === yes ? ' chosen' : ''}`);
-    b.append(el('span', 'label', label));
+  const answerButton = (yes: boolean, className: string, label: string, name: string): HTMLButtonElement => {
+    const b = el('button', className, label);
     b.type = 'button';
     b.setAttribute('aria-label', name);
     b.disabled = !answerable;
@@ -150,33 +100,17 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
     return b;
   };
 
-  let card: HTMLElement;
-  let bar: HTMLElement | null = null;
-  let ring: SVGElement | null = null;
-  if (v.kind === 'ready') {
-    card = el('section', 'vote ready');
-    const drawn = disc();
-    ring = drawn.ring;
-    const inside = el('div', 'inside');
-    const starter = members.find((m) => m.peer === v.starter)?.name;
-    inside.append(crest(), el('h1', 'title', voteTitle(v, members, t)));
-    if (starter) inside.append(el('p', 'sub', t.voteStartedBy(starter)));
-    inside.append(marks('pips', boxes));
-    card.append(drawn.face, inside, answerButton(true, 'accept', mine === true ? t.readyAccepted : t.voteAccept),
-      answerButton(false, 'decline', t.voteDecline));
-  } else {
-    card = el('section', 'vote surrender');
-    bar = el('div', 'bar');
-    const track = el('div', 'track');
-    track.append(bar);
-    const foot = el('div', 'foot');
-    const status = voteStatus(mine, state.voteOver, t);
-    if (status === null) foot.append(answerButton(true, 'yes', MARK.yes, t.voteYes), answerButton(false, 'no', MARK.no, t.voteNo));
-    else foot.append(el('span', 'said', status));
-    card.append(el('h1', 'title', voteTitle(v, members, t)), marks('segments', boxes), track, foot);
-  }
+  const card = el('section', 'vote surrender');
+  const bar = el('div', 'bar');
+  const track = el('div', 'track');
+  track.append(bar);
+  const foot = el('div', 'foot');
+  const status = voteStatus(mine, state.voteOver, t);
+  if (status === null) foot.append(answerButton(true, 'yes', MARK.yes, t.voteYes), answerButton(false, 'no', MARK.no, t.voteNo));
+  else foot.append(el('span', 'said', status));
+  card.append(el('h1', 'title', voteTitle(v, members, t)), marks('segments', voteBoxes(v, members)), track, foot);
   root.replaceChildren(card);
-  countdown = { vote: v, over: state.voteOver, bar, ring };
+  countdown = { vote: v, over: state.voteOver, bar };
   if (!ticking) {
     ticking = true;
     requestAnimationFrame(tick);
