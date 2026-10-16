@@ -11,6 +11,7 @@ export const SETTINGS_CH = {
   emoteImport: 'emote:import',
   emoteRemove: 'emote:remove',
   emoteSound: 'emote:sound',
+  emoteFx: 'emote:fx',
   about: 'app:about',
   openFolder: 'app:openSettingsFolder',
   openProject: 'app:openProjectPage',

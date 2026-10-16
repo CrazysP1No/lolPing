@@ -1,8 +1,10 @@
 import { Button } from '@fluentui/react-components';
 import { DismissRegular } from '@fluentui/react-icons';
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react';
+import type { EmoteRef } from '../../../shared/emotes';
 import { dropPatch, type WheelPatch, type WheelSource, type WheelTarget } from '../../../shared/wheelLayout';
 import { useText } from '../text';
+import { FxPicker, type FxPickerTarget } from './FxPicker';
 
 // Geometry of the editor wheel, in CSS pixels.
 const SIZE = 300;
@@ -43,6 +45,12 @@ interface Props<T extends string> {
   poolExtra?: ReactNode;
   /** Files dragged in from outside and dropped on the pool. Without it the pool takes no files. */
   onDropFiles?: (files: File[]) => void;
+  /** Right-click on one of our emotes opens the effect picker. Absent for wheels of pings. */
+  onFxPick?: (id: EmoteRef, fx: number | undefined) => void;
+  /** Which ids may open that picker (our imported emotes). */
+  fxIds?: readonly EmoteRef[];
+  /** The effect stored on one of those emotes, for marking its tile as the current one. */
+  fxFor?: (id: EmoteRef) => number | undefined;
   onChange: (patch: WheelPatch<T>) => void;
   onPreview: (id: T) => void;
 }
@@ -55,13 +63,21 @@ const activate = (fn: () => void) => (e: KeyboardEvent) => {
 };
 
 export function WheelEditor<T extends string>({
-  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onChange, onPreview,
+  wheel, center, centerOn, trigger, pool, defaults, labels, poolExtra, onDropFiles, onFxPick, fxIds, fxFor, onChange, onPreview,
 }: Props<T>) {
   const t = useText();
   const [picked, setPicked] = useState<WheelSource<T> | null>(null);
   const [hot, setHot] = useState<WheelTarget | null>(null);
   const [filesOver, setFilesOver] = useState(false);
+  const [fxPicker, setFxPicker] = useState<FxPickerTarget | null>(null);
   const drag = useRef<WheelSource<T> | null>(null);
+  const isFxPickable = (id: T): boolean => fxIds?.includes(id) ?? false;
+  const openFx = (id: T, e: MouseEvent): void => {
+    if (!onFxPick || !isFxPickable(id)) return;
+    e.preventDefault();
+    setPicked(null);
+    setFxPicker({ id, x: e.clientX, y: e.clientY, url: icon(id) ?? '', fx: fxFor?.(id) });
+  };
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -131,6 +147,7 @@ export function WheelEditor<T extends string>({
     },
   };
 
+  const fxTip = isFxPickable(center) || pool.some((p) => isFxPickable(p.id)); // the hint only shows when it can apply
   const byId = new Map(pool.map((p) => [p.id, p]));
   const name = (id: T) => byId.get(id)?.name ?? '?';
   const icon = (id: T) => byId.get(id)?.icon;
@@ -169,7 +186,8 @@ export function WheelEditor<T extends string>({
                 style={{ left: C + R_ICON * Math.sin(a), top: C - R_ICON * Math.cos(a) }}
                 {...dragProps({ from: 'slot', id, slot: i })} {...dropProps(i)}
                 onClick={() => clickTarget(i, { from: 'slot', id, slot: i })}
-                onKeyDown={activate(() => clickTarget(i, { from: 'slot', id, slot: i }))}>
+                onKeyDown={activate(() => clickTarget(i, { from: 'slot', id, slot: i }))}
+                onContextMenu={(e) => openFx(id, e)}>
                 <img src={icon(id)} alt="" />
               </div>
             );
@@ -198,7 +216,8 @@ export function WheelEditor<T extends string>({
                 <div key={p.id} className={`weCell${p.onRemove ? ' removable' : ''}`}>
                   <div role="button" tabIndex={0}
                     className={`weTile${isPicked((s) => s.from === 'pool' && s.id === p.id)}`}
-                    {...dragProps({ from: 'pool', id: p.id })} onClick={pick} onKeyDown={activate(pick)}>
+                    {...dragProps({ from: 'pool', id: p.id })} onClick={pick} onKeyDown={activate(pick)}
+                    onContextMenu={(e) => openFx(p.id, e)}>
                     {p.badge ? <span className="weNew">{p.badge}</span> : null}
                     {slot >= 0 ? <span className="weWhere">{t.slotNames[slot]}</span> : null}
                     <img src={p.icon} alt="" />
@@ -223,7 +242,8 @@ export function WheelEditor<T extends string>({
           {poolExtra}
         </div>
       </div>
-      <div className="weHint" aria-live="polite">{picked ? t.wheelPickHint(name(picked.id)) : ' '}</div>
+      <div className="weHint" aria-live="polite">{picked ? t.wheelPickHint(name(picked.id)) : fxTip ? t.fxHint : ' '}</div>
+      {fxPicker && onFxPick ? <FxPicker target={fxPicker} onPick={onFxPick} onClose={() => setFxPicker(null)} /> : null}
     </div>
   );
 }

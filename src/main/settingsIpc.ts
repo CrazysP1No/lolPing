@@ -1,5 +1,5 @@
 import { globalShortcut, ipcMain, shell } from 'electron';
-import { isCustomRef, isEmoteRefShape, type CustomEmote, type EmoteRef, type ImportResult, type SoundResult } from '../shared/emotes';
+import { isCustomRef, isEmoteFx, isEmoteRefShape, type CustomEmote, type EmoteRef, type ImportResult, type SoundResult } from '../shared/emotes';
 import type { Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus, type SetSettingsResult } from '../shared/ipc';
 import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
@@ -17,7 +17,7 @@ export const LATEST_RELEASE_URL = `${PROJECT_URL}/releases/latest`;
 
 export interface SettingsIpcDeps {
   store: SettingsStore;
-  /** Imported emotes' files. Only the import, remove and sound handlers change `customEmotes`. */
+  /** Imported emotes' files. Only the import, remove, sound and fx handlers change `customEmotes`. */
   library: EmoteLibrary;
   getStatus(): AppStatus;
   setEnabled(on: boolean): void;
@@ -134,6 +134,11 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
     d.store.update({ customEmotes: d.store.get().customEmotes.map((c) => (c.id === id ? withSound(c) : c)) });
     return { ok: true };
   }));
+  ipcMain.handle(SETTINGS_CH.emoteFx, (_e, id: unknown, fx: unknown) => {
+    // undefined is a choice too: it puts the emote back to the plain pop.
+    if (!isCustomRef(id) || !(fx === undefined || isEmoteFx(fx))) return;
+    d.store.update({ customEmotes: d.store.get().customEmotes.map((c) => (c.id === id ? { ...c, fx } : c)) });
+  });
   ipcMain.handle(SETTINGS_CH.about, () => d.about());
   ipcMain.handle(SETTINGS_CH.openFolder, async () => {
     await shell.openPath(d.store.dir);

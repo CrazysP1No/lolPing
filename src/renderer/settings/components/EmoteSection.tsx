@@ -211,6 +211,9 @@ export function EmoteSection({ settings: s, update, lengthUnit }: { settings: Se
         checked={s.emoteSound} onChange={(v) => void update({ emoteSound: v })} dim={keyOff} />
       <WheelEditor wheel={s.emoteWheel} center={s.clickEmoteId} centerOn={s.emoteClick && !keyOff} trigger={key}
         pool={pool} poolExtra={importer} onDropFiles={importFiles}
+        onFxPick={(id, fx) => void api.setEmoteFx(id, fx)}
+        fxIds={s.customEmotes.map((c) => c.id)}
+        fxFor={(id) => s.customEmotes.find((c) => c.id === id)?.fx}
         defaults={{ wheel: DEFAULT_EMOTE_WHEEL, center: DEFAULT_CLICK_EMOTE }}
         labels={{ title: t.emoteWheelTitle, desc: t.emoteWheelDesc(key), poolTitle: t.allEmotes, poolDesc: t.allEmotesDesc }}
         onChange={(patch) => void update(emotePatch(patch))} onPreview={(ref) => void api.previewEmote(ref)} />

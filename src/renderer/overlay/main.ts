@@ -10,7 +10,9 @@ import {
 import type { PingTag } from '../../shared/ipc';
 import type { WheelKind } from '../../shared/protocol';
 import { DEFAULT_SETTINGS, overlaySettings, soundLevel, type OverlaySettings } from '../../shared/settings';
-import { EmoteStage } from './emoteFx';
+import { warmFx } from '../shared/emoteFx';
+import '../shared/emoteFx.css';
+import { EmoteStage } from './emoteStage';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
@@ -52,7 +54,7 @@ function localArt(ref: EmoteRef): EmoteArt {
   if (!custom) return { kind: 'placeholder' };
   const hash = customHash(ref);
   const sound = custom.sound ? { sound: customSoundUrl(hash) } : {};
-  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound };
+  return { kind: 'custom', url: custom.animated ? customAnimUrl(hash) : customStillUrl(hash), animated: custom.animated, ...sound, fx: custom.fx ?? 0 };
 }
 
 /** Our newest ping on this display while "Keep my last ping on screen" is on. */
@@ -153,6 +155,10 @@ const soundEntries = [
 ];
 // About lists a missing file by its place in assets/ ("sounds/x.wav", "emotes/y.ogg"), not by the URL this page used.
 const assetName = (url: string): string => url.replace(/^(?:\.{1,2}\/)+/, '');
+
+// The same startup warm the sounds and sheets get: without it, the first ornamented emote pays for the glow
+// sprites' decode and shader compile mid-gesture.
+warmFx();
 
 void Promise.all([sounds.load(soundEntries), checkImages()]).then(([missingSounds, missingImages]) => {
   const missing = [...missingSounds.map(assetName), ...missingImages];
