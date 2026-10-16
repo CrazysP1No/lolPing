@@ -8,7 +8,7 @@ import { checkStill } from '../../src/main/emoteLibrary';
 import { EmoteTransfer } from '../../src/main/emoteTransfer';
 import { LanTransport } from '../../src/main/lanTransport';
 import { RelayTransport } from '../../src/main/relayTransport';
-import { deriveRoomKeys, open, seal } from '../../src/main/roomCrypto';
+import { deriveRoomKeys, makeIdentity, open, peerIdOf, seal, signBody } from '../../src/main/roomCrypto';
 import { RateLimiter } from '../../src/main/rateLimiter';
 import { RELAY_PING_BURST, RELAY_PING_RATE } from '../../src/main/roomManager';
 import type { Transport } from '../../src/main/transport';
@@ -16,7 +16,7 @@ import { EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import { ALL_PINGS } from '../../src/shared/pings';
 import { parseRoomCode } from '../../src/shared/roomCode';
 import {
-  decodeMessage, encodeMessage, MAX_TEXT, PROTOCOL_VERSION, sanitizeText, type RoomFeatureOff, type RoomMessage,
+  decodeMessage, encodeMessage, joinSigned, MAX_TEXT, PEER_RE, PROTOCOL_VERSION, sanitizeText, type RoomFeatureOff, type RoomMessage,
 } from '../../src/shared/roomProtocol';
 import { VOTE_MS } from '../../src/shared/voteTally';
 
@@ -38,13 +38,15 @@ const { values, positionals } = parseArgs({
     vote: { type: 'string' }, // 'ff' or 'ready': start one vote of that kind 3 s after joining
     answer: { type: 'string' }, // 'yes' or 'no': answer every vote it sees
     nf: { type: 'string' }, // room features announced as switched off: text, votes
+    legacy: { type: 'boolean', default: false }, // act like 0.5.1: a random id, nothing signed
+    forge: { type: 'string' }, // a member's peer id: once joined, send an unsigned bye and a huge-seq ping claiming it
   },
 });
 
 const parsed = parseRoomCode(positionals.join(' '));
 if (!parsed.ok) {
   console.error('usage: node tools/room-peer/run.mjs PING-XXXXX-XXXXX [--name Bot] [--color 0-7] [--rate 1] [--host 127.0.0.1] [--port 47475] [--display 1] [--relay] [--emotes] [--image still.webp]'
-    + ' [--app 0.6.0] [--text "hello"] [--alive] [--vote ff|ready] [--answer yes|no] [--nf text,votes]');
+    + ' [--app 0.6.0] [--text "hello"] [--alive] [--vote ff|ready] [--answer yes|no] [--nf text,votes] [--legacy] [--forge <peer id>]');
   process.exit(1);
 }
 
@@ -61,6 +63,10 @@ if (values.answer !== undefined && values.answer !== 'yes' && values.answer !== 
   console.error('--answer must be yes or no');
   process.exit(1);
 }
+if (values.forge !== undefined && !PEER_RE.test(values.forge)) {
+  console.error('--forge takes a peer id: 16 lower-case hex characters');
+  process.exit(1);
+}
 const nf = (values.nf ?? '').split(',').filter(Boolean);
 if (!nf.every((f): f is RoomFeatureOff => f === 'text' || f === 'votes')) {
   console.error('--nf takes text, votes or text,votes');
@@ -68,10 +74,15 @@ if (!nf.every((f): f is RoomFeatureOff => f === 'text' || f === 'votes')) {
 }
 
 const keys = await deriveRoomKeys(parsed.code);
-const peer = randomBytes(8).toString('hex');
+// Signed like the app unless --legacy: the id is the key's hash, and everything but a chunk carries a signature.
+const identity = values.legacy ? null : makeIdentity(randomBytes(32));
+const peer = identity ? peerIdOf(identity.pk) : randomBytes(8).toString('hex');
 let seq = 0;
-const packet = (body: Record<string, unknown>): Buffer =>
-  seal(keys.msgKey, encodeMessage({ peer, seq: ++seq, ts: Date.now(), ...body } as RoomMessage));
+function packet(body: Record<string, unknown>): Buffer {
+  const bytes = encodeMessage({ peer, seq: ++seq, ts: Date.now(), ...body } as RoomMessage);
+  if (!identity || body.t === 'chunk') return seal(keys.msgKey, bytes);
+  return seal(keys.msgKey, new TextEncoder().encode(joinSigned(new TextDecoder().decode(bytes), signBody(identity, bytes))));
+}
 
 // --image: the still must pass the same checks as an import, and its ID is its hash, as in the app.
 const image = values.image ? new Uint8Array(readFileSync(values.image)) : null;
@@ -82,7 +93,7 @@ if (image && checkStill(image) !== null) {
 const imageHash = image ? createHash('sha256').update(image).digest('hex').slice(0, 32) : null;
 const presence = (): Buffer =>
   packet({ t: 'presence', proto: PROTOCOL_VERSION, app: values.app, name: values.name, color: Number(values.color), status: 'on',
-    em: imageHash ? [imageHash] : [], nf });
+    em: imageHash ? [imageHash] : [], nf, ...(identity ? { pk: identity.pk.toString('base64') } : {}) });
 
 const transport: Transport = values.relay
   ? new RelayTransport()
@@ -214,7 +225,18 @@ if (values.vote) {
     sendSpaced({ t: 'vote', id, kind }, `vote ${kind} ${id}`);
   }, 3000);
 }
-console.log(`room-peer "${values.name}" in room ${positionals.join(' ')} over ${values.relay ? 'the relays' : 'the LAN'} — Ctrl+C to leave`);
+if (values.forge) {
+  const victim = values.forge;
+  // What a hostile member can send without the victim's key: a 0.5.2 member shrugs both off, a 0.5.1 one is gone.
+  const forged = (body: Record<string, unknown>, s: number): Buffer =>
+    seal(keys.msgKey, encodeMessage({ peer: victim, seq: s, ts: Date.now(), ...body } as RoomMessage));
+  setTimeout(() => {
+    transport.broadcast(forged({ t: 'ping', ping: 'danger', d: Number(values.display), x: 0.5, y: 0.5 }, 2 ** 40));
+    transport.broadcast(forged({ t: 'bye' }, 2 ** 40 + 1));
+    console.log(`[out] forged a huge-seq ping and a bye as ${victim}`);
+  }, 3000);
+}
+console.log(`room-peer "${values.name}" (${peer}${identity ? '' : ', legacy'}) in room ${positionals.join(' ')} over ${values.relay ? 'the relays' : 'the LAN'} — Ctrl+C to leave`);
 process.on('SIGINT', () => {
   transfer.stop();
   transport.broadcast(packet({ t: 'bye' }));

@@ -23,6 +23,8 @@ node tools/room-peer/run.mjs PING-XXXXX-XXXXX --name Bot --rate 1
 | `--vote` | none | `ff` or `ready`: start one vote of that kind 3 s after joining |
 | `--answer` | none | `yes` or `no`: answer every vote it sees with that ballot |
 | `--nf` | none | `text`, `votes` or `text,votes`: announce those room features as switched off |
+| `--legacy` | off | Act like lolPing 0.5.1: a random peer id and no signatures (see below) |
+| `--forge` | none | A member's peer id: 3 s after joining, send an unsigned bye and a ping with a huge sequence number claiming it (see below) |
 
 Start lolPing, create a room, copy the code and run the command with it. Several peers can run at once on different ports.
 
@@ -66,4 +68,14 @@ With `--relay` the peer never touches the LAN: it reaches the room only through 
 
 ```bash
 node tools/room-peer/run.mjs PING-XXXXX-XXXXX --relay --name Remote
+```
+
+## Signatures
+
+Like lolPing 0.5.2, the peer signs everything it sends except chunks, and its peer id is its key's hash. It prints its id when it starts. With `--legacy` it acts like 0.5.1 and signs nothing.
+
+`--forge <id>` checks that a member can't be impersonated. Run one signed peer and one `--legacy` peer, then a third with `--forge` and the signed peer's id: lolPing keeps the signed peer and its pings keep arriving. Forge the legacy peer's id instead and lolPing shows it leaving; members on 0.5.1 stay open to this until they update.
+
+```bash
+node tools/room-peer/run.mjs PING-XXXXX-XXXXX --port 47477 --rate 0 --forge 0123456789abcdef
 ```

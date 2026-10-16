@@ -39,6 +39,8 @@ export interface PresenceMsg extends Base {
   em: string[];
   /** Added in 0.6.0: the room features this peer has switched off. Older apps leave it out, which reads as none. */
   nf: RoomFeatureOff[];
+  /** Added in 0.5.2: the Ed25519 public key, raw, in base64. The peer id is its hash, and every message but a chunk is signed with it. */
+  pk?: string;
 }
 export interface PingMsg extends Base {
   t: 'ping';
@@ -147,6 +149,10 @@ export const EMOTE_CHUNKS_MAX = 17;
 /** Chunk indexes in a `want`'s `need`: at most this many entries, each below EMOTE_CHUNKS_MAX. */
 export const EMOTE_NEED_MAX = 64;
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+/** 32 raw bytes in base64. */
+const PK_RE = /^[A-Za-z0-9+/]{43}=$/;
+/** The signature tail: 64 raw bytes in base64, as the last field, so a receiver can cut it off and get the signed bytes. */
+const SIG_TAIL_RE = /,"sg":"([A-Za-z0-9+/]{86}==)"}$/;
 
 /** The announced hashes, rebuilt: well-formed and distinct, the first ANNOUNCED_MAX. Anything else means none. */
 function emList(raw: unknown): string[] {
@@ -174,12 +180,12 @@ export function validateMessage(raw: unknown): RoomMessage | null {
   const base = { peer, seq, ts };
   switch (t) {
     case 'presence': {
-      const { proto, app, name, color, rgb, status, em, nf } = raw;
+      const { proto, app, name, color, rgb, status, em, nf, pk } = raw;
       if (!isUint(proto) || typeof app !== 'string' || app.length > MAX_APP_VERSION || typeof name !== 'string') return null;
       if (!isTagColor(color) || !STATUSES.includes(status as MemberStatus)) return null;
       const presence: PresenceMsg = {
         t, ...base, proto, app, name: sanitizeName(name.slice(0, 256)), color, status: status as MemberStatus,
-        em: emList(em), nf: nfList(nf),
+        em: emList(em), nf: nfList(nf), ...(typeof pk === 'string' && PK_RE.test(pk) ? { pk } : {}),
       };
       // A malformed custom colour is dropped rather than the whole presence: an unreadable tag beats a missing member.
       return isTagRgb(rgb) ? { ...presence, rgb } : presence;
@@ -264,6 +270,29 @@ export function isOlderThan(app: string, version: string): boolean {
 export function encodeMessage(m: RoomMessage): Uint8Array {
   const out = m.t === 'ping' || m.t === 'emote' || m.t === 'text' || m.t === 'alive' ? { ...m, x: round4(m.x), y: round4(m.y) } : m;
   return new TextEncoder().encode(JSON.stringify(out));
+}
+
+/** `body` (an encoded message) with the signature `sig` as its last field. */
+export const joinSigned = (body: string, sig: string): string => `${body.slice(0, -1)},"sg":"${sig}"}`;
+
+/** The signed body and its signature, or null when the plaintext carries no well-formed signature tail. */
+export function splitSigned(plain: string): { body: string; sig: string } | null {
+  const m = SIG_TAIL_RE.exec(plain);
+  return m ? { body: `${plain.slice(0, m.index)}}`, sig: m[1] } : null;
+}
+
+/** A packet's message, the bytes its signature covers (all of them when unsigned) and the signature, or null. */
+export function decodeSigned(plain: Uint8Array): { msg: RoomMessage; body: Uint8Array; sig: string | null } | null {
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(plain);
+  } catch {
+    return null;
+  }
+  const signed = splitSigned(text);
+  const body = signed ? new TextEncoder().encode(signed.body) : plain;
+  const msg = decodeMessage(body);
+  return msg ? { msg, body, sig: signed?.sig ?? null } : null;
 }
 
 export function decodeMessage(bytes: Uint8Array): RoomMessage | null {

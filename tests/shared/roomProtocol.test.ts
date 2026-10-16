@@ -4,7 +4,7 @@ import {
   isTagColor, isTagRgb, nearestTagColor, readableTagRgb, sameTagRgb, TAG_COLORS, tagColorCss, tagHex, tagRgbFromHex, tagWire,
 } from '../../src/shared/roomColors';
 import {
-  clampNameInput, decodeMessage, encodeMessage, isOlderThan, isVoteId, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
+  clampNameInput, decodeMessage, decodeSigned, encodeMessage, joinSigned, splitSigned, isOlderThan, isVoteId, MAX_TEXT, sanitizeName, sanitizeText, validateMessage,
   type AliveMsg, type BallotMsg, type ChunkMsg, type EmoteMsg, type PingMsg, type PresenceMsg, type RoomMessage, type TextMsg,
   type VoteMsg, type WantMsg,
 } from '../../src/shared/roomProtocol';
@@ -424,5 +424,53 @@ describe('tag colours', () => {
     expect(wire.rgb).toEqual([10, 20, 30]);
     // The index is the nearest palette entry rather than the stored one, so older builds show something close.
     expect(tagWire(3, [79, 195, 247]).color).toBe(0);
+  });
+});
+
+describe('message signatures', () => {
+  const SIG = `${'A'.repeat(86)}==`;
+  const enc = (m: RoomMessage): string => new TextDecoder().decode(encodeMessage(m));
+  const bytes = (v: string): Uint8Array => new TextEncoder().encode(v);
+
+  it('appends the signature as a last field and splits it back off exactly', () => {
+    const signed = joinSigned('{"t":"bye"}', SIG);
+    expect(signed).toBe(`{"t":"bye","sg":"${SIG}"}`);
+    expect(splitSigned(signed)).toEqual({ body: '{"t":"bye"}', sig: SIG });
+  });
+
+  it('treats a missing, short or misplaced signature as unsigned', () => {
+    expect(splitSigned('{"t":"bye"}')).toBeNull();
+    expect(splitSigned(`{"t":"bye","sg":"${'A'.repeat(85)}=="}`)).toBeNull();
+    expect(splitSigned(`{"sg":"${SIG}","t":"bye"}`)).toBeNull();
+  });
+
+  it('still reads as a plain message for an app that knows nothing of signatures', () => {
+    const bye: RoomMessage = { ...base, t: 'bye' };
+    const decoded = decodeMessage(bytes(joinSigned(enc(bye), SIG)));
+    expect(decoded).toEqual(bye);
+    expect(decoded).not.toHaveProperty('sg');
+  });
+
+  it('gives back the signed bytes, or the whole plaintext when unsigned', () => {
+    const body = enc(ping);
+    expect(decodeSigned(bytes(joinSigned(body, SIG)))).toEqual({ msg: ping, body: bytes(body), sig: SIG });
+    expect(decodeSigned(bytes(body))).toEqual({ msg: ping, body: bytes(body), sig: null });
+    expect(decodeSigned(bytes('not json'))).toBeNull();
+  });
+
+  it('keeps a well-formed public key on a presence and drops a bad one, not the presence', () => {
+    const pk = `${'B'.repeat(43)}=`;
+    expect(validateMessage({ ...presence, pk })).toEqual({ ...presence, pk });
+    for (const bad of [`${'B'.repeat(42)}=`, `${'B'.repeat(43)}!`, 7]) expect(validateMessage({ ...presence, pk: bad })).toEqual(presence);
+  });
+
+  it('fits the largest signed presence in one packet', () => {
+    const worst: PresenceMsg = {
+      ...base, seq: Number.MAX_SAFE_INTEGER, t: 'presence', proto: 1, app: '9'.repeat(64), name: '😀'.repeat(16), color: 7,
+      rgb: [255, 255, 255], status: 'paused', em: Array.from({ length: 9 }, (_, i) => String(i).repeat(32)),
+      nf: ['text', 'votes'], pk: `${'B'.repeat(43)}=`,
+    };
+    const sealed = seal(Buffer.alloc(32), bytes(joinSigned(enc(worst), SIG)));
+    expect(sealed.length).toBeLessThanOrEqual(MAX_PACKET);
   });
 });

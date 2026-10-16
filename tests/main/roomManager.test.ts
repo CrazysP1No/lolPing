@@ -1,18 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
+import {
+  makeIdentity, open, peerIdOf, publicKeyOf, seal, signBody, verifyBody, type RoomIdentity, type RoomKeys,
+} from '../../src/main/roomCrypto';
 import {
   MAX_MEMBERS, RoomManager, type RemoteEmote, type RemotePing, type RemoteText, type RoomToast,
 } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import type { TagRgb } from '../../src/shared/roomColors';
 import {
-  decodeMessage, encodeMessage, type BallotMsg, type RoomFeatureOff, type RoomMessage, type VoteMsg,
+  decodeMessage, decodeSigned, encodeMessage, joinSigned, type BallotMsg, type RoomFeatureOff, type RoomMessage, type VoteMsg,
 } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
 
 const KEYS: RoomKeys = { msgKey: Buffer.alloc(32, 1), relayTopic: 'room' };
 const CODE = makeRoomCode(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]));
-const SELF = 'abababababababab';
+const SELF = peerIdOf(makeIdentity(new Uint8Array(32).fill(0xab)).pk);
 
 /** Another lolPing in the room, sending through the fake transport. */
 class Remote {
@@ -45,6 +47,28 @@ class Remote {
   bye(): void {
     this.lan.deliver(this.key, this.packet({ t: 'bye' }));
   }
+}
+
+/** A 0.5.2 lolPing: its id is its key's hash, its presence carries the key, and everything but a chunk is signed. */
+class SignedRemote extends Remote {
+  readonly id: RoomIdentity;
+  constructor(seed: number, key: string, lan: FakeTransport) {
+    const id = makeIdentity(new Uint8Array(32).fill(seed));
+    super(peerIdOf(id.pk), key, lan);
+    this.id = id;
+  }
+  override packet(m: Record<string, unknown>, key = KEYS.msgKey, signer: RoomIdentity = this.id): Buffer {
+    const extra = m.t === 'presence' ? { pk: this.id.pk.toString('base64') } : {};
+    const body = encodeMessage({ peer: this.peer, seq: ++this.seq, ts: Date.now(), ...m, ...extra } as RoomMessage);
+    if (m.t === 'chunk') return seal(key, body);
+    const text = new TextDecoder().decode(body);
+    return seal(key, new TextEncoder().encode(joinSigned(text, signBody(signer, body))));
+  }
+}
+
+/** An unsigned packet claiming to be from `peer`, as a hostile member (or a 0.5.1 app) could send. */
+function forged(peer: string, m: Record<string, unknown>, seq = 1): Buffer {
+  return seal(KEYS.msgKey, encodeMessage({ peer, seq, ts: Date.now(), ...m } as RoomMessage));
 }
 
 let lan: FakeTransport;
@@ -1137,5 +1161,115 @@ describe('room text and votes', () => {
     room.sendText('hello', { d: 1, x: 0, y: 0 });
     room.sendBallot('0a1b2c3d', true);
     expect(lan.sent).toHaveLength(0);
+  });
+});
+
+describe('signed members', () => {
+  let sam: SignedRemote;
+  const members = (): string[] => room.state().members.map((m) => m.peer);
+
+  beforeEach(async () => {
+    await joinActive();
+    sam = new SignedRemote(7, 'lan:s', lan);
+    sam.presence({ name: 'Sam' });
+  });
+
+  it('signs what we send with the key our presence announces, but not chunks', () => {
+    room.sendToLan(sam.peer, { t: 'chunk', h: 'ab'.repeat(16), i: 0, n: 1, b: 'QQ==' });
+    const sent = lan.sent.map((x) => {
+      const plain = open(KEYS.msgKey, x.packet);
+      if (!plain) throw new Error('unsealed');
+      const d = decodeSigned(plain);
+      if (!d) throw new Error('undecodable');
+      return d;
+    });
+    const presence = sent.find((d) => d.msg.t === 'presence');
+    if (!presence || presence.msg.t !== 'presence' || !presence.msg.pk || !presence.sig) throw new Error('no signed presence');
+    const pk = Buffer.from(presence.msg.pk, 'base64');
+    expect(peerIdOf(pk)).toBe(SELF);
+    const key = publicKeyOf(pk);
+    if (!key) throw new Error('bad key');
+    expect(verifyBody(key, presence.body, presence.sig)).toBe(true);
+    expect(sent.find((d) => d.msg.t === 'chunk')?.sig).toBeNull();
+  });
+
+  it('keeps a signed member when someone forges their bye', () => {
+    lan.deliver('lan:evil', forged(sam.peer, { t: 'bye' }));
+    expect(members()).toContain(sam.peer);
+    sam.ping();
+    expect(pings).toHaveLength(1);
+  });
+
+  it("doesn't let a forged high sequence number block a signed member", () => {
+    lan.deliver('lan:evil', forged(sam.peer, { t: 'ping', ping: 'danger', d: 1, x: 0, y: 0 }, 2 ** 40));
+    expect(pings).toHaveLength(0);
+    sam.ping();
+    expect(pings).toHaveLength(1);
+  });
+
+  it('drops a message signed with someone else’s key', () => {
+    const mallory = makeIdentity(new Uint8Array(32).fill(9));
+    lan.deliver('lan:evil', sam.packet({ t: 'bye' }, KEYS.msgKey, mallory));
+    expect(members()).toContain(sam.peer);
+    lan.deliver('lan:evil', sam.packet({ t: 'ping', ping: 'danger', d: 1, x: 0, y: 0 }, KEYS.msgKey, mallory));
+    expect(pings).toHaveLength(0);
+  });
+
+  it('ignores a signed presence whose key does not match its peer id', () => {
+    const liar = new SignedRemote(8, 'lan:l', lan);
+    const other = makeIdentity(new Uint8Array(32).fill(10));
+    const body = encodeMessage({
+      peer: liar.peer, seq: 1, ts: Date.now(), t: 'presence', proto: 1, app: '0.5.2', name: 'Liar', color: 1, status: 'on',
+      em: [], nf: [], pk: other.pk.toString('base64'),
+    });
+    lan.deliver('lan:l', seal(KEYS.msgKey, new TextEncoder().encode(joinSigned(new TextDecoder().decode(body), signBody(other, body)))));
+    expect(members()).not.toContain(liar.peer);
+  });
+
+  it('drops signed messages until it has the sender’s presence', () => {
+    const kim = new SignedRemote(11, 'lan:k', lan);
+    kim.ping();
+    expect(pings).toHaveLength(0);
+    kim.presence({ name: 'Kim' });
+    kim.ping();
+    expect(pings).toHaveLength(1);
+  });
+
+  it('lets a signed presence win over an unsigned presence and bye sent first for the same id', () => {
+    const kim = new SignedRemote(11, 'lan:k', lan);
+    lan.deliver('lan:evil', forged(kim.peer, { t: 'presence', proto: 1, app: '0.5.1', name: 'Fake', color: 0, status: 'on' }));
+    lan.deliver('lan:evil', forged(kim.peer, { t: 'bye' }, 2));
+    kim.presence({ name: 'Kim' });
+    expect(room.state().members.find((m) => m.peer === kim.peer)?.name).toBe('Kim');
+    kim.ping();
+    expect(pings).toHaveLength(1);
+  });
+
+  it('takes over a member that an unsigned presence made', () => {
+    const kim = new SignedRemote(11, 'lan:k', lan);
+    lan.deliver('lan:evil', forged(kim.peer, { t: 'presence', proto: 1, app: '0.5.1', name: 'Fake', color: 0, status: 'on' }));
+    expect(room.state().members.find((m) => m.peer === kim.peer)?.name).toBe('Fake');
+    kim.presence({ name: 'Kim' });
+    lan.deliver('lan:evil', forged(kim.peer, { t: 'ping', ping: 'danger', d: 1, x: 0, y: 0 }, 3));
+    expect(room.state().members.find((m) => m.peer === kim.peer)?.name).toBe('Kim');
+    expect(pings).toHaveLength(0);
+  });
+
+  it('keeps a kicked signed member out', () => {
+    room.kick(sam.peer);
+    sam.presence({ name: 'Sam' });
+    sam.ping();
+    expect(members()).not.toContain(sam.peer);
+    expect(pings).toHaveLength(0);
+  });
+
+  it('passes a chunk claiming a signed member to the transfer without moving their route', () => {
+    const chunks: RoomMessage[] = [];
+    room.on('chunk', (c: RoomMessage) => chunks.push(c));
+    lan.deliver('lan:evil', forged(sam.peer, { t: 'chunk', h: 'cd'.repeat(16), i: 0, n: 1, b: 'QQ==' }));
+    expect(chunks).toHaveLength(1);
+    lan.sent.length = 0;
+    room.sendToLan(sam.peer, { t: 'want', to: sam.peer, h: 'cd'.repeat(16), need: [] });
+    expect(lan.sent.map((x) => x.to)).toEqual(['lan:s']);
   });
 });

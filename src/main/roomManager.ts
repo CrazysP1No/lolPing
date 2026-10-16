@@ -1,3 +1,4 @@
+import type { KeyObject } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import type { EmoteRef } from '../shared/emotes';
 import type { PingId } from '../shared/pings';
@@ -5,12 +6,14 @@ import type { JoinResult, MemberPath, RoomMember, RoomStateCore } from '../share
 import type { TagRgb } from '../shared/roomColors';
 import { formatRoomCode, makeRoomCode, parseRoomCode } from '../shared/roomCode';
 import {
-  decodeMessage, encodeMessage, isOlderThan, PROTOCOL_VERSION, ROOM_CHAT_SINCE, type BallotMsg, type MemberStatus,
+  decodeSigned, encodeMessage, isOlderThan, joinSigned, PROTOCOL_VERSION, ROOM_CHAT_SINCE, type BallotMsg, type MemberStatus,
   type PresenceMsg, type RoomFeatureOff, type RoomMessage, type VoteKind, type VoteMsg,
 } from '../shared/roomProtocol';
 import { RateLimiter } from './rateLimiter';
 import { ReplayGuard } from './replayGuard';
-import { open, seal, type RoomKeys } from './roomCrypto';
+import {
+  makeIdentity, open, peerIdOf, publicKeyOf, seal, signBody, verifyBody, type RoomIdentity, type RoomKeys,
+} from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export const MAX_MEMBERS = 16;
@@ -124,9 +127,9 @@ interface Member {
   viaInternet: boolean;
   /** Per transport kind: the address it was last heard from, and when. */
   paths: Partial<Record<Transport['kind'], { key: PeerKey; seenAt: number }>>;
+  /** The key their signed presence proved; null for a member on 0.5.1 or older, who signs nothing. */
+  pk: KeyObject | null;
 }
-
-const toHex = (b: Uint8Array): string => [...b].map((v) => v.toString(16).padStart(2, '0')).join('');
 
 /**
  * The room: who is in it, what we send, and what we let through. Talks to the network only through transports,
@@ -135,8 +138,12 @@ const toHex = (b: Uint8Array): string => [...b].map((v) => v.toString(16).padSta
  * 'want' (WantMsg), 'chunk' (ChunkMsg) and 'memberGone' (peer), which EmoteTransfer answers.
  */
 export class RoomManager extends EventEmitter {
-  /** Our peer ID: random per join, since a peer that said bye stays "gone" to the others for their whole session. */
+  /**
+   * Our peer ID: the hash of a key made fresh on every join, since a peer that said bye stays "gone" to the others for
+   * their whole session, and because only the holder of that key can sign as this ID.
+   */
   self: string;
+  private identity: RoomIdentity;
   private phase: RoomStateCore['phase'] = 'idle';
   private code: string | null = null;
   private keys: RoomKeys | null = null;
@@ -147,7 +154,11 @@ export class RoomManager extends EventEmitter {
   private answered = new Set<PeerKey>();
   /** Per peer ID: stale presences seen, and when the last one came. Never turns into a member. */
   private staleStrikes = new Map<string, { count: number; at: number }>();
-  private guard: ReplayGuard;
+  /** Signed and unsigned traffic are judged apart, so nothing unsigned can block or remove a member who signs. */
+  private signedGuard: ReplayGuard;
+  private unsignedGuard: ReplayGuard;
+  /** Every ID a signed presence has proved this session: unsigned packets claiming one are forgeries. */
+  private boundIds = new Set<string>();
   private readonly limiter: RateLimiter;
   /** Emote stills (want/chunk) per member: their own, wider bucket, so a flood of wants still meets a wall. */
   private readonly transferLimiter: RateLimiter;
@@ -175,8 +186,10 @@ export class RoomManager extends EventEmitter {
 
   constructor(private readonly deps: RoomDeps) {
     super();
-    this.self = toHex(deps.randomBytes(8));
-    this.guard = new ReplayGuard(deps.now);
+    this.identity = makeIdentity(deps.randomBytes(32));
+    this.self = peerIdOf(this.identity.pk);
+    this.signedGuard = new ReplayGuard(deps.now);
+    this.unsignedGuard = new ReplayGuard(deps.now);
     this.limiter = new RateLimiter(deps.now);
     this.transferLimiter = new RateLimiter(deps.now);
     this.ballotLimiter = new RateLimiter(deps.now);
@@ -246,7 +259,8 @@ export class RoomManager extends EventEmitter {
   kick(peer: string): void {
     const m = this.members.get(peer);
     if (!m) return;
-    this.guard.markGone(peer);
+    this.signedGuard.markGone(peer);
+    this.unsignedGuard.markGone(peer);
     this.remove(m, 'kicked');
   }
 
@@ -387,11 +401,14 @@ export class RoomManager extends EventEmitter {
   private async start(code: string): Promise<boolean> {
     if (this.phase !== 'idle') this.leave();
     const session = ++this.session;
-    this.self = toHex(this.deps.randomBytes(8));
+    this.identity = makeIdentity(this.deps.randomBytes(32));
+    this.self = peerIdOf(this.identity.pk);
     this.seq = 0;
     this.phase = 'joining';
     this.code = code;
-    this.guard = new ReplayGuard(this.deps.now);
+    this.signedGuard = new ReplayGuard(this.deps.now);
+    this.unsignedGuard = new ReplayGuard(this.deps.now);
+    this.boundIds = new Set();
     this.aloneSince = this.deps.now();
     this.emitState();
     let keys: RoomKeys;
@@ -481,29 +498,46 @@ export class RoomManager extends EventEmitter {
   private onPacket(t: Transport, key: PeerKey, packet: Uint8Array): void {
     if (!this.keys) return;
     const plain = open(this.keys.msgKey, packet);
-    const msg = plain && decodeMessage(plain);
-    if (!msg || msg.peer === this.self) return;
-    const verdict = this.guard.accept(msg.peer, msg.seq, msg.ts);
+    const decoded = plain && decodeSigned(plain);
+    if (!decoded || decoded.msg.peer === this.self) return;
+    const { msg, body, sig } = decoded;
+    // Chunks are never signed (a signature wouldn't fit), and needn't be: a still is checked against its hash when
+    // assembled. So whoever a chunk claims to be from, it never moves a replay window, a liveness clock or a route.
+    if (msg.t === 'chunk') {
+      const m = this.members.get(msg.peer);
+      if (!m || this.paused || m.muted || m.needsUpdate || !this.transferLimiter.allow(m.peer, TRANSFER_RATE)) return;
+      this.emit('chunk', msg);
+      return;
+    }
+    let pk: KeyObject | null = null;
+    if (sig) {
+      pk = msg.t === 'presence' ? this.provenKey(msg) : this.members.get(msg.peer)?.pk ?? null;
+      if (!pk || !verifyBody(pk, body, sig)) return;
+    } else if (this.boundIds.has(msg.peer)) {
+      return;
+    }
+    const guard = sig ? this.signedGuard : this.unsignedGuard;
+    const verdict = guard.accept(msg.peer, msg.seq, msg.ts);
     if (verdict === 'stale') return this.onStale(msg);
     if (verdict !== 'ok') return;
     this.staleStrikes.delete(msg.peer);
 
-    if (msg.t === 'presence') return this.onPresence(t, key, msg);
+    if (msg.t === 'presence') return this.onPresence(t, key, msg, pk);
     const m = this.members.get(msg.peer);
     if (msg.t === 'bye') {
-      this.guard.markGone(msg.peer);
+      guard.markGone(msg.peer);
       if (m) this.remove(m, 'left');
       return;
     }
     if (!m) return;
     this.heard(m, t, key);
-    // Emote stills travel on their own messages, in their own bucket: a still's chunks arrive as a burst, but a
-    // flood of wants still meets a wall. A paused lolPing neither fetches nor serves stills. An app on another
-    // protocol generation can't have sent these (its validator drops unknown types), so that check is defence in depth.
-    if (msg.t === 'want' || msg.t === 'chunk') {
-      if (this.paused || m.muted || m.needsUpdate || (msg.t === 'want' && msg.to !== this.self)) return;
+    // Emote still requests travel in their own bucket: a flood of wants still meets a wall. A paused lolPing neither
+    // fetches nor serves stills. An app on another protocol generation can't have sent these (its validator drops
+    // unknown types), so that check is defence in depth.
+    if (msg.t === 'want') {
+      if (this.paused || m.muted || m.needsUpdate || msg.to !== this.self) return;
       if (!this.transferLimiter.allow(m.peer, TRANSFER_RATE)) return;
-      this.emit(msg.t, msg);
+      this.emit('want', msg);
       return;
     }
     // A ballot is the one answer a vote waits for, so a muted member's still counts and so does our own pause;
@@ -534,7 +568,15 @@ export class RoomManager extends EventEmitter {
     }
   }
 
-  private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {
+  /** The key a signed presence carries, when its peer ID is that key's hash; null when it can't vouch for the ID. */
+  private provenKey(msg: PresenceMsg): KeyObject | null {
+    if (!msg.pk) return null;
+    const raw = Buffer.from(msg.pk, 'base64');
+    return peerIdOf(raw) === msg.peer ? publicKeyOf(raw) : null;
+  }
+
+  /** `pk` is the key a signed presence proved, null for an unsigned one; it takes over a member an unsigned one made. */
+  private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg, pk: KeyObject | null): void {
     let m = this.members.get(msg.peer);
     const isNew = !m;
     if (!m) {
@@ -547,10 +589,14 @@ export class RoomManager extends EventEmitter {
       m = {
         peer: msg.peer, name: msg.name, color: msg.color, rgb: msg.rgb ?? null, status: msg.status,
         needsUpdate: false, noEmotes: false, noChat: false, textOff: false, votesOff: false, muted: false, em: [],
-        firstSeen: this.deps.now(), viaInternet: false, paths: {},
+        firstSeen: this.deps.now(), viaInternet: false, paths: {}, pk: null,
       };
       this.members.set(m.peer, m);
       this.aloneSince = null;
+    }
+    if (pk) {
+      m.pk = pk;
+      this.boundIds.add(m.peer);
     }
     m.name = msg.name;
     m.color = msg.color;
@@ -639,7 +685,7 @@ export class RoomManager extends EventEmitter {
     const p = this.deps.profile();
     return this.seal({
       t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
-      em: [...this.deps.announceEmotes()],
+      em: [...this.deps.announceEmotes()], pk: this.identity.pk.toString('base64'),
       // Left out when nothing is off, so a 0.6 presence to a 0.5 peer carries nothing new.
       ...(p.nf.length ? { nf: [...p.nf] } : {}),
       // Left out rather than sent as null: a peer on an older build ignores it either way, and this keeps the packet small.
@@ -697,7 +743,10 @@ export class RoomManager extends EventEmitter {
 
   private seal(body: Record<string, unknown>): Buffer {
     const msg = { peer: this.self, seq: ++this.seq, ts: this.deps.now(), ...body } as RoomMessage;
-    return seal(this.keys!.msgKey, encodeMessage(msg));
+    const bytes = encodeMessage(msg);
+    if (msg.t === 'chunk') return seal(this.keys!.msgKey, bytes);
+    const signed = joinSigned(new TextDecoder().decode(bytes), signBody(this.identity, bytes));
+    return seal(this.keys!.msgKey, new TextEncoder().encode(signed));
   }
 
   private emitState(): void {
