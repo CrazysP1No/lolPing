@@ -107,3 +107,15 @@ describe('wheel size', () => {
     expect(wheel.release(800, 400)).toBeNull();
   });
 });
+
+describe('wheel centre', () => {
+  it('swaps the centre icon without touching the slices', () => {
+    const { wheel, svg } = makeWheel();
+    const hrefs = (): string[] => svg.children.filter((c) => c.attrs.has('href')).map((c) => c.attrs.get('href') as string);
+    expect(hrefs()).toContain('icon.png');
+    wheel.setCenterIcon('other.png');
+    expect(hrefs()).toContain('other.png');
+    expect(hrefs()).not.toContain('icon.png');
+    expect(hrefs().filter((h) => /^\d\.png$/.test(h))).toHaveLength(8);
+  });
+});

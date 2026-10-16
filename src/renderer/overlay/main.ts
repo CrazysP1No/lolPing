@@ -1,6 +1,6 @@
-import { DEFAULT_CLICK_EMOTE, EMOTE_CATALOG } from '../../shared/emoteCatalog';
+import { EMOTE_CATALOG } from '../../shared/emoteCatalog';
 import {
-  CUSTOM_EMOTE_URL, allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customSoundUrl, customStillUrl, emoteIconUrl, emoteSoundUrl,
+  CUSTOM_EMOTE_URL, allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customSoundUrl, customStillUrl, emoteSoundUrl,
   isBundledEmote,
   type EmoteArt, type EmoteRef,
 } from '../../shared/emotes';
@@ -15,7 +15,8 @@ import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
 import { showToast } from './toast';
 import { TextStage } from './textFx';
-import { Wheel, type WheelItem } from './wheel';
+import { Wheel } from './wheel';
+import { centerIcons, emoteItem, pingItem } from './wheelItems';
 
 const pingLayer = document.getElementById('pings') as HTMLElement;
 const toastLayer = document.getElementById('toasts') as HTMLElement;
@@ -40,17 +41,9 @@ const volume = (): number => soundLevel(settings);
 const tick = (): void => {
   if (settings.tickSound) sounds.play(TICK_SOUND, volume() * 0.5);
 };
-const pingWheel = new Wheel(pingSvg, 'PING', textureUrl('generic_ping'), tick);
-const emoteWheel = new Wheel(emoteSvg, 'EMOTE', emoteIconUrl(DEFAULT_CLICK_EMOTE), tick);
-
-const pingItem = (p: PingDef): WheelItem => ({ key: p.id, icon: textureUrl(p.icon) });
-
-/** A wheel slot's icon: the bundled emote's, the imported emote's still, or the generic ping for one that isn't known. */
-function emoteItem(ref: EmoteRef): WheelItem {
-  if (catalogEmote(ref)) return { key: ref, icon: emoteIconUrl(ref) };
-  if (settings.customEmotes.some((c) => c.id === ref)) return { key: ref, icon: customStillUrl(customHash(ref)) };
-  return { key: ref, icon: textureUrl('generic_ping') };
-}
+const centers = centerIcons(settings);
+const pingWheel = new Wheel(pingSvg, 'PING', centers.ping, tick);
+const emoteWheel = new Wheel(emoteSvg, 'EMOTE', centers.emote, tick);
 
 /** This machine's own emotes: the settings know what an imported one looks like, whether it moves and has a sound. */
 function localArt(ref: EmoteRef): EmoteArt {
@@ -77,7 +70,10 @@ function applySettings(s: OverlaySettings): void {
   pingWheel.setSize(s.wheelSizePx);
   emoteWheel.setSize(s.wheelSizePx);
   pingWheel.setItems(pingsFor(s.wheel).map(pingItem));
-  emoteWheel.setItems(s.emoteWheel.map(emoteItem));
+  emoteWheel.setItems(s.emoteWheel.map((ref) => emoteItem(ref, s.customEmotes)));
+  const { ping, emote } = centerIcons(s);
+  pingWheel.setCenterIcon(ping);
+  emoteWheel.setCenterIcon(emote);
 }
 applySettings(settings);
 

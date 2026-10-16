@@ -33,6 +33,7 @@ export interface WheelItem {
 export class Wheel {
   private readonly wedges: SVGPathElement[] = [];
   private readonly icons: SVGImageElement[] = [];
+  private hub: SVGImageElement | null = null;
   private items: readonly WheelItem[] = [];
   private hot = -1;
   private ox = 0;
@@ -57,6 +58,11 @@ export class Wheel {
       if (item) icon.setAttribute('href', item.icon);
       else icon.removeAttribute('href');
     });
+  }
+
+  /** Changes the icon in the middle of the wheel. */
+  setCenterIcon(url: string): void {
+    this.hub?.setAttribute('href', url);
   }
 
   /** Scales the SVG and its dead zone together, keeping the press point at the centre. */
@@ -156,7 +162,7 @@ export class Wheel {
     el('circle', { r: innerR + 4, fill: 'none', stroke: '#1a1a1a', 'stroke-width': 6, opacity: 0.6 }, svg);
     el('circle', { r: innerR, fill: `url(#${id}-core)`, stroke: '#c8aa6e', 'stroke-width': 3 }, svg);
     el('circle', { r: innerR - 7, fill: 'none', stroke: '#8a7448', 'stroke-width': 1, opacity: 0.6 }, svg);
-    el('image', { href: this.centerIcon, x: -20, y: -58, width: 40, height: 40, class: 'hub' }, svg);
+    this.hub = el('image', { href: this.centerIcon, x: -20, y: -58, width: 40, height: 40, class: 'hub' }, svg);
     el('text', { x: 0, y: 6, 'text-anchor': 'middle', class: 'centerTxt' }, svg).textContent = this.centerLabel;
     el('text', { x: 6, y: 50, 'text-anchor': 'middle', class: 'backTxt' }, svg).textContent = 'BACK';
     const mouse = el('g', { opacity: 0.55, transform: 'translate(-26,40)' }, svg);
