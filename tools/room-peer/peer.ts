@@ -32,7 +32,7 @@ const { values, positionals } = parseArgs({
     relay: { type: 'boolean', default: false }, // through the public relays instead of the LAN
     emotes: { type: 'boolean', default: false }, // also send emotes, alternating with the pings
     image: { type: 'string' }, // a still .webp this peer owns: it announces and serves it, and its custom emote uses it
-    app: { type: 'string', default: 'room-peer' }, // the app version it announces; 0.6.0 or newer can see text and votes
+    app: { type: 'string', default: 'room-peer' }, // the app version it announces; 0.5.2 or newer can see text and votes
     text: { type: 'string' }, // a room text line to send every 5 s
     alive: { type: 'boolean', default: false }, // an alive line about a random member every 7 s
     vote: { type: 'string' }, // 'ff' or 'ready': start one vote of that kind 3 s after joining
@@ -46,7 +46,7 @@ const { values, positionals } = parseArgs({
 const parsed = parseRoomCode(positionals.join(' '));
 if (!parsed.ok) {
   console.error('usage: node tools/room-peer/run.mjs PING-XXXXX-XXXXX [--name Bot] [--color 0-7] [--rate 1] [--host 127.0.0.1] [--port 47475] [--display 1] [--relay] [--emotes] [--image still.webp]'
-    + ' [--app 0.6.0] [--text "hello"] [--alive] [--vote ff|ready] [--answer yes|no] [--nf text,votes] [--legacy] [--forge <peer id>]');
+    + ' [--app 0.5.2] [--text "hello"] [--alive] [--vote ff|ready] [--answer yes|no] [--nf text,votes] [--legacy] [--forge <peer id>]');
   process.exit(1);
 }
 

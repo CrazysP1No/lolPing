@@ -237,7 +237,7 @@ describe('presence announcements (em)', () => {
     expect(decodeMessage(encodeMessage(m))).toEqual(m);
   });
 
-  it('reads a presence without em as announcing nothing (an app before 0.6.0)', () => {
+  it('reads a presence without em as announcing nothing (an app before 0.5.2)', () => {
     expect(validateMessage({ t: 'presence', peer: presence.peer, seq: 1, ts: 1, proto: 1, app: '0.5.1', name: 'A', color: 0, status: 'on' }))
       .toMatchObject({ em: [] });
   });

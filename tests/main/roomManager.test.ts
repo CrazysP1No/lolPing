@@ -938,7 +938,7 @@ describe('emote transfer gating (audit regressions)', () => {
     saved = [];
     room = new RoomManager({
       transports: [lan], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xab),
-      deriveKeys: async () => KEYS, appVersion: '0.6.0', profile: () => profile,
+      deriveKeys: async () => KEYS, appVersion: '0.5.2', profile: () => profile,
       resolveTarget: (d) => (d === 1 ? { displayId: 100, width: 1920, height: 1080 } : null),
       announceEmotes: () => [],
     });
@@ -1010,7 +1010,7 @@ describe('room text and votes', () => {
     room.on('ballot', (m: BallotMsg) => ballots.push(m));
     await joinActive();
     alex = new Remote('1111111111111111', 'lan:a', lan);
-    alex.presence({ name: 'Alex', color: 4, app: '0.6.0' });
+    alex.presence({ name: 'Alex', color: 4, app: '0.5.2' });
   });
 
   it('passes text and alive through the ping gates', () => {
@@ -1107,8 +1107,8 @@ describe('room text and votes', () => {
     const old = new Remote('2222222222222222', 'lan:b', lan);
     const quiet = new Remote('3333333333333333', 'lan:c', lan);
     const odd = new Remote('4444444444444444', 'lan:d', lan);
-    old.presence({ app: '0.5.2' });
-    quiet.presence({ app: '0.6.0', nf: ['votes'] });
+    old.presence({ app: '0.5.1' });
+    quiet.presence({ app: '0.5.2', nf: ['votes'] });
     odd.presence({ app: 'room-peer', nf: ['text', 'votes'] });
     const flags = (peer: string): (boolean | undefined)[] => {
       const m = room.state().members.find((x) => x.peer === peer);
@@ -1119,7 +1119,7 @@ describe('room text and votes', () => {
     expect(flags(old.peer)).toEqual([true, false, false]);
     expect(flags(quiet.peer)).toEqual([false, false, true]);
     expect(flags(odd.peer)).toEqual([false, true, true]);
-    quiet.presence({ app: '0.6.0' }); // switched votes back on
+    quiet.presence({ app: '0.5.2' }); // switched votes back on
     expect(flags(quiet.peer)).toEqual([false, false, false]);
   });
 
@@ -1142,7 +1142,7 @@ describe('room text and votes', () => {
 
   it('keeps an 0.5 peer as a member when we send text', async () => {
     const old = new Remote('2222222222222222', 'lan:b', lan);
-    old.presence({ app: '0.5.2' });
+    old.presence({ app: '0.5.1' });
     lan.sent = [];
     room.sendText('hello', { d: 1, x: 0.1, y: 0.2 });
     room.sendAlive(old.peer, { d: 1, x: 0.1, y: 0.2 });
@@ -1151,7 +1151,7 @@ describe('room text and votes', () => {
     expect(sentMessages('lan:b').map((m) => m.t)).toEqual(['text', 'alive', 'vote', 'ballot']);
     expect(sentMessages('lan:b')[2]).toMatchObject({ kind: 'kick', target: old.peer });
     await vi.advanceTimersByTimeAsync(2000);
-    old.presence({ app: '0.5.2' });
+    old.presence({ app: '0.5.1' });
     expect(room.state().members.map((m) => m.peer)).toContain(old.peer);
   });
 

@@ -6,7 +6,7 @@ import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 export const PROTOCOL_VERSION = 1;
 export const MAX_NAME = 16;
 /** The first app version that sends and shows room text, alive lines and votes. */
-export const ROOM_CHAT_SINCE = '0.6.0';
+export const ROOM_CHAT_SINCE = '0.5.2';
 export const MAX_TEXT = 120;
 const MAX_DISPLAY = 16;
 const MAX_APP_VERSION = 64;
@@ -37,7 +37,7 @@ export interface PresenceMsg extends Base {
   status: MemberStatus;
   /** Added in 0.5.2: the 32-hex hashes of the custom emotes on our wheel and centre, at most 9. Older apps leave it out. */
   em: string[];
-  /** Added in 0.6.0: the room features this peer has switched off. Older apps leave it out, which reads as none. */
+  /** Added in 0.5.2: the room features this peer has switched off. Older apps leave it out, which reads as none. */
   nf: RoomFeatureOff[];
   /** Added in 0.5.2: the Ed25519 public key, raw, in base64. The peer id is its hash, and every message but a chunk is signed with it. */
   pk?: string;
@@ -70,7 +70,7 @@ export interface TextMsg extends Base {
   x: number;
   y: number;
 }
-/** Added in 0.6.0: a line from the peer `who` to where the sender's cursor is; older apps drop it as an unknown type. */
+/** Added in 0.5.2: a line from the peer `who` to where the sender's cursor is; older apps drop it as an unknown type. */
 export interface AliveMsg extends Base {
   t: 'alive';
   who: string;
@@ -80,14 +80,14 @@ export interface AliveMsg extends Base {
 }
 export type VoteKind = 'ff' | 'ready' | 'kick';
 const VOTE_KINDS: readonly VoteKind[] = ['ff', 'ready', 'kick'];
-/** Added in 0.6.0: starts a vote. `id` names it; `target` is the peer to remove and only a kick has one. */
+/** Added in 0.5.2: starts a vote. `id` names it; `target` is the peer to remove and only a kick has one. */
 export interface VoteMsg extends Base {
   t: 'vote';
   id: string;
   kind: VoteKind;
   target?: string;
 }
-/** Added in 0.6.0: the sender's answer to vote `id`. */
+/** Added in 0.5.2: the sender's answer to vote `id`. */
 export interface BallotMsg extends Base {
   t: 'ballot';
   id: string;

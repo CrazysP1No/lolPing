@@ -686,7 +686,7 @@ export class RoomManager extends EventEmitter {
     return this.seal({
       t: 'presence', proto: PROTOCOL_VERSION, app: this.deps.appVersion, name: p.name, color: p.color, status: this.status(),
       em: [...this.deps.announceEmotes()], pk: this.identity.pk.toString('base64'),
-      // Left out when nothing is off, so a 0.6 presence to a 0.5 peer carries nothing new.
+      // Left out when nothing is off, so a presence to an older peer carries nothing new.
       ...(p.nf.length ? { nf: [...p.nf] } : {}),
       // Left out rather than sent as null: a peer on an older build ignores it either way, and this keeps the packet small.
       ...(p.rgb ? { rgb: p.rgb } : {}),

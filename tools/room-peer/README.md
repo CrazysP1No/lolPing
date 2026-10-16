@@ -17,7 +17,7 @@ node tools/room-peer/run.mjs PING-XXXXX-XXXXX --name Bot --rate 1
 | `--relay` | off | Join through the public relays instead of the LAN |
 | `--emotes` | off | Also send emotes (see below) |
 | `--image` | none | A still `.webp` this peer owns and shares (see below) |
-| `--app` | `room-peer` | The app version it announces. `0.6.0` or newer makes lolPing treat it as able to see text and votes (see below) |
+| `--app` | `room-peer` | The app version it announces. `0.5.2` or newer makes lolPing treat it as able to see text and votes (see below) |
 | `--text` | none | A line of room text, at most 120 characters, sent every 5 s at a random spot on `--display` |
 | `--alive` | off | Every 7 s, an alive line about a random member |
 | `--vote` | none | `ff` or `ready`: start one vote of that kind 3 s after joining |
@@ -50,16 +50,16 @@ Two peers on different ports reach each other too: the second one sends to the f
 
 ## Text and votes
 
-Without `--app`, the peer announces itself as `room-peer`, which lolPing does not call old. Pass `--app 0.5.2` (or any version below 0.6.0) to be flagged "can't see text and votes", or `--app 0.6.0` to be treated as able to see them. lolPing does not send text or votes to a member that is flagged or has the feature switched off.
+Without `--app`, the peer announces itself as `room-peer`, which lolPing does not call old. Pass `--app 0.5.1` (or any version below 0.5.2) to be flagged "can't see text and votes", or `--app 0.5.2` to be treated as able to see them. lolPing does not send text or votes to a member that is flagged or has the feature switched off.
 
 `--text "gg wp"` sends that line every 5 s. `--alive` sends an alive line every 7 s about a random member the peer has heard from, lolPing included; the line shows that member's name. `--vote ff` starts a surrender vote and `--vote ready` a ready check, once, 3 s after joining, with an 8-character hex id as the app makes. `--answer yes` or `--answer no` answers each vote the peer sees, at once and again every 3 s until the vote's time is up, as the app does. `--nf text,votes` announces text and votes as switched off, so lolPing should not send them.
 
 What it receives prints as `[in] text "<text>" from <name> on display <d> at x, y`, `[in] alive <who> from <name>`, `[in] vote <kind> <id> from <name>` and `[in] ballot <yes|no> <id> from <name>`. With `--relay`, these messages count against the same relay limit as pings, so a high `--rate` can crowd them out.
 
 ```bash
-node tools/room-peer/run.mjs PING-XXXXX-XXXXX --app 0.6.0 --text "gg wp" --answer yes
-node tools/room-peer/run.mjs PING-XXXXX-XXXXX --app 0.6.0 --vote ff --rate 0
-node tools/room-peer/run.mjs PING-XXXXX-XXXXX --app 0.5.2 --rate 0
+node tools/room-peer/run.mjs PING-XXXXX-XXXXX --app 0.5.2 --text "gg wp" --answer yes
+node tools/room-peer/run.mjs PING-XXXXX-XXXXX --app 0.5.2 --vote ff --rate 0
+node tools/room-peer/run.mjs PING-XXXXX-XXXXX --app 0.5.1 --rate 0
 ```
 
 ## Over the internet path
