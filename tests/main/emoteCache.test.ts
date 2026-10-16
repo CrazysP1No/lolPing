@@ -39,7 +39,9 @@ describe('EmoteCache', () => {
     expect(existsSync(dir)).toBe(false);
   });
 
-  it('evicts the least recently used still beyond the cap, and touch() protects a shown one', async () => {
+  // Filling the cache is CACHE_MAX_FILES writes; on a busy CI runner that alone crossed the 5 s default (1.1 s on an
+  // idle one), which read as a flake in every PR's Linux job.
+  it('evicts the least recently used still beyond the cap, and touch() protects a shown one', { timeout: 20_000 }, async () => {
     for (let n = 0; n < CACHE_MAX_FILES; n++) {
       expect(await cache.put(HASH(n), stillOf(n, 100))).toBe(true);
       const at = new Date(Date.now() - (CACHE_MAX_FILES - n) * 1000); // HASH(0) is the oldest on disk, HASH(1) the next
