@@ -13,7 +13,7 @@ import type { RoomState } from '../shared/room';
 import type { VoteKind } from '../shared/roomProtocol';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { sameTagRgb, tagWire } from '../shared/roomColors';
-import { overlaySettings, type Settings } from '../shared/settings';
+import { overlaySettings, soundLevel, type Settings } from '../shared/settings';
 import { parseTextInput } from '../shared/textCommands';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
@@ -367,6 +367,7 @@ function start(): void {
   const panelState = (view: PanelState['view'], vote: PanelState['vote'], voteOver = false): PanelState => ({
     view, lang: resolveLang(settings.language, app.getLocale()), max: MAX_MEMBERS, room: room.state(), history: history.lines(),
     vote, voteOver, textOn: featureOn(settings, 'roomText'), votesOn: featureOn(settings, 'roomVotes'),
+    volume: soundLevel(settings),
   });
   /** An open roster follows the room and its history; a hidden one ignores this. */
   function refreshRoster(): void {

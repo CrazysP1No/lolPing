@@ -89,6 +89,8 @@ export interface PanelState {
   /** The room text and room votes feature switches. */
   textOn: boolean;
   votesOn: boolean;
+  /** The ping sound volume, 0 to 1 (0 when muted): the ready check's sounds play at it. */
+  volume: number;
 }
 
 /** What a click in a panel window asks for. An `alive` line is placed at the cursor by the app, not by the page. */

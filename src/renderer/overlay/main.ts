@@ -9,7 +9,7 @@ import {
 } from '../../shared/pings';
 import type { PingTag } from '../../shared/ipc';
 import type { WheelKind } from '../../shared/protocol';
-import { DEFAULT_SETTINGS, overlaySettings, type OverlaySettings } from '../../shared/settings';
+import { DEFAULT_SETTINGS, overlaySettings, soundLevel, type OverlaySettings } from '../../shared/settings';
 import { EmoteStage } from './emoteFx';
 import { spawnPing } from './pingFx';
 import { SoundBank } from './soundBank';
@@ -35,7 +35,7 @@ const stage = new EmoteStage(emoteLayer);
 const texts = new TextStage(textLayer);
 let settings: OverlaySettings = overlaySettings(DEFAULT_SETTINGS);
 const [fallbackPing] = pingsFor([DEFAULT_CLICK_PING]);
-const volume = (): number => (settings.muted ? 0 : settings.volume / 100);
+const volume = (): number => soundLevel(settings);
 
 const tick = (): void => {
   if (settings.tickSound) sounds.play(TICK_SOUND, volume() * 0.5);

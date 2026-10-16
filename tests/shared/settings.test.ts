@@ -4,7 +4,7 @@ import { MOD } from '../../src/shared/keys';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import {
   DEFAULT_SETTINGS, keyboardTriggers, mergeSettings, normalizeSettings, overlaySettings, patchClashes, rendererPatch, sameTrigger,
-  triggerLabel, triggersClash,
+  soundLevel, triggerLabel, triggersClash,
 } from '../../src/shared/settings';
 
 describe('normalizeSettings', () => {
@@ -595,5 +595,12 @@ describe('room text settings', () => {
   it('keeps the scrolling style and falls back to the spot for a bad value', () => {
     expect(normalizeSettings({ roomTextStyle: 'danmaku' }).roomTextStyle).toBe('danmaku');
     for (const raw of ['scroll', 1, null, {}]) expect(normalizeSettings({ roomTextStyle: raw }).roomTextStyle).toBe('spot');
+  });
+});
+
+describe('soundLevel', () => {
+  it('turns the volume setting into 0 to 1, and is 0 while muted', () => {
+    expect(soundLevel({ volume: 70, muted: false })).toBe(0.7);
+    expect(soundLevel({ volume: 70, muted: true })).toBe(0);
   });
 });

@@ -119,7 +119,8 @@ WAD_TEXTURES = {
 }
 
 # The room panel, vote widgets and text box are drawn with these. Output file in assets/ui -> (WAD under the install
-# folder, path in it, crop box (x, y, width, height) or None for the whole file). Videos are copied as they are.
+# folder, path in it, crop box (x, y, width, height) or None for the whole file). Videos and sounds are copied
+# as they are.
 # League's fonts are licensed from a type foundry, so they are not taken.
 UI_WAD = 'Game/DATA/FINAL/UI.wad.client'
 STATIC_WAD = 'Plugins/rcp-fe-lol-static-assets/assets.wad'
@@ -159,6 +160,10 @@ UI_ART = {
     'ready-accepted-intro.webm': (STATIC_WAD, STATIC + 'videos/timer-accepted-intro.webm', None),
     'ready-accepted-idle.webm': (STATIC_WAD, STATIC + 'videos/timer-accepted-idle.webm', None),
     'ready-declined.webm': (STATIC_WAD, STATIC + 'videos/timer-declined.webm', None),
+    # what the client plays: match found (its low-spec intro, the one this client uses), the countdown, the accepted loop
+    'ready-intro.ogg': (STATIC_WAD, STATIC + 'sounds/sfx-readycheck-lowspec-intro.ogg', None),
+    'ready-countdown.ogg': (STATIC_WAD, STATIC + 'sounds/sfx-readycheck-ringmagic-countdown.ogg', None),
+    'ready-accepted-loop.ogg': (STATIC_WAD, STATIC + 'sounds/sfx-readycheck-ringmagic-accepted-loop.ogg', None),
 }
 UI_OUT = REPO / 'assets' / 'ui'
 

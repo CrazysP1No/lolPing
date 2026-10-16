@@ -46,7 +46,7 @@ py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League o
 ```
 
 - In-game, from `Game/DATA/FINAL/UI.wad.client`: the surrender widget (`SurrenderAtlas.tex`), the Tab scoreboard (`ScoreboardAtlas.tex`), the options window and its buttons (`OptionsMenuAtlas.tex`). League's fonts are not taken: they are licensed from a type foundry.
-- Client, from the plugin WADs: the ready check frame (`rcp-fe-lol-static-assets`), the Summoner's Rift scene and map icon (`rcp-be-lol-game-data`), and the lock-in button used as Accept (`rcp-fe-lol-champ-select`).
+- Client, from the plugin WADs: the Summoner's Rift scene and map icon (`rcp-be-lol-game-data`), and from `rcp-fe-lol-static-assets` and `rcp-fe-lol-navigation` the ready check frame and mask, the Accept button art, the four timer videos and three sounds (match found, countdown, accepted loop) that the client's ready check plays.
 
 The crop boxes were measured from the decoded atlases. After a patch that moves things in an atlas, decode it again and check each piece.
 
