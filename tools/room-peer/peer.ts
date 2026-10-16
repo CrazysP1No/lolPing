@@ -1,5 +1,6 @@
 // A fake room member for trying rooms with one computer: it announces itself, pings at random spots and prints
-// the pings (and, with --emotes, the emotes) it receives. It speaks the real protocol, using the app's own modules.
+// the pings, emotes, text, alive lines and votes it receives. It can also send text, alive lines and votes. It speaks
+// the real protocol, using the app's own modules.
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -14,7 +15,10 @@ import type { Transport } from '../../src/main/transport';
 import { EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import { ALL_PINGS } from '../../src/shared/pings';
 import { parseRoomCode } from '../../src/shared/roomCode';
-import { decodeMessage, encodeMessage, PROTOCOL_VERSION, type RoomMessage } from '../../src/shared/roomProtocol';
+import {
+  decodeMessage, encodeMessage, MAX_TEXT, PROTOCOL_VERSION, sanitizeText, type RoomFeatureOff, type RoomMessage,
+} from '../../src/shared/roomProtocol';
+import { VOTE_MS } from '../../src/shared/voteTally';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -28,12 +32,38 @@ const { values, positionals } = parseArgs({
     relay: { type: 'boolean', default: false }, // through the public relays instead of the LAN
     emotes: { type: 'boolean', default: false }, // also send emotes, alternating with the pings
     image: { type: 'string' }, // a still .webp this peer owns: it announces and serves it, and its custom emote uses it
+    app: { type: 'string', default: 'room-peer' }, // the app version it announces; 0.6.0 or newer can see text and votes
+    text: { type: 'string' }, // a room text line to send every 5 s
+    alive: { type: 'boolean', default: false }, // an alive line about a random member every 7 s
+    vote: { type: 'string' }, // 'ff' or 'ready': start one vote of that kind 3 s after joining
+    answer: { type: 'string' }, // 'yes' or 'no': answer every vote it sees
+    nf: { type: 'string' }, // room features announced as switched off: text, votes
   },
 });
 
 const parsed = parseRoomCode(positionals.join(' '));
 if (!parsed.ok) {
-  console.error('usage: node tools/room-peer/run.mjs PING-XXXXX-XXXXX [--name Bot] [--color 0-7] [--rate 1] [--host 127.0.0.1] [--port 47475] [--display 1] [--relay] [--emotes] [--image still.webp]');
+  console.error('usage: node tools/room-peer/run.mjs PING-XXXXX-XXXXX [--name Bot] [--color 0-7] [--rate 1] [--host 127.0.0.1] [--port 47475] [--display 1] [--relay] [--emotes] [--image still.webp]'
+    + ' [--app 0.6.0] [--text "hello"] [--alive] [--vote ff|ready] [--answer yes|no] [--nf text,votes]');
+  process.exit(1);
+}
+
+const text = values.text === undefined ? null : sanitizeText(values.text);
+if (text === '' || (values.text !== undefined && [...values.text].length > MAX_TEXT)) {
+  console.error(`--text must be 1 to ${MAX_TEXT} characters`);
+  process.exit(1);
+}
+if (values.vote !== undefined && values.vote !== 'ff' && values.vote !== 'ready') {
+  console.error('--vote must be ff or ready');
+  process.exit(1);
+}
+if (values.answer !== undefined && values.answer !== 'yes' && values.answer !== 'no') {
+  console.error('--answer must be yes or no');
+  process.exit(1);
+}
+const nf = (values.nf ?? '').split(',').filter(Boolean);
+if (!nf.every((f): f is RoomFeatureOff => f === 'text' || f === 'votes')) {
+  console.error('--nf takes text, votes or text,votes');
   process.exit(1);
 }
 
@@ -51,8 +81,8 @@ if (image && checkStill(image) !== null) {
 }
 const imageHash = image ? createHash('sha256').update(image).digest('hex').slice(0, 32) : null;
 const presence = (): Buffer =>
-  packet({ t: 'presence', proto: PROTOCOL_VERSION, app: 'room-peer', name: values.name, color: Number(values.color), status: 'on',
-    em: imageHash ? [imageHash] : [] });
+  packet({ t: 'presence', proto: PROTOCOL_VERSION, app: values.app, name: values.name, color: Number(values.color), status: 'on',
+    em: imageHash ? [imageHash] : [], nf });
 
 const transport: Transport = values.relay
   ? new RelayTransport()
@@ -64,6 +94,8 @@ const received = new Set<string>();
 const lanKeys = new Map<string, string>(); // member peer ID → the address its packets come from
 const answered = new Set<string>();
 const relayCap = new RateLimiter(Date.now);
+const names = new Map<string, string>(); // member peer ID → the name its presence announced
+const nameOf = (p: string): string => names.get(p) ?? p;
 const transfer = new EmoteTransfer({
   now: Date.now,
   have: (h) => h === imageHash || received.has(h),
@@ -83,12 +115,23 @@ const transfer = new EmoteTransfer({
   spareSharedToken: (keep) =>
     relayCap.tokens('internet', RELAY_PING_RATE, RELAY_PING_BURST) >= keep + 1 && relayCap.allow('internet', RELAY_PING_RATE, RELAY_PING_BURST),
 });
+// --answer: the app sends its ballot again every 3 s until the vote closes, so this does too.
+const answering = new Set<string>();
+function answerVote(id: string, openMs: number): void {
+  if (!values.answer || answering.has(id)) return;
+  answering.add(id);
+  const send = (): void => sendSpaced({ t: 'ballot', id, yes: values.answer === 'yes' }, `ballot ${values.answer} ${id}`);
+  send();
+  const timer = setInterval(send, 3000);
+  setTimeout(() => clearInterval(timer), openMs);
+}
 transport.on('status', (s) => console.log(`[${label}] ${s}`));
 transport.on('packet', (from: string, data: Uint8Array) => {
   const plain = open(keys.msgKey, data);
   const msg = plain && decodeMessage(plain);
   if (!msg || msg.peer === peer) return;
   lanKeys.set(msg.peer, from);
+  if (msg.t === 'presence') names.set(msg.peer, msg.name);
   if (msg.t === 'want') {
     if (msg.to !== peer) return;
     console.log(`[in] want ${msg.h} ${msg.need.length ? `chunks ${msg.need.join(', ')}` : '(all chunks)'}`);
@@ -96,6 +139,13 @@ transport.on('packet', (from: string, data: Uint8Array) => {
   } else if (msg.t === 'chunk') transfer.onChunk(msg);
   else if (msg.t === 'ping') console.log(`[in] ${msg.ping} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
   else if (msg.t === 'emote') console.log(`[in] emote ${msg.e} on display ${msg.d} at ${msg.x}, ${msg.y} from ${from}`);
+  else if (msg.t === 'text') {
+    console.log(`[in] text "${msg.text}" from ${nameOf(msg.peer)} on display ${msg.d} at ${msg.x}, ${msg.y}`);
+  } else if (msg.t === 'alive') console.log(`[in] alive ${nameOf(msg.who)} from ${nameOf(msg.peer)}`);
+  else if (msg.t === 'vote') {
+    console.log(`[in] vote ${msg.kind} ${msg.id} from ${nameOf(msg.peer)}`);
+    answerVote(msg.id, VOTE_MS[msg.kind]);
+  } else if (msg.t === 'ballot') console.log(`[in] ballot ${msg.yes ? 'yes' : 'no'} ${msg.id} from ${nameOf(msg.peer)}`);
   else if (msg.t === 'presence') {
     console.log(`[in] presence: ${msg.name} (${msg.status})${msg.em.length ? `, announces ${msg.em.join(', ')}` : ''}`);
     // Answer a new member straight away, as the app does: a second room-peer on another port hears no broadcast.
@@ -118,6 +168,12 @@ if (values.relay && rate > RELAY_PING_RATE) {
   rate = RELAY_PING_RATE;
 }
 const spot = (): [number, number] => [0.1 + Math.random() * 0.8, 0.1 + Math.random() * 0.8];
+// Text, alive lines, votes and ballots go to the room within the relay cap, as in the app.
+function sendSpaced(body: Record<string, unknown>, what: string): void {
+  if (values.relay && !relayCap.allow('internet', RELAY_PING_RATE, RELAY_PING_BURST)) return;
+  transport.broadcast(packet(body));
+  console.log(`[out] ${what}`);
+}
 const sendEmote = (e: string): void => {
   const [x, y] = spot();
   transport.broadcast(packet({ t: 'emote', e, d: Number(values.display), x, y }));
@@ -135,6 +191,28 @@ if (rate > 0) {
   }, 1000 / rate);
   // Our --image, or a made-up custom emote: the app has no such image, so it shows the placeholder.
   if (values.emotes) setInterval(() => sendEmote(`c:${imageHash ?? randomBytes(16).toString('hex')}`), 10_000);
+}
+if (text) {
+  setInterval(() => {
+    const [x, y] = spot();
+    sendSpaced({ t: 'text', text, d: Number(values.display), x, y }, `text "${text}" at ${x.toFixed(2)}, ${y.toFixed(2)}`);
+  }, 5000);
+}
+if (values.alive) {
+  setInterval(() => {
+    // Any member heard so far, lolPing included, or this peer itself while it hears nobody.
+    const members = [...names.keys(), peer];
+    const who = members[Math.floor(Math.random() * members.length)];
+    const [x, y] = spot();
+    sendSpaced({ t: 'alive', who, d: Number(values.display), x, y }, `alive ${nameOf(who)} at ${x.toFixed(2)}, ${y.toFixed(2)}`);
+  }, 7000);
+}
+if (values.vote) {
+  const kind = values.vote;
+  setTimeout(() => {
+    const id = randomBytes(4).toString('hex');
+    sendSpaced({ t: 'vote', id, kind }, `vote ${kind} ${id}`);
+  }, 3000);
 }
 console.log(`room-peer "${values.name}" in room ${positionals.join(' ')} over ${values.relay ? 'the relays' : 'the LAN'} — Ctrl+C to leave`);
 process.on('SIGINT', () => {
