@@ -107,6 +107,12 @@ describe('room text, alive lines, votes and ballots', () => {
     expect(decodeMessage(encodeMessage({ ...alive, x: 0.123456, y: 0.987654 }))).toMatchObject({ x: 0.1235, y: 0.9877 });
   });
 
+  it('round-trips an overtime vote and rejects a target on it', () => {
+    const overtime: VoteMsg = { ...ff, kind: 'overtime' };
+    expect(decodeMessage(encodeMessage(overtime))).toEqual(overtime);
+    expect(validateMessage({ ...overtime, target: who })).toBeNull();
+  });
+
   it('knows a vote id: eight lower-case hex characters', () => {
     expect(isVoteId('0a1b2c3d')).toBe(true);
     for (const v of ['0a1b2c3', '0a1b2c3d4', '0A1B2C3D', 'ghijklmn', 7, null, undefined]) expect(isVoteId(v)).toBe(false);

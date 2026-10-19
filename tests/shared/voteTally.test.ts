@@ -19,7 +19,7 @@ describe('VoteTally', () => {
     expect(tally.check()).toBeNull();
     tally.ballot('d', 'v1', true);
     expect(tally.check()).toEqual({
-      id: 'v1', kind: 'ff', passed: true, yes: 4, voters: 5, declined: [], missing: ['e'],
+      id: 'v1', kind: 'ff', passed: true, yes: 4, voters: 5, accepted: ['a', 'b', 'c', 'd'], declined: [], missing: ['e'],
     });
 
     const two = setup().tally;
@@ -36,7 +36,7 @@ describe('VoteTally', () => {
     expect(tally.check()).toBeNull();
     tally.ballot('c', 'v1', false);
     expect(tally.check()).toEqual({
-      id: 'v1', kind: 'ff', passed: false, yes: 1, voters: 5, declined: ['b', 'c'], missing: ['d', 'e'],
+      id: 'v1', kind: 'ff', passed: false, yes: 1, voters: 5, accepted: ['a'], declined: ['b', 'c'], missing: ['d', 'e'],
     });
     expect(tally.view()).toBeNull();
   });
@@ -55,12 +55,36 @@ describe('VoteTally', () => {
     expect(passing.check()).toMatchObject({ passed: true, yes: 3, declined: [], missing: [] });
   });
 
+  it.each([true, false])('waits for every overtime answer even after a majority says %s', (yes) => {
+    const { tally } = setup();
+    tally.start({ id: 'o1', kind: 'overtime', starter: 'a', voters: FIVE });
+    for (const peer of ['b', 'c', 'd']) tally.ballot(peer, 'o1', yes);
+    expect(tally.check()).toBeNull();
+    tally.ballot('e', 'o1', false);
+    expect(tally.check()).toMatchObject({
+      kind: 'overtime', accepted: yes ? ['a', 'b', 'c', 'd'] : ['a'],
+      declined: yes ? ['e'] : ['b', 'c', 'd', 'e'], missing: [],
+    });
+    expect(tally.check()).toBeNull();
+  });
+
+  it('keeps unanswered overtime voters separate from no, including those who leave', () => {
+    const { tally, advance } = setup();
+    tally.start({ id: 'o1', kind: 'overtime', starter: 'a', voters: ['a', 'b', 'c', 'd'] });
+    tally.ballot('b', 'o1', false);
+    tally.left('c');
+    advance(59_999);
+    expect(tally.check()).toBeNull();
+    advance(1);
+    expect(tally.check()).toMatchObject({ accepted: ['a'], declined: ['b'], missing: ['c', 'd'] });
+  });
+
   it('lets the other person kick in a room of two', () => {
     expect([needed('kick', 1), needed('kick', 2), needed('kick', 4), needed('kick', 5)]).toEqual([1, 2, 3, 3]);
     const { tally } = setup();
     tally.start({ id: 'k1', kind: 'kick', starter: 'a', target: 'b', voters: ['a', 'b'] });
     expect(tally.check()).toEqual({
-      id: 'k1', kind: 'kick', target: 'b', passed: true, yes: 1, voters: 1, declined: [], missing: [],
+      id: 'k1', kind: 'kick', target: 'b', passed: true, yes: 1, voters: 1, accepted: ['a'], declined: [], missing: [],
     });
   });
 
@@ -80,7 +104,7 @@ describe('VoteTally', () => {
     expect(ready.tally.check()).toBeNull();
     ready.advance(1);
     expect(ready.tally.check()).toMatchObject({ passed: false, missing: ['b'] });
-    expect(VOTE_MS).toEqual({ ff: 60_000, kick: 60_000, ready: 15_000 });
+    expect(VOTE_MS).toEqual({ ff: 60_000, kick: 60_000, ready: 15_000, overtime: 60_000 });
   });
 
   it('keeps the first ballot', () => {

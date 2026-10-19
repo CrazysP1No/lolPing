@@ -411,7 +411,10 @@ function start(): void {
         onView: (v, over) => (v ? panels.showVote(panelState('vote', v, over)) : panels.hideVote()),
         onResult: (o) => {
           const display = screen.getPrimaryDisplay();
-          postLine(lineDeps, {
+          postLine({
+            ...lineDeps,
+            show: (p) => overlays.spawnText({ ...p, style: o.kind === 'overtime' ? 'danmaku' : settings.roomTextStyle }),
+          }, {
             kind: 'vote', owner: 'vote', tag: null, displayId: display.id, x: display.bounds.width / 2, y: display.bounds.height * 0.2,
             text: voteResultLine(o, (peer) => memberNames.get(peer) ?? '?', text()),
           });

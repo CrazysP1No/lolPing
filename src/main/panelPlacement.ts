@@ -1,7 +1,7 @@
 import type { VoteKind } from '../shared/roomProtocol';
 import type { Rect } from './coords';
 
-/** Window sizes in DIPs. A kick uses the surrender widget. */
+/** Window sizes in DIPs. Kick and overtime use the surrender widget. */
 export const SURRENDER_SIZE = { width: 223, height: 113 };
 export const READY_SIZE = { width: 442, height: 452 };
 export const ROSTER_SIZE = { width: 720, height: 470 };
@@ -12,7 +12,7 @@ const WIDGET_TOP = 0.4;
 
 export const voteSize = (kind: VoteKind): { width: number; height: number } => (kind === 'ready' ? READY_SIZE : SURRENDER_SIZE);
 
-/** Surrender and kick sit at the right edge, about 40% down; the ready check is centred. `area` is the primary display's work area. */
+/** Surrender, kick and overtime sit at the right edge, about 40% down; ready checks are centred in the work area. */
 export function votePlacement(kind: VoteKind, area: Rect): Rect {
   const size = voteSize(kind);
   if (kind === 'ready') return centredIn(size, area);

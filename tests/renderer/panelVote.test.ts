@@ -38,6 +38,8 @@ describe('voteTitle', () => {
   it('names the vote in the chosen language, and the kick target by name', () => {
     expect(voteTitle(view(), members, strings('en'))).toBe('Surrender?');
     expect(voteTitle(view({ kind: 'ready' }), members, strings('zh-CN'))).toBe('就位确认');
+    expect(voteTitle(view({ kind: 'overtime' }), members, strings('en'))).toBe('Work overtime?');
+    expect(voteTitle(view({ kind: 'overtime' }), members, strings('zh-CN'))).toBe('加班吗？');
     expect(voteTitle(view({ kind: 'kick', target: 'bb' }), members, strings('en'))).toBe('Remove Alex?');
     expect(voteTitle(view({ kind: 'kick', target: 'bb' }), members, strings('zh-CN'))).toBe('移出 Alex？');
   });

@@ -142,7 +142,7 @@ function historyLine(line: HistoryLine): HTMLElement {
   return row;
 }
 
-function voteButton(label: string, kind: 'ff' | 'ready', act: (a: PanelAction) => void): HTMLButtonElement {
+function voteButton(label: string, kind: 'ff' | 'ready' | 'overtime', act: (a: PanelAction) => void): HTMLButtonElement {
   const b = el('button', `lol-button ${kind}`, label);
   b.type = 'button';
   b.addEventListener('click', () => act({ t: 'vote', kind }));
@@ -175,7 +175,11 @@ export function renderRoster(root: HTMLElement, state: PanelState, act: (a: Pane
   // The vote buttons sit either side of the room code, where the scoreboard shows the team scores.
   const board = el('section', 'board');
   const head = el('div', 'board-head');
-  if (state.votesOn) head.append(voteButton(t.panelSurrender, 'ff', act));
+  if (state.votesOn) {
+    const buttons = el('div', 'vote-buttons');
+    buttons.append(voteButton(t.panelSurrender, 'ff', act), voteButton(t.panelOvertime, 'overtime', act));
+    head.append(buttons);
+  }
   head.append(el('span', 'code', state.room.code ?? ''));
   if (state.votesOn) head.append(voteButton(t.panelReadyCheck, 'ready', act));
   board.append(head);

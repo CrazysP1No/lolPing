@@ -8,7 +8,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: default; }
 h1, p { margin: 0; }
 
-/* ---------- surrender and kick: League's in-game surrender widget, 223 x 113 ---------- */
+/* ---------- surrender, kick and overtime: League's in-game surrender widget, 223 x 113 ---------- */
 .surrender { position: relative; width: 223px; height: 113px; background: url("/ui/surrender-frame.png") no-repeat; }
 .surrender .title {
   position: absolute; left: 10px; right: 10px; top: 8px; overflow: hidden; text-align: center; white-space: nowrap;
@@ -32,6 +32,7 @@ h1, p { margin: 0; }
 .foot .yes { color: #2bd34d; }
 .foot .no { color: #e2453c; }
 .foot button:disabled { opacity: .45; }
+.overtime .foot button { width: 88px; font-size: 12px; }
 
 /* ---------- ready check: the client's, with its sizes from rcp-fe-lol-navigation.css ---------- */
 /* Drawn at the client's own scale and zoomed to the window. The 530 px body sits 11 px in, because the timer video is
@@ -104,7 +105,7 @@ h1, p { margin: 0; }
   height: 51px; margin: -51px 0 0; padding: 0 16px 6px;
 }
 .board-head .code { grid-column: 2; font: 700 17px/1 var(--serif); letter-spacing: .06em; color: var(--gold-2); }
-.board-head .ff { grid-column: 1; justify-self: start; }
+.board-head .vote-buttons { grid-column: 1; justify-self: start; display: flex; gap: 8px; }
 .board-head .ready { grid-column: 3; justify-self: end; }
 
 .list { flex: 1; min-height: 0; overflow-y: auto; }

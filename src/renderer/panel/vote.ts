@@ -36,6 +36,7 @@ export function voteStatus(mine: boolean | undefined, over: boolean, t: Strings)
 export function voteTitle(v: VoteView, members: readonly RoomMember[], t: Strings): string {
   if (v.kind === 'ff') return t.voteTitleFf;
   if (v.kind === 'ready') return t.voteTitleReady;
+  if (v.kind === 'overtime') return t.voteTitleOvertime;
   return t.voteTitleKick(members.find((m) => m.peer === v.target)?.name ?? '?');
 }
 
@@ -77,7 +78,7 @@ function tick(): void {
   else requestAnimationFrame(tick);
 }
 
-/** Draws a surrender or kick vote into `root` as League's in-game surrender widget. The ready check is `readyCheck.ts`. */
+/** Draws surrender, kick and overtime votes as League's in-game surrender widget. Ready checks use `readyCheck.ts`. */
 export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelAction) => void): void {
   const v = state.vote;
   if (!v) {
@@ -100,13 +101,17 @@ export function renderVote(root: HTMLElement, state: PanelState, act: (a: PanelA
     return b;
   };
 
-  const card = el('section', 'vote surrender');
+  const overtime = v.kind === 'overtime';
+  const card = el('section', `vote surrender${overtime ? ' overtime' : ''}`);
   const bar = el('div', 'bar');
   const track = el('div', 'track');
   track.append(bar);
   const foot = el('div', 'foot');
   const status = voteStatus(mine, state.voteOver, t);
-  if (status === null) foot.append(answerButton(true, 'yes', MARK.yes, t.voteYes), answerButton(false, 'no', MARK.no, t.voteNo));
+  if (status === null) foot.append(
+    answerButton(true, 'yes', overtime ? t.panelOvertime : MARK.yes, overtime ? t.panelOvertime : t.voteYes),
+    answerButton(false, 'no', overtime ? t.voteNoOvertime : MARK.no, overtime ? t.voteNoOvertime : t.voteNo),
+  );
   else foot.append(el('span', 'said', status));
   card.append(el('h1', 'title', voteTitle(v, members, t)), marks('segments', voteBoxes(v, members)), track, foot);
   root.replaceChildren(card);

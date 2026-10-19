@@ -1,12 +1,12 @@
 import type { VoteKind } from './roomProtocol';
 
 /** How long each vote stays open. Our own constants: a sender's clock or wish never sets them. */
-export const VOTE_MS: Record<VoteKind, number> = { ff: 60_000, kick: 60_000, ready: 15_000 };
+export const VOTE_MS: Record<VoteKind, number> = { ff: 60_000, kick: 60_000, ready: 15_000, overtime: 60_000 };
 
-/** Yes ballots a vote needs: surrender 70% rounded up, ready check everyone, kick more than half. */
+/** Yes ballots a vote needs: surrender 70%, ready/overtime everyone, kick more than half. */
 export function needed(kind: VoteKind, voters: number): number {
   if (kind === 'ff') return Math.ceil(0.7 * voters);
-  if (kind === 'ready') return voters;
+  if (kind === 'ready' || kind === 'overtime') return voters;
   return Math.floor(voters / 2) + 1;
 }
 
@@ -28,6 +28,8 @@ export interface VoteOutcome {
   passed: boolean;
   yes: number;
   voters: number;
+  /** Voters who said yes. */
+  accepted: string[];
   /** Voters who said no, or left. */
   declined: string[];
   /** Voters who never answered. */
@@ -70,10 +72,10 @@ export class VoteTally {
     return true;
   }
 
-  /** A voter who is gone counts as no, unless they already answered. */
+  /** A voter who is gone counts as no, except in overtime polls where they remain unanswered. */
   left(voter: string): void {
     const o = this.open;
-    if (o && o.voters.includes(voter) && !(voter in o.ballots)) o.ballots[voter] = false;
+    if (o && o.kind !== 'overtime' && o.voters.includes(voter) && !(voter in o.ballots)) o.ballots[voter] = false;
   }
 
   view(): VoteView | null {
@@ -81,20 +83,23 @@ export class VoteTally {
     return o && { ...o, voters: [...o.voters], ballots: { ...o.ballots } };
   }
 
-  /** The result, once: as soon as it can't change, or at the end with the unanswered counted as no. */
+  /** The result, once: overtime waits for every answer or the deadline; other votes end once decided. */
   check(): VoteOutcome | null {
     const o = this.open;
     if (!o) return null;
     const answered = o.voters.filter((p) => p in o.ballots);
-    const yes = answered.filter((p) => o.ballots[p]).length;
+    const accepted = answered.filter((p) => o.ballots[p]);
+    const yes = accepted.length;
     const missing = o.voters.filter((p) => !(p in o.ballots));
     const need = needed(o.kind, o.voters.length);
     const passed = yes >= need;
-    if (!passed && yes + missing.length >= need && this.now() < o.endsAt) return null;
+    if (this.now() < o.endsAt) {
+      if (o.kind === 'overtime' ? missing.length > 0 : !passed && yes + missing.length >= need) return null;
+    }
     this.open = null;
     return {
       id: o.id, kind: o.kind, ...(o.target === undefined ? {} : { target: o.target }), passed, yes, voters: o.voters.length,
-      declined: answered.filter((p) => !o.ballots[p]), missing,
+      accepted, declined: answered.filter((p) => !o.ballots[p]), missing,
     };
   }
 }

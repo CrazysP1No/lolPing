@@ -10,6 +10,7 @@ describe('parsePanelAction', () => {
     expect(parsePanelAction({ t: 'kick', peer })).toEqual({ t: 'kick', peer });
     expect(parsePanelAction({ t: 'vote', kind: 'ff' })).toEqual({ t: 'vote', kind: 'ff' });
     expect(parsePanelAction({ t: 'vote', kind: 'ready' })).toEqual({ t: 'vote', kind: 'ready' });
+    expect(parsePanelAction({ t: 'vote', kind: 'overtime' })).toEqual({ t: 'vote', kind: 'overtime' });
     expect(parsePanelAction({ t: 'ballot', yes: false })).toEqual({ t: 'ballot', yes: false });
   });
 

@@ -112,6 +112,34 @@ describe('RoomVotes', () => {
     expect(room.votes).toEqual([]);
   });
 
+  it('collects all overtime choices before reporting the people in each group', () => {
+    const { room, votes, results } = setup();
+    expect(votes.start('overtime')).toBe('started');
+    expect(room.votes).toEqual([{ id: OWN, kind: 'overtime' }]);
+    room.emit('ballot', ballotFrom('a', true, OWN));
+    room.emit('ballot', ballotFrom('b', true, OWN));
+    expect(results).toEqual([]);
+    room.emit('ballot', ballotFrom('c', false, OWN));
+    expect(results).toEqual([
+      expect.objectContaining({ kind: 'overtime', accepted: ['me', 'a', 'b'], declined: ['c'], missing: [] }),
+    ]);
+    expect(room.kicked).toEqual([]);
+  });
+
+  it('lets us decline overtime and lists unanswered members after 60 s', () => {
+    const { room, votes, results } = setup();
+    room.emit('vote', voteFrom('a', { kind: 'overtime' }));
+    votes.answer(false);
+    expect(room.ballots).toEqual([{ id: 'abcdef01', yes: false }]);
+    room.setMembers(room.members.filter((m) => m.peer !== 'b'));
+    vi.advanceTimersByTime(59_000);
+    expect(results).toEqual([]);
+    vi.advanceTimersByTime(1000);
+    expect(results).toEqual([
+      expect.objectContaining({ accepted: ['a'], declined: ['me'], missing: ['b', 'c'] }),
+    ]);
+  });
+
   it('opens nothing for a vote from a muted member', () => {
     const { room, votes, views } = setup();
     room.members = [member('me', { self: true }), member('a', { muted: true }), member('b')];
@@ -264,7 +292,7 @@ describe('RoomVotes', () => {
 describe('voteResultLine', () => {
   const nameOf = (peer: string): string => ({ a: 'Alex', b: 'Bo', c: 'Cy' })[peer] ?? '?';
   const outcome = (over: Partial<VoteOutcome>): VoteOutcome => ({
-    id: 'x', kind: 'ff', passed: false, yes: 2, voters: 5, declined: [], missing: [], ...over,
+    id: 'x', kind: 'ff', passed: false, yes: 2, voters: 5, accepted: [], declined: [], missing: [], ...over,
   });
 
   it('writes a surrender result with the count', () => {
@@ -283,5 +311,21 @@ describe('voteResultLine', () => {
   it('names the member a kick vote was about', () => {
     const kick = outcome({ kind: 'kick', target: 'b', passed: true, yes: 3, voters: 4 });
     expect(voteResultLine(kick, nameOf, strings('en'))).toBe('Vote to remove Bo passed (3 / 4)');
+  });
+
+  it('names who is working overtime, who is not and who did not vote', () => {
+    const overtime = outcome({ kind: 'overtime', accepted: ['a'], declined: ['b'], missing: ['c'] });
+    expect(voteResultLine(overtime, nameOf, strings('en')))
+      .toBe('Overtime: Alex; No overtime: Bo; Did not vote: Cy');
+    expect(voteResultLine(overtime, nameOf, strings('zh-CN')))
+      .toBe('加班：Alex；不加班：Bo；未投票：Cy');
+  });
+
+  it('shows empty overtime groups explicitly', () => {
+    const overtime = outcome({ kind: 'overtime', accepted: ['a', 'b'], declined: [], missing: [] });
+    expect(voteResultLine(overtime, nameOf, strings('en')))
+      .toBe('Overtime: Alex, Bo; No overtime: None; Did not vote: None');
+    expect(voteResultLine(overtime, nameOf, strings('zh-CN')))
+      .toBe('加班：Alex、Bo；不加班：无；未投票：无');
   });
 });

@@ -4,8 +4,8 @@ import { centredIn, READY_SIZE, SURRENDER_SIZE, votePlacement } from '../../src/
 const area = { x: 100, y: 50, width: 1920, height: 1000 };
 
 describe('votePlacement', () => {
-  it('puts a surrender or kick widget at the right edge, 40% down', () => {
-    for (const kind of ['ff', 'kick'] as const) {
+  it('puts surrender, kick and overtime widgets at the right edge, 40% down', () => {
+    for (const kind of ['ff', 'kick', 'overtime'] as const) {
       expect(votePlacement(kind, area)).toEqual({ ...SURRENDER_SIZE, x: 100 + 1920 - SURRENDER_SIZE.width - 16, y: 50 + 400 });
     }
   });

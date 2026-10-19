@@ -98,7 +98,7 @@ export type PanelAction =
   | { t: 'alive'; peer: string }
   | { t: 'mute'; peer: string; on: boolean }
   | { t: 'kick'; peer: string }
-  | { t: 'vote'; kind: 'ff' | 'ready' }
+  | { t: 'vote'; kind: 'ff' | 'ready' | 'overtime' }
   | { t: 'ballot'; yes: boolean };
 
 export interface PanelApi {
@@ -121,7 +121,7 @@ export function parsePanelAction(raw: unknown): PanelAction | null {
     case 'kick':
       return isPeer(a.peer) ? { t: 'kick', peer: a.peer } : null;
     case 'vote':
-      return a.kind === 'ff' || a.kind === 'ready' ? { t: 'vote', kind: a.kind } : null;
+      return a.kind === 'ff' || a.kind === 'ready' || a.kind === 'overtime' ? { t: 'vote', kind: a.kind } : null;
     case 'ballot':
       return typeof a.yes === 'boolean' ? { t: 'ballot', yes: a.yes } : null;
     default:

@@ -3,7 +3,7 @@ import { isPingId, type PingId } from './pings';
 import { isTagColor, isTagRgb, type TagRgb } from './roomColors';
 
 /** Bumped when room messages change incompatibly. Peers on another version are shown as "needs update". */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const MAX_NAME = 16;
 /** The first app version that sends and shows room text, alive lines and votes. */
 export const ROOM_CHAT_SINCE = '0.5.2';
@@ -78,8 +78,8 @@ export interface AliveMsg extends Base {
   x: number;
   y: number;
 }
-export type VoteKind = 'ff' | 'ready' | 'kick';
-const VOTE_KINDS: readonly VoteKind[] = ['ff', 'ready', 'kick'];
+export type VoteKind = 'ff' | 'ready' | 'kick' | 'overtime';
+const VOTE_KINDS: readonly VoteKind[] = ['ff', 'ready', 'kick', 'overtime'];
 /** Added in 0.5.2: starts a vote. `id` names it; `target` is the peer to remove and only a kick has one. */
 export interface VoteMsg extends Base {
   t: 'vote';

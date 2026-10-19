@@ -22,7 +22,7 @@ const BALLOT_REPEAT_MS = 3000;
 /** How long the widget stays after the result. */
 const RESULT_SHOW_MS = 3000;
 
-/** Runs surrender, ready check and kick votes over the room. */
+/** Runs surrender, ready check, kick and overtime votes over the room. */
 export class RoomVotes {
   private tally: VoteTally;
   private checkTimer: ReturnType<typeof setInterval> | null = null;
@@ -185,5 +185,6 @@ export class RoomVotes {
 export function voteResultLine(o: VoteOutcome, nameOf: (peer: string) => string, t: Strings): string {
   if (o.kind === 'ff') return t.voteResultFf(o.passed, o.yes, o.voters);
   if (o.kind === 'ready') return o.passed ? t.readyAll : t.readyMissing([...o.declined, ...o.missing].map(nameOf));
+  if (o.kind === 'overtime') return t.voteResultOvertime(o.accepted.map(nameOf), o.declined.map(nameOf), o.missing.map(nameOf));
   return t.voteResultKick(o.passed, nameOf(o.target ?? ''), o.yes, o.voters);
 }
