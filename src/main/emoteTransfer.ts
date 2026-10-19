@@ -1,160 +1,253 @@
 import { createHash } from 'node:crypto';
-import { customHash, isCustomRef, STILL_MAX_BYTES, type EmoteArt } from '../shared/emotes';
-import { EMOTE_CHUNK_BYTES, EMOTE_MAX_REFS, type ChunkMsg, type WantMsg } from '../shared/roomProtocol';
+import { type ChunkMsg, type WantMsg } from '../shared/roomProtocol';
 import { checkStill } from './emoteLibrary';
 
-type TransferBody = Pick<WantMsg, 't' | 'to' | 'h' | 'need'> | Pick<ChunkMsg, 't' | 'h' | 'i' | 'n' | 'b'>;
+/** One chunk carries this many bytes: 1,000 base64 characters, and a sealed chunk stays under the 1,200-byte packet cap. */
+export const EMOTE_CHUNK_BYTES = 750;
+/** Assemblies in flight at once, bytes pending in total, and how long an assembly may take. */
+export const MAX_ASSEMBLIES = 16;
+export const MAX_PENDING_BYTES = 256 * 1024;
+export const ASSEMBLY_TIMEOUT_MS = 60_000;
+/** Silence before a want for the missing indexes; at most this many re-asks, then the hash waits for the next presence. */
+export const REASK_MS = 3_000;
+export const REASKS_MAX = 3;
+/** Chunk pacing: LAN unicast per requester per tick; over relays a chunk or a want only goes when 5 ping tokens remain. */
+export const TRANSFER_TICK_MS = 100;
+export const LAN_CHUNKS_PER_TICK = 2;
+/** Chunks per tick across every queue and requester: the LAN egress ceiling, ~60 KB/s however many members ask. */
+export const LAN_TOTAL_CHUNKS_PER_TICK = 8;
+export const RELAY_KEEP_TOKENS = 5;
+
 interface Assembly {
-  peer: string;
-  h: string;
-  parts: (Buffer | undefined)[];
+  /** Chunk count, from the first chunk. 0 until then: a want sent, no bytes yet. */
   n: number;
+  parts: Map<number, Uint8Array>;
   bytes: number;
-  started: number;
-  last: number;
-  retries: number;
-}
-interface Outgoing {
-  peer: string;
-  h: string;
-  chunks: string[];
-  need: Set<number>;
-  started: number;
+  firstAt: number;
+  lastAt: number;
+  /** The announcer our wants go to. */
+  ask: string;
+  /** The first want went out. Over relays it can wait for a spare ping token. */
+  asked: boolean;
+  reasks: number;
 }
 
-/** Bounded still cache and reliable chunks over the room's existing encrypted routes. */
+interface SendQueue {
+  bytes: Uint8Array;
+  n: number;
+  /** LAN requesters: chunks go unicast, at most LAN_CHUNKS_PER_TICK per requester per tick. */
+  lan: Map<string, Set<number>>;
+  /** Chunks that must ride a relay: one broadcast reaches the whole room, gated by the ping bucket. */
+  shared: Set<number>;
+}
+
+export interface EmoteTransferDeps {
+  now(): number;
+  /** The still for `hash` is here already: our own library, or the cache. */
+  have(hash: string): boolean;
+  /** Our own still for `hash`, when it is one of our announced emotes. */
+  still(hash: string): Uint8Array | null;
+  /** The hashes our presence announces right now. */
+  announced(): readonly string[];
+  /** The Show friends' custom emotes switch. */
+  enabled(): boolean;
+  /** Keeps a still that passed the hash and image checks. */
+  put(hash: string, bytes: Uint8Array): void;
+  /** How a member is reached right now: a LAN unicast, a relay broadcast, or neither. */
+  routeOf(peer: string): 'lan' | 'shared' | null;
+  sendToLan(peer: string, body: Record<string, unknown>): void;
+  broadcastShared(body: Record<string, unknown>): void;
+  /** True when a relay chunk may go: the shared bucket keeps `keep` tokens for pings and emotes. */
+  spareSharedToken(keep: number): boolean;
+}
+
+/**
+ * Moves custom emote stills over a room, both ways. The ID is the SHA-256 prefix of the still, so a finished assembly
+ * that doesn't hash back to it is dropped: nobody can substitute another member's image. Bytes are only ever written to
+ * the cache as `<hash>.webp` and only ever decoded by Chromium as an image; nothing here executes them.
+ *
+ * RoomManager emits 'emotes' (a presence's announced hashes), 'want', 'chunk' and 'memberGone'; this class answers.
+ */
 export class EmoteTransfer {
-  private readonly announced = new Map<string, Set<string>>();
-  private readonly incoming = new Map<string, Assembly>();
-  private readonly outgoing = new Map<string, Outgoing>();
-  // shortcut: stills are cached for this room session only; persist them if rejoining needs instant previews.
-  private readonly cache = new Map<string, Buffer>();
+  private readonly announcers = new Map<string, Set<string>>();
+  private readonly assemblies = new Map<string, Assembly>();
+  private readonly sends = new Map<string, SendQueue>();
+  private readonly timer: NodeJS.Timeout;
 
-  constructor(private readonly deps: {
-    now(): number;
-    hashes(): string[];
-    read(hash: string): Uint8Array | null;
-    send(peer: string, body: TransferBody): boolean;
-    ready(hash: string): void;
-  }) {}
-
-  art(ref: string): EmoteArt | undefined {
-    const image = isCustomRef(ref) ? this.cache.get(customHash(ref)) : undefined;
-    return image ? { kind: 'custom', url: `data:image/webp;base64,${image.toString('base64')}`, animated: false } : undefined;
+  constructor(private readonly deps: EmoteTransferDeps) {
+    this.timer = setInterval(() => this.tick(), TRANSFER_TICK_MS);
+    this.timer.unref();
   }
 
-  announce(peer: string, hashes: string[]): void {
-    if (!this.announced.has(peer) && this.announced.size >= 8) return;
-    this.announced.set(peer, new Set(hashes));
-    for (const [key, a] of this.incoming) if (a.peer === peer && !hashes.includes(a.h)) this.incoming.delete(key);
-    for (const h of hashes) this.request(peer, h);
+  stop(): void {
+    clearInterval(this.timer);
   }
 
-  /** An emote can arrive before its updated presence; its reference also announces the image. */
-  request(peer: string, h: string): void {
-    if (!this.announced.has(peer) && this.announced.size >= 8) return;
-    const hashes = this.announced.get(peer) ?? new Set<string>();
-    hashes.add(h);
-    if (hashes.size > EMOTE_MAX_REFS) hashes.delete(hashes.values().next().value!);
-    this.announced.set(peer, hashes);
-    const key = `${peer}:${h}`;
-    if (this.cache.has(h) || this.incoming.has(key)) return;
-    const local = this.deps.read(h);
-    if (local && this.valid(h, local)) {
-      this.put(h, Buffer.from(local));
+  /** A presence announced `hashes`: prefetch whatever isn't here yet, on the announcer's route. */
+  announced(peer: string, hashes: readonly string[]): void {
+    this.announcers.set(peer, new Set(hashes));
+    if (!this.deps.enabled()) return;
+    for (const hash of hashes) {
+      if (this.deps.have(hash) || this.assemblies.has(hash)) continue;
+      if (this.assemblies.size >= MAX_ASSEMBLIES) return;
+      const asked = this.sendWant(peer, hash, []);
+      this.assemblies.set(hash, { n: 0, parts: new Map(), bytes: 0, firstAt: this.deps.now(), lastAt: this.deps.now(), ask: peer, asked, reasks: 0 });
+    }
+  }
+
+  /** Another member asks for one of our stills. Only hashes in our own current announcement are served. */
+  onWant(w: WantMsg): void {
+    if (!this.deps.enabled()) return; // the switch stops both directions: nothing of ours leaves either
+    if (!this.deps.announced().includes(w.h)) return;
+    const lane = this.deps.routeOf(w.peer);
+    if (lane !== 'lan' && lane !== 'shared') return;
+    let queue = this.sends.get(w.h);
+    if (!queue) {
+      const bytes = this.deps.still(w.h); // read once per queue: a flood of wants can't make it read the disk each time
+      if (!bytes) return;
+      queue = { bytes, n: Math.ceil(bytes.length / EMOTE_CHUNK_BYTES), lan: new Map(), shared: new Set() };
+      this.sends.set(w.h, queue);
+    }
+    const want = w.need.length > 0 ? w.need.filter((i) => i < queue.n) : Array.from({ length: queue.n }, (_, i) => i);
+    if (want.length === 0) return;
+    if (lane === 'lan') {
+      const set = queue.lan.get(w.peer) ?? new Set<number>();
+      for (const i of want) set.add(i);
+      queue.lan.set(w.peer, set);
+    } else {
+      for (const i of want) queue.shared.add(i); // a broadcast reaches the requester as well as everyone else
+    }
+  }
+
+  /** One slice of a still, from the member that announced the hash. Assemblies finish into the cache once verified. */
+  onChunk(c: ChunkMsg): void {
+    if (!this.deps.enabled()) return;
+    if (!(this.announcers.get(c.peer)?.has(c.h) ?? false)) return; // only from a member who announced that hash
+    const part = Buffer.from(c.b, 'base64');
+    let a = this.assemblies.get(c.h);
+    if (!a) {
+      if (this.deps.have(c.h)) return; // already stored: a straggler chunk must not open a zombie assembly
+      if (this.assemblies.size >= MAX_ASSEMBLIES || this.pendingBytes() + part.length > MAX_PENDING_BYTES) return;
+      a = { n: 0, parts: new Map(), bytes: 0, firstAt: this.deps.now(), lastAt: this.deps.now(), ask: c.peer, asked: true, reasks: 0 };
+      this.assemblies.set(c.h, a);
+    }
+    if (a.n === 0) a.n = c.n;
+    else if (a.n !== c.n) {
+      this.assemblies.delete(c.h); // one sender, two ideas about the length: drop and wait for the next presence
       return;
     }
-    // One complete wheel plus centre (17 × 12 KB) fits under the 256 KB assembly budget.
-    if (this.incoming.size >= EMOTE_MAX_REFS) return;
-    const now = this.deps.now();
-    this.incoming.set(key, { peer, h, parts: [], n: 0, bytes: 0, started: now, last: now, retries: 0 });
-    this.deps.send(peer, { t: 'want', to: peer, h, need: [] });
+    if (c.i >= a.n || a.parts.has(c.i)) return;
+    a.parts.set(c.i, part);
+    a.bytes += part.length;
+    a.lastAt = this.deps.now();
+    if (a.parts.size === a.n) this.finish(c.h, a);
   }
 
-  want(msg: WantMsg): void {
-    if (!this.deps.hashes().includes(msg.h)) return;
-    const key = `${msg.peer}:${msg.h}`;
-    let q = this.outgoing.get(key);
-    if (!q) {
-      if (this.outgoing.size >= 8 * EMOTE_MAX_REFS) return;
-      const bytes = this.deps.read(msg.h);
-      if (!bytes || !this.valid(msg.h, bytes)) return;
-      const chunks: string[] = [];
-      for (let at = 0; at < bytes.length; at += EMOTE_CHUNK_BYTES) chunks.push(Buffer.from(bytes.subarray(at, at + EMOTE_CHUNK_BYTES)).toString('base64'));
-      q = { peer: msg.peer, h: msg.h, chunks, need: new Set(), started: this.deps.now() };
-      this.outgoing.set(key, q);
+  memberGone(peer: string): void {
+    this.announcers.delete(peer);
+    for (const [hash, q] of this.sends) {
+      q.lan.delete(peer);
+      if (q.lan.size === 0 && q.shared.size === 0) this.sends.delete(hash);
     }
-    for (const i of msg.need.length ? msg.need : q.chunks.map((_, i) => i)) if (i < q.chunks.length) q.need.add(i);
+    for (const [hash, a] of this.assemblies) if (a.ask === peer) this.assemblies.delete(hash);
   }
 
-  chunk(msg: ChunkMsg): void {
-    const key = `${msg.peer}:${msg.h}`;
-    const a = this.incoming.get(key);
-    if (!a || !this.announced.get(msg.peer)?.has(msg.h)) return;
-    if ((a.n && a.n !== msg.n) || a.parts[msg.i]) return;
-    const bytes = Buffer.from(msg.b, 'base64');
-    if (a.bytes + bytes.length > STILL_MAX_BYTES) {
-      this.incoming.delete(key);
-      return;
+  get stats(): { assembling: number; sending: number } {
+    return { assembling: this.assemblies.size, sending: this.sends.size };
+  }
+
+  private pendingBytes(): number {
+    let total = 0;
+    for (const a of this.assemblies.values()) total += a.bytes;
+    return total;
+  }
+
+  /** The finished assembly, in chunk order: kept only when it hashes back to its ID and is a still this app would import. */
+  private finish(hash: string, a: Assembly): void {
+    this.assemblies.delete(hash);
+    const full = new Uint8Array(a.bytes);
+    let at = 0;
+    for (let i = 0; i < a.n; i++) {
+      const part = a.parts.get(i);
+      if (!part) return; // finish only runs once every index is in
+      full.set(part, at);
+      at += part.length;
     }
-    a.n = msg.n;
-    a.parts[msg.i] = bytes;
-    a.bytes += bytes.length;
-    a.last = this.deps.now();
-    if (Array.from({ length: a.n }, (_, i) => a.parts[i]).some((b) => !b)) return;
-    this.incoming.delete(key);
-    const image = Buffer.concat(a.parts as Buffer[]);
-    if (!this.valid(msg.h, image)) return;
-    this.put(msg.h, image);
-    this.deps.ready(msg.h);
+    if (createHash('sha256').update(full).digest('hex').slice(0, 32) !== hash) return;
+    if (checkStill(full) !== null) return;
+    this.deps.put(hash, full);
   }
 
-  tick(): void {
-    const now = this.deps.now();
-    for (const [key, a] of this.incoming) {
-      if (now - a.started >= 60_000 || (now - a.last >= 3000 && a.retries >= 3)) {
-        this.incoming.delete(key);
-      } else if (now - a.last >= 3000) {
-        const need = Array.from({ length: a.n }, (_, i) => i).filter((i) => !a.parts[i]);
-        if (this.deps.send(a.peer, { t: 'want', to: a.peer, h: a.h, need })) a.retries++;
-        a.last = now;
+  /** False when it didn't go: no route, or no spare relay token (joining a room can find 9 hashes per member at once). */
+  private sendWant(peer: string, hash: string, need: readonly number[]): boolean {
+    const body = { t: 'want', to: peer, h: hash, need: [...need] };
+    const lane = this.deps.routeOf(peer);
+    if (lane === 'lan') this.deps.sendToLan(peer, body);
+    else if (lane === 'shared' && this.deps.spareSharedToken(RELAY_KEEP_TOKENS)) this.deps.broadcastShared(body); // `to` addresses it, the seal protects it
+    else return false;
+    return true;
+  }
+
+  private chunkBody(hash: string, i: number, q: SendQueue): Record<string, unknown> {
+    const slice = q.bytes.subarray(i * EMOTE_CHUNK_BYTES, Math.min((i + 1) * EMOTE_CHUNK_BYTES, q.bytes.length));
+    return { t: 'chunk', h: hash, i, n: q.n, b: Buffer.from(slice).toString('base64') };
+  }
+
+  /** Sender pacing and receiver re-asks. Anything thrown is dropped: a timer must never take the app down. */
+  private tick(): void {
+    try {
+      if (!this.deps.enabled()) {
+        this.assemblies.clear(); // the switch stops both directions: pending work is dropped, not paused
+        this.sends.clear();
+        return;
       }
-    }
-    const sent = new Map<string, number>();
-    for (const [key, q] of this.outgoing) {
-      if (now - q.started >= 60_000 || !this.deps.hashes().includes(q.h)) {
-        this.outgoing.delete(key);
-        continue;
+      let egress = 0; // chunks sent this tick, across every queue and requester
+      const ours = new Set(this.deps.announced());
+      for (const [hash, q] of [...this.sends]) {
+        if (!ours.has(hash)) {
+          this.sends.delete(hash); // the emote left our wheel: nobody may still be served it
+          continue;
+        }
+        for (const [peer, need] of [...q.lan]) {
+          for (let k = 0; k < LAN_CHUNKS_PER_TICK && need.size > 0 && egress < LAN_TOTAL_CHUNKS_PER_TICK; k++) {
+            const i = need.values().next().value as number;
+            need.delete(i);
+            this.deps.sendToLan(peer, this.chunkBody(hash, i, q));
+            egress++;
+          }
+          if (need.size === 0) q.lan.delete(peer);
+        }
+        if (q.shared.size > 0 && this.deps.spareSharedToken(RELAY_KEEP_TOKENS)) {
+          const i = q.shared.values().next().value as number;
+          q.shared.delete(i);
+          this.deps.broadcastShared(this.chunkBody(hash, i, q));
+        }
+        if (q.lan.size === 0 && q.shared.size === 0) this.sends.delete(hash);
       }
-      for (const i of q.need) {
-        if ((sent.get(q.peer) ?? 0) >= 20 || !this.deps.send(q.peer, { t: 'chunk', h: q.h, i, n: q.chunks.length, b: q.chunks[i] })) break;
-        sent.set(q.peer, (sent.get(q.peer) ?? 0) + 1);
-        q.need.delete(i);
+      const now = this.deps.now();
+      for (const [hash, a] of [...this.assemblies]) {
+        if (a.n > 0 && a.parts.size === a.n) continue; // completes inside onChunk
+        if (now - a.firstAt >= ASSEMBLY_TIMEOUT_MS || !(this.announcers.get(a.ask)?.has(hash) ?? false)) {
+          this.assemblies.delete(hash);
+          continue;
+        }
+        if (!a.asked) {
+          a.asked = this.sendWant(a.ask, hash, []);
+          a.lastAt = now;
+          continue;
+        }
+        if (now - a.lastAt < REASK_MS) continue;
+        if (a.reasks >= REASKS_MAX) {
+          this.assemblies.delete(hash); // the next presence starts over
+          continue;
+        }
+        const need = a.n === 0 ? [] : Array.from({ length: a.n }, (_, i) => i).filter((i) => !a.parts.has(i));
+        if (!this.sendWant(a.ask, hash, need)) continue; // waits for a token: not a re-ask yet
+        a.reasks++;
+        a.lastAt = now;
       }
-      if (!q.need.size) this.outgoing.delete(key);
+    } catch {
+      // a send that failed (a packet that wouldn't seal, a route that vanished) waits for the next tick
     }
-  }
-
-  forget(peer: string): void {
-    this.announced.delete(peer);
-    for (const [key, a] of this.incoming) if (a.peer === peer) this.incoming.delete(key);
-    for (const [key, q] of this.outgoing) if (q.peer === peer) this.outgoing.delete(key);
-  }
-
-  clear(): void {
-    this.announced.clear();
-    this.incoming.clear();
-    this.outgoing.clear();
-    this.cache.clear();
-  }
-
-  private valid(h: string, bytes: Uint8Array): boolean {
-    return checkStill(bytes) === null && createHash('sha256').update(bytes).digest('hex').slice(0, 32) === h;
-  }
-
-  private put(h: string, bytes: Buffer): void {
-    for (const [key, a] of this.incoming) if (a.h === h) this.incoming.delete(key);
-    if (this.cache.size >= 8 * EMOTE_MAX_REFS) this.cache.delete(this.cache.keys().next().value!);
-    this.cache.set(h, bytes);
   }
 }

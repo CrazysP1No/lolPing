@@ -1,15 +1,15 @@
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, scrypt } from 'node:crypto';
+import {
+  createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, hkdfSync, randomBytes, scrypt, sign, verify,
+  type KeyObject,
+} from 'node:crypto';
 
 /** Every room packet: format byte, nonce, AES-256-GCM ciphertext and tag. Larger packets are never sent or read. */
 export const MAX_PACKET = 1200;
-export const MAX_VIDEO_PACKET = 32768;
 const FORMAT = 0x01;
-const VIDEO_FORMAT = 0x02;
 const NONCE = 12;
 const TAG = 16;
 const OVERHEAD = 1 + NONCE + TAG;
 const AAD = Buffer.from([FORMAT]);
-const VIDEO_AAD = Buffer.from([VIDEO_FORMAT]);
 
 export interface RoomKeys {
   /** Encrypts every room message. Never leaves the main process. */
@@ -31,37 +31,67 @@ export function deriveRoomKeys(canonical: string): Promise<RoomKeys> {
 }
 
 export function seal(key: Buffer, plain: Uint8Array): Buffer {
-  return sealFormat(key, plain, FORMAT, MAX_PACKET, 'room message too large');
-}
-
-export function sealVideo(key: Buffer, plain: Uint8Array): Buffer {
-  return sealFormat(key, plain, VIDEO_FORMAT, MAX_VIDEO_PACKET, 'room video too large');
-}
-
-function sealFormat(key: Buffer, plain: Uint8Array, format: number, limit: number, error: string): Buffer {
-  if (plain.length + OVERHEAD > limit) throw new Error(error);
+  if (plain.length + OVERHEAD > MAX_PACKET) throw new Error('room message too large');
   const nonce = randomBytes(NONCE);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  cipher.setAAD(format === VIDEO_FORMAT ? VIDEO_AAD : AAD);
+  cipher.setAAD(AAD);
   const body = Buffer.concat([cipher.update(plain), cipher.final()]);
-  return Buffer.concat([Buffer.from([format]), nonce, body, cipher.getAuthTag()]);
-}
-
-export function packetLimit(packet: Uint8Array): number {
-  return packet[0] === VIDEO_FORMAT ? MAX_VIDEO_PACKET : MAX_PACKET;
+  return Buffer.concat([AAD, nonce, body, cipher.getAuthTag()]);
 }
 
 /** The plaintext, or null for anything that isn't a packet sealed with this key. */
 export function open(key: Buffer, packet: Uint8Array): Buffer | null {
-  const format = packet[0];
-  if (packet.length < OVERHEAD || packet.length > packetLimit(packet) || (format !== FORMAT && format !== VIDEO_FORMAT)) return null;
+  if (packet.length < OVERHEAD || packet.length > MAX_PACKET || packet[0] !== FORMAT) return null;
   const buf = Buffer.from(packet.buffer, packet.byteOffset, packet.length);
   try {
     const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(1, 1 + NONCE));
-    decipher.setAAD(format === VIDEO_FORMAT ? VIDEO_AAD : AAD);
+    decipher.setAAD(AAD);
     decipher.setAuthTag(buf.subarray(buf.length - TAG));
     return Buffer.concat([decipher.update(buf.subarray(1 + NONCE, buf.length - TAG)), decipher.final()]);
   } catch {
     return null;
+  }
+}
+
+/** A member's signing key for one room session: the raw Ed25519 public key, and the private key that stays here. */
+export interface RoomIdentity {
+  pk: Buffer;
+  key: KeyObject;
+}
+
+// DER wrappers that turn a raw 32-byte Ed25519 seed or public key into what node:crypto imports.
+const PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+/** The identity grown from a 32-byte seed; the caller passes fresh random bytes, tests a fixed seed. */
+export function makeIdentity(seed: Uint8Array): RoomIdentity {
+  const key = createPrivateKey({ key: Buffer.concat([PKCS8_PREFIX, seed]), format: 'der', type: 'pkcs8' });
+  const spki = createPublicKey(key).export({ format: 'der', type: 'spki' });
+  return { pk: spki.subarray(SPKI_PREFIX.length), key };
+}
+
+/** A member's peer id: the first 16 hex characters of SHA-256 of their public key, so nobody else can claim it. */
+export const peerIdOf = (pk: Uint8Array): string => createHash('sha256').update(pk).digest('hex').slice(0, 16);
+
+/** The public key a presence announced, or null when it isn't one. */
+export function publicKeyOf(pk: Uint8Array): KeyObject | null {
+  if (pk.length !== 32) return null;
+  try {
+    return createPublicKey({ key: Buffer.concat([SPKI_PREFIX, pk]), format: 'der', type: 'spki' });
+  } catch {
+    return null;
+  }
+}
+
+/** The signature over an encoded message, in base64 (88 characters). */
+export const signBody = (id: RoomIdentity, body: Uint8Array): string => sign(null, body, id.key).toString('base64');
+
+export function verifyBody(pk: KeyObject, body: Uint8Array, sig: string): boolean {
+  const raw = Buffer.from(sig, 'base64');
+  if (raw.length !== 64) return false;
+  try {
+    return verify(null, body, pk, raw);
+  } catch {
+    return false;
   }
 }

@@ -3,9 +3,20 @@ import type { EmoteArt } from '../../src/shared/emotes';
 import { OVERLAY_EMOTED, OVERLAY_PINGED } from '../../src/shared/ipc';
 import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 
+type Rect = { x: number; y: number; width: number; height: number };
+
 const h = vi.hoisted(() => ({
-  windows: [] as Array<{ x: number; webContents: { send: ReturnType<typeof vi.fn> } }>,
+  windows: [] as Array<{
+    x: number;
+    bounds: Rect;
+    emit: (event: string) => boolean;
+    webContents: { send: ReturnType<typeof vi.fn> };
+    onTop: string[];
+    hiddenInMissionControl: boolean;
+  }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
+  isMac: false,
+  isLinux: false,
 }));
 
 vi.mock('electron', async () => {
@@ -15,15 +26,28 @@ vi.mock('electron', async () => {
       return (h.windows as unknown as FakeWindow[]).find((w) => w.webContents === wc) ?? null;
     }
     x: number;
+    bounds: Rect;
     webContents = Object.assign(new Emitter(), { send: vi.fn() });
-    constructor(opts: { x: number }) {
+    constructor(opts: Rect) {
       super();
       this.x = opts.x;
+      this.bounds = { x: opts.x, y: opts.y, width: opts.width, height: opts.height };
       h.windows.push(this);
     }
+    /** Every always-on-top level set on it, in order. */
+    onTop: string[] = [];
     setIgnoreMouseEvents(): void {}
-    setAlwaysOnTop(): void {}
-    setBounds(): void {}
+    setAlwaysOnTop(_flag: boolean, level: string): void {
+      this.onTop.push(level);
+    }
+    setVisibleOnAllWorkspaces(): void {}
+    hiddenInMissionControl = false;
+    setHiddenInMissionControl(hidden: boolean): void {
+      this.hiddenInMissionControl = hidden;
+    }
+    setBounds(r: Rect): void {
+      this.bounds = r;
+    }
     showInactive(): void {}
     isDestroyed(): boolean {
       return false;
@@ -39,12 +63,18 @@ vi.mock('electron', async () => {
     getPrimaryDisplay: () => displays[0],
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
+  screen.setMaxListeners(0); // every test starts a manager on this one fake screen
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
   return { BrowserWindow: FakeWindow, ipcMain, screen };
 });
 
 vi.mock('../../src/main/paths', () => ({
-  IS_MAC: false,
+  get IS_MAC() {
+    return h.isMac;
+  },
+  get IS_LINUX() {
+    return h.isLinux;
+  },
   loadPage: () => Promise.resolve(),
   preloadPath: () => 'preload.js',
 }));
@@ -61,9 +91,9 @@ const sent = (i: number): Array<[string, unknown]> =>
 beforeEach(async () => {
   h.windows.length = 0;
   h.handlers.clear();
+  h.isMac = false;
+  h.isLinux = false;
   vi.resetModules();
-  const { screen } = await import('electron');
-  screen.removeAllListeners();
   const { OverlayManager } = await import('../../src/main/overlayManager');
   resolveArt = vi.fn(art);
   mgr = new OverlayManager(overlaySettings({ ...DEFAULT_SETTINGS, clickEmoteId: 'okay' }), resolveArt);
@@ -154,17 +184,59 @@ describe('OverlayManager emote reports from the overlay', () => {
   });
 });
 
-describe('OverlayManager remote and preview emotes', () => {
-  it('shows text only on its target display, retaining the sender tag', () => {
-    mgr.spawnText({ displayId: 2, x: 5, y: 6, text: '集合', tag: { name: 'Bob', color: 2 } });
-    expect(sent(1)).toEqual([['text:spawn', { x: 5, y: 6, text: '集合', tag: { name: 'Bob', color: 2 } }]]);
-    expect(sent(0)).toEqual([]);
+describe('OverlayManager kept ping', () => {
+  const keepOn = () => mgr.updateSettings(overlaySettings({ ...DEFAULT_SETTINGS, keepLastPing: true }));
+
+  it('keeps a click ping and drops the one kept on the other display', () => {
+    keepOn();
+    mgr.handle({ type: 'click', x: 1920 + 300, y: 400, wheel: 'ping' });
+    expect(sent(1)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 300, y: 400, keep: true }]]);
+    expect(sent(0)).toEqual([['ping:unkeep', null]]);
   });
+
+  it('drops the kept ping on the other displays when a wheel ping is reported', () => {
+    keepOn();
+    h.handlers.get(OVERLAY_PINGED)!({ sender: h.windows[1].webContents }, { id: 'danger', x: 1, y: 2 });
+    expect(sent(0)).toEqual([['ping:unkeep', null]]);
+    expect(sent(1)).toEqual([]);
+  });
+
+  it('drops it everywhere on pause, and sends nothing while the setting is off', () => {
+    mgr.dropKeptPings();
+    mgr.handle({ type: 'click', x: 50, y: 60, wheel: 'ping' });
+    expect(sent(0)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 50, y: 60 }]]);
+    expect(sent(1)).toEqual([]);
+    keepOn();
+    mgr.dropKeptPings();
+    expect(sent(1)).toEqual([['ping:unkeep', null]]);
+  });
+
+  it('never keeps a room member’s ping or a preview', () => {
+    keepOn();
+    mgr.spawnRemote({ displayId: 2, x: 1, y: 1, id: 'danger', tag: { name: 'Bot', color: 0 } });
+    mgr.previewPing('danger');
+    expect(sent(1)).toEqual([['ping:spawn', { id: 'danger', x: 1, y: 1, tag: { name: 'Bot', color: 0 } }]]);
+    expect(sent(0)).toEqual([['ping:spawn', { id: 'danger', x: 960, y: 540 }]]);
+  });
+});
+
+describe('OverlayManager remote and preview emotes', () => {
   it('shows a room member\'s emote on the target display with their tag, and clears theirs on the others', () => {
     mgr.spawnRemoteEmote({ displayId: 2, x: 5, y: 6, ref: 'gg_heart', peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
     expect(resolveArt).toHaveBeenCalledWith('gg_heart', true);
     expect(sent(1)).toEqual([['emote:spawn', { owner: 'peer-1', art: art('gg_heart', true), x: 5, y: 6, tag: { name: 'Bob', color: 2 } }]]);
     expect(sent(0)).toEqual([['emote:clear', { owner: 'peer-1' }]]);
+  });
+
+  it('plays a room member’s custom emote with the effect on their message, over what we would have picked', () => {
+    const url = `lolping://emotes/${'a'.repeat(32)}.webp`;
+    const cached: EmoteArt = { kind: 'custom', url, animated: false, fx: 0 };
+    const mine: EmoteArt = { kind: 'custom', url, animated: false, fx: 2 };
+    resolveArt.mockReturnValueOnce(cached).mockReturnValueOnce(mine);
+    mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, fx: 5, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
+    mgr.spawnRemoteEmote({ displayId: 1, x: 1, y: 1, ref: `c:${'a'.repeat(32)}`, peer: 'peer-1', tag: { name: 'Bob', color: 2 } });
+    expect(sent(0)[0][1]).toMatchObject({ art: { kind: 'custom', fx: 5 } }); // the sender's pick, not the cache's plain pop
+    expect(sent(0)[1][1]).toMatchObject({ art: { kind: 'custom', fx: 0 } }); // no fx on the message: the sender's plain pop, whatever we stored
   });
 
   it('previews in the middle of the main display without sharing', () => {
@@ -178,30 +250,98 @@ describe('OverlayManager remote and preview emotes', () => {
   });
 });
 
-describe('OverlayManager wards', () => {
-  const ward = { key: 'peer:2', displayId: 2, x: 5, y: 6, tag: { name: 'Bob', color: 2 } };
-
-  it('sends a ward snapshot to its display and empty snapshots to the others', () => {
-    mgr.syncWards([ward]);
-    expect(sent(1)).toEqual([['ward:sync', { wards: [ward], silent: false }]]);
-    expect(sent(0)).toEqual([['ward:sync', { wards: [], silent: false }]]);
+describe('OverlayManager window bounds', () => {
+  it('leaves the bottom row of each display uncovered on Windows, so the taskbar does not see a full-screen app', () => {
+    for (const w of h.windows) w.emit('ready-to-show');
+    expect(h.windows.map((w) => w.bounds)).toEqual([
+      { x: 0, y: 0, width: 1920, height: 1079 },
+      { x: 1920, y: 0, width: 1280, height: 1023 },
+    ]);
   });
 
-  it('restores wards silently after an overlay reload', () => {
-    mgr.syncWards([ward]);
-    h.windows[1].webContents.send.mockClear();
-    (h.windows[1].webContents as unknown as { emit(event: string): void }).emit('did-finish-load');
-    expect(sent(1)).toEqual([['ward:sync', { wards: [ward], silent: true }]]);
+  it('keeps pings where they were placed, since the window still starts at the display\'s corner', () => {
+    mgr.handle({ type: 'click', x: 1920 + 300, y: 400, wheel: 'ping' });
+    expect(sent(1)).toEqual([['ping:spawn', { id: DEFAULT_SETTINGS.clickPingId, x: 300, y: 400 }]]);
   });
 
-  it('plays the clear effect only on the target display and forgets the cleared ward on reload', () => {
-    mgr.syncWards([ward]);
-    h.windows.forEach((w) => w.webContents.send.mockClear());
-    mgr.clearWard({ ...ward, points: 1 });
-    expect(sent(1)).toEqual([['ward:clear', { key: ward.key, points: 1 }]]);
-    expect(sent(0)).toEqual([]);
-    h.windows[1].webContents.send.mockClear();
-    (h.windows[1].webContents as unknown as { emit(event: string): void }).emit('did-finish-load');
-    expect(sent(1)).toEqual([['ward:sync', { wards: [], silent: true }]]);
+  it('covers the whole display on macOS', async () => {
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    for (const w of h.windows) w.emit('ready-to-show');
+    expect(h.windows.map((w) => w.bounds)).toEqual([
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      { x: 1920, y: 0, width: 1280, height: 1024 },
+    ]);
+  });
+
+  it('covers the whole display on Linux, where the taskbar workaround does not apply', async () => {
+    h.windows.length = 0;
+    h.isLinux = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    for (const w of h.windows) w.emit('ready-to-show');
+    expect(h.windows.map((w) => w.bounds)).toEqual([
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      { x: 1920, y: 0, width: 1280, height: 1024 },
+    ]);
+  });
+
+  it('keeps every overlay out of Mission Control on macOS, and leaves Windows alone', async () => {
+    expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([false, false]);
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt).start();
+    expect(h.windows.map((w) => w.hiddenInMissionControl)).toEqual([true, true]);
+  });
+});
+
+describe('OverlayManager z-order', () => {
+  /** Levels set on each window after it was created. */
+  const raised = (): string[][] => h.windows.map((w) => w.onTop.slice(1));
+
+  it('puts the overlay back on top on Windows before it shows a wheel, a ping, an emote or a toast', () => {
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.spawnRemote({ displayId: 2, x: 1, y: 1, id: 'danger', tag: { name: 'Bot', color: 0 } });
+    mgr.previewEmote('okay');
+    mgr.toast('t', 'b');
+    expect(raised()).toEqual([['screen-saver', 'screen-saver', 'screen-saver'], ['screen-saver']]);
+  });
+
+  it('leaves the z-order alone while a wheel moves, ends, or settings change', () => {
+    mgr.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mgr.handle({ type: 'wheelMove', x: 110, y: 210, wheel: 'ping' });
+    mgr.handle({ type: 'wheelRelease', x: 120, y: 220, wheel: 'ping' });
+    mgr.updateSettings(overlaySettings(DEFAULT_SETTINGS));
+    expect(raised()).toEqual([['screen-saver'], []]);
+  });
+
+  it('never touches it again on Linux, where the Windows 10 z-order fix does not apply', async () => {
+    h.windows.length = 0;
+    h.isLinux = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    const linux = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt);
+    linux.start();
+    linux.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    linux.previewPing('danger');
+    expect(raised()).toEqual([[], []]);
+  });
+
+  it('never touches it again on macOS, where the panel stays on top', async () => {
+    h.windows.length = 0;
+    h.isMac = true;
+    vi.resetModules();
+    const { OverlayManager } = await import('../../src/main/overlayManager');
+    const mac = new OverlayManager(overlaySettings(DEFAULT_SETTINGS), resolveArt);
+    mac.start();
+    mac.handle({ type: 'wheelOpen', x: 100, y: 200, wheel: 'ping' });
+    mac.previewPing('danger');
+    expect(raised()).toEqual([[], []]);
   });
 });

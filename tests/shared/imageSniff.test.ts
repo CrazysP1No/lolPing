@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gifExtent, gifSize, imageSize, isAnimatedWebp, sniffImage, sniffVideo, webpSize } from '../../src/shared/imageSniff';
+import { gifExtent, gifSize, imageSize, isAnimatedWebp, sniffImage, webpSize } from '../../src/shared/imageSniff';
 
 const ascii = (s: string): number[] => [...s].map((c) => c.charCodeAt(0));
 const le16 = (n: number): number[] => [n & 0xff, (n >> 8) & 0xff];
@@ -20,19 +20,6 @@ const WEBP_LOSSLESS = (w: number, h: number) =>
 const WEBP_EXTENDED = (w: number, h: number, flags = 0x10) =>
   bytes(...webpHead('VP8X'), [flags, 0, 0, 0], le24(w - 1), le24(h - 1));
 const GIF = (magic: string, w: number, h: number) => bytes(ascii(magic), le16(w), le16(h), [0xf7, 0, 0]);
-
-describe('sniffVideo', () => {
-  it('recognises MP4 and WebM by content rather than file extension', () => {
-    expect(sniffVideo(bytes([0, 0, 0, 24], ascii('ftypisom'), [0, 0, 0, 0], ascii('isommp42')))).toBe('mp4');
-    expect(sniffVideo(bytes([0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84], ascii('webm')))).toBe('webm');
-  });
-
-  it('rejects image containers, unrelated EBML and truncated signatures', () => {
-    for (const b of [PNG, JPEG, bytes([0, 0, 0, 24], ascii('ftypavif'), [0, 0, 0, 0]),
-      bytes([0x1a, 0x45, 0xdf, 0xa3, 0x42, 0x82], ascii('matroska')), bytes([0x1a, 0x45, 0xdf, 0xa3]),
-      bytes([0, 0, 0, 24], ascii('ftyp')), new Uint8Array()]) expect(sniffVideo(b)).toBeNull();
-  });
-});
 
 describe('sniffImage', () => {
   it('recognises the four formats by their magic bytes', () => {

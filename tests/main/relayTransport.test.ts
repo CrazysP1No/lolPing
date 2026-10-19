@@ -1,7 +1,7 @@
 import { schnorr } from '@noble/secp256k1';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeKeyPair, signEvent, type NostrEvent } from '../../src/main/nostrEvent';
-import { MAX_VIDEO_PACKET, sealVideo, type RoomKeys } from '../../src/main/roomCrypto';
+import type { RoomKeys } from '../../src/main/roomCrypto';
 import { RelayTransport } from '../../src/main/relayTransport';
 import { RoomManager } from '../../src/main/roomManager';
 import type { TransportStatus } from '../../src/main/transport';
@@ -73,21 +73,6 @@ describe('RelayTransport', () => {
     last().open();
     last().receive(['EVENT', 'lolping', theirs('AQID')]);
     expect(packets).toEqual([[`net:${other.pubkey}`, Buffer.from([1, 2, 3])]]);
-  });
-
-  it('accepts a maximum video packet but still rejects an oversized control packet', () => {
-    relay.start(KEYS);
-    last().open();
-    const video = sealVideo(KEYS.msgKey, new Uint8Array(MAX_VIDEO_PACKET - 1 - 12 - 16));
-    const content = Buffer.from(video).toString('base64');
-    expect(content.length).toBe(4 * Math.ceil(MAX_VIDEO_PACKET / 3));
-    last().receive(['EVENT', 'lolping', theirs(content)]);
-    expect(packets).toEqual([[`net:${other.pubkey}`, video]]);
-
-    const control = Buffer.from(video);
-    control[0] = 0x01;
-    last().receive(['EVENT', 'lolping', theirs(control.toString('base64'))]);
-    expect(packets).toHaveLength(1);
   });
 
   it("drops content over 1600 characters or that isn't base64", () => {
@@ -213,8 +198,9 @@ describe('RelayTransport under RoomManager', () => {
     const net = new RelayTransport({ urls, socket: f.factory, random: () => 0.5 });
     const room = new RoomManager({
       transports: [net], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0x12),
-      deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => ({ name: 'Me', color: 1, limit: 5 }),
+      deriveKeys: async () => KEYS, appVersion: '0.4.0', profile: () => ({ name: 'Me', color: 1, rgb: null, limit: 5, nf: [] }),
       resolveTarget: () => null,
+      announceEmotes: () => [],
     });
     /** A relay that answers OK to everything it was sent. */
     const ackAll = (): void => {

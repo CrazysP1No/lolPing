@@ -5,12 +5,14 @@ Requirements:
   * Python 3.14+ (uses the built-in compression.zstd module)
   * ffmpeg on PATH
   * vgmstream-cli (https://github.com/vgmstream/vgmstream/releases), passed with --vgmstream
-  * Pillow, only for --dds-dir, --wad-textures, --emote-gallery and --emotes; NumPy, only for the last two
+  * Pillow, only for --dds-dir, --derived, --wad-textures, --ui, --emote-gallery and --emotes; NumPy, only for the last two
 
 Examples:
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --wad-textures
+  py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --ui
   py -3.14 tools/extract-assets/extract_assets.py --dds-dir C:/Users/me/Downloads/need
+  py -3.14 tools/extract-assets/extract_assets.py --derived
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --emote-gallery --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
   py -3.14 tools/extract-assets/extract_assets.py --league "C:/Riot Games/League of Legends" --emotes --vgmstream C:/tools/vgmstream/vgmstream-cli.exe
 """
@@ -100,9 +102,8 @@ EMOTE_SET: dict[str, int] = {
     'such_foolishness': 4730,
 }
 # The default emote wheel, top slot then clockwise, and the centre (click) emote.
-DEFAULT_EMOTE_WHEEL: list[str] = ['unworthy_cn', 'unworthy', 'poro_snax', 'snoozy_poro', 'sad_kitten', 'bee_sad',
-                                  'cheeky_poro', 'wahaha', 'angry_kitty', 'omg_love_it', 'gg_heart', 'poro_ride',
-                                  'bee_happy', 'dont_make_me_laugh', 'bee_mad', 'woah_dizzy']
+DEFAULT_EMOTE_WHEEL: list[str] = ['unworthy_cn', 'poro_snax', 'sad_kitten', 'cheeky_poro', 'angry_kitty', 'gg_heart',
+                                  'bee_happy', 'bee_mad']
 DEFAULT_CLICK_EMOTE = 'facepalm'
 # Names for the catalog where the client's are not enough: slug -> (name, nameZh). The client calls both Unworthy emotes
 # "Unworthy" / "弱爆", and the app's settings list emotes by name.
@@ -116,6 +117,80 @@ WAD_TEXTURES = {
     'vision_cleared': 'ASSETS/Shared/Particles/PingUpdate/Need/Vision_Cleared.tex',
     'pingwheel_visionclearedrender': 'ASSETS/Shared/Particles/PingUpdate/Need/PingWheel_VisionClearedRender.tex',
 }
+
+# The room panel, vote widgets and text box are drawn with these. Output file in assets/ui -> (WAD under the install
+# folder, path in it, crop box (x, y, width, height) or None for the whole file). Videos and sounds are copied
+# as they are.
+# League's fonts are licensed from a type foundry, so they are not taken.
+UI_WAD = 'Game/DATA/FINAL/UI.wad.client'
+STATIC_WAD = 'Plugins/rcp-fe-lol-static-assets/assets.wad'
+NAVIGATION_WAD = 'Plugins/rcp-fe-lol-navigation/assets.wad'
+GAME_DATA_WAD = 'Plugins/rcp-be-lol-game-data/default-assets2.wad'
+SURRENDER_ATLAS = 'ASSETS/UX/Popups/SurrenderAtlas.tex'
+SCOREBOARD_ATLAS = 'ASSETS/UX/Scoreboard/ScoreboardAtlas.tex'
+OPTIONS_ATLAS = 'ASSETS/UX/Options/OptionsMenuAtlas.tex'
+SRU = 'plugins/rcp-be-lol-game-data/global/default/content/src/leagueclient/gamemodeassets/classic_sru/img/'
+STATIC = 'plugins/rcp-fe-lol-static-assets/global/default/'
+UI_ART = {
+    # in-game surrender vote
+    'surrender-frame.png': (UI_WAD, SURRENDER_ATLAS, (2, 2, 223, 113)),
+    'surrender-timer.png': (UI_WAD, SURRENDER_ATLAS, (14, 139, 196, 5)),
+    'surrender-button.png': (UI_WAD, SURRENDER_ATLAS, (0, 194, 120, 30)),
+    'surrender-button-hover.png': (UI_WAD, SURRENDER_ATLAS, (0, 226, 120, 30)),
+    'surrender-button-down.png': (UI_WAD, SURRENDER_ATLAS, (122, 226, 120, 30)),
+    # in-game Tab scoreboard
+    'scoreboard-frame.png': (UI_WAD, SCOREBOARD_ATLAS, (6, 23, 1124, 452)),
+    'scoreboard-cap.png': (UI_WAD, SCOREBOARD_ATLAS, (1916, 29, 107, 58)),
+    'scoreboard-ring.png': (UI_WAD, SCOREBOARD_ATLAS, (1790, 345, 52, 52)),
+    'scoreboard-self.png': (UI_WAD, SCOREBOARD_ATLAS, (1146, 26, 294, 73)),
+    # in-game options window
+    'options-frame.png': (UI_WAD, OPTIONS_ATLAS, (0, 0, 940, 168)),
+    'options-field.png': (UI_WAD, OPTIONS_ATLAS, (188, 172, 589, 20)),
+    'options-buttons.png': (UI_WAD, OPTIONS_ATLAS, (188, 196, 320, 160)),
+    # client ready check (the navigation plugin draws it: rcp-fe-lol-navigation.css, ready-check-*.hbs)
+    'ready-frame.png': (STATIC_WAD, STATIC + 'images/ready-check-main-frame.png', None),
+    'ready-mask.png': (STATIC_WAD, STATIC + 'images/default-background.png', None),
+    'ready-background.png': (GAME_DATA_WAD, SRU + 'ready-check-background.png', None),
+    'ready-icon.png': (GAME_DATA_WAD, SRU + 'game-select-icon-active.png', None),
+    'ready-accept.png': (NAVIGATION_WAD, 'plugins/rcp-fe-lol-navigation/global/default/button-accept-default.png', None),
+    'ready-accept-hover.png': (STATIC_WAD, STATIC + 'images/button-accept-hover.png', None),
+    'ready-accept-disabled.png': (STATIC_WAD, STATIC + 'images/button-accept-disabled.png', None),
+    # the ring of light round the frame: counting down, then accepted (intro, then a loop) or declined
+    'ready-countdown.webm': (STATIC_WAD, STATIC + 'videos/timer-countdown.webm', None),
+    'ready-accepted-intro.webm': (STATIC_WAD, STATIC + 'videos/timer-accepted-intro.webm', None),
+    'ready-accepted-idle.webm': (STATIC_WAD, STATIC + 'videos/timer-accepted-idle.webm', None),
+    'ready-declined.webm': (STATIC_WAD, STATIC + 'videos/timer-declined.webm', None),
+    # what the client plays: match found (its low-spec intro, the one this client uses), the countdown, the accepted loop
+    'ready-intro.ogg': (STATIC_WAD, STATIC + 'sounds/sfx-readycheck-lowspec-intro.ogg', None),
+    'ready-countdown.ogg': (STATIC_WAD, STATIC + 'sounds/sfx-readycheck-ringmagic-countdown.ogg', None),
+    'ready-accepted-loop.ogg': (STATIC_WAD, STATIC + 'sounds/sfx-readycheck-ringmagic-accepted-loop.ogg', None),
+}
+UI_OUT = REPO / 'assets' / 'ui'
+
+
+def extract_ui(league: Path) -> None:
+    """Cuts UI_ART out of the game and client WADs into assets/ui."""
+    import io
+    from PIL import Image
+
+    UI_OUT.mkdir(parents=True, exist_ok=True)
+    by_wad: dict[str, list[str]] = {}
+    for wad, path, _box in UI_ART.values():
+        by_wad.setdefault(wad, []).append(path)
+    files = {(wad, p): data for wad, paths in by_wad.items() for p, data in wad_read(league / wad, sorted(set(paths))).items()}
+    for name, (wad, path, box) in UI_ART.items():
+        data = files[(wad, path)]
+        if not name.endswith('.png'):
+            (UI_OUT / name).write_bytes(data)
+            print('ui', name)
+            continue
+        img = tex_to_png(data) if path.endswith('.tex') else Image.open(io.BytesIO(data)).convert('RGBA')
+        if box:
+            x, y, w, h = box
+            img = img.crop((x, y, x + w, y + h))
+        img.save(UI_OUT / name, optimize=True)
+        print('ui', name)
+
 
 # ---- xxHash64 (WAD path hashes) ----
 M64 = (1 << 64) - 1
@@ -299,6 +374,20 @@ def convert_textures(dds_dir: Path) -> None:
         print('texture', dds.stem)
 
 
+# output texture -> (extracted texture it is made from, degrees to rotate it). Not League files: made by --derived.
+DERIVED_TEXTURES = {
+    'enemy_missing_flipped': ('enemy_missing', 180),  # the upside-down Enemy Missing ping (#24)
+}
+
+
+def derive_textures() -> None:
+    from PIL import Image
+
+    for name, (source, degrees) in DERIVED_TEXTURES.items():
+        Image.open(TEXTURE_OUT / f'{source}.png').rotate(degrees).save(TEXTURE_OUT / f'{name}.png')
+        print('derived texture', name)
+
+
 def tex_to_png(data: bytes, out: Path | None = None):
     """League TEX (DXT1 or DXT5, mipmaps stored smallest first) -> RGBA PIL image, also saved as PNG when out is given.
     Decodes by wrapping the full-size level in a DDS header."""
@@ -325,6 +414,9 @@ def main() -> None:
     ap.add_argument('--vgmstream', default='vgmstream-cli', help='path to vgmstream-cli.exe')
     ap.add_argument('--dds-dir', type=Path, help='folder of .dds textures to convert to PNG')
     ap.add_argument('--wad-textures', action='store_true', help='with --league: extract only the WAD_TEXTURES, no sounds')
+    ap.add_argument('--derived', action='store_true',
+                    help='make the DERIVED_TEXTURES from textures already in assets/textures (also runs after --dds-dir)')
+    ap.add_argument('--ui', action='store_true', help='with --league: extract only the UI_ART into assets/ui')
     ap.add_argument('--emote-gallery', action='store_true',
                     help='with --league: list every emote in <temp>/lolping-emote-gallery/gallery.html (EMOTE_SET '
                          'pre-ticked; candidates baked with their sounds), no ping sounds')
@@ -334,15 +426,21 @@ def main() -> None:
     ap.add_argument('--glow-opacity', type=float,
                     help='with --emotes: draw the emote halos at this opacity instead of emote_bake.GLOW_OPACITY')
     args = ap.parse_args()
-    if not args.league and not args.dds_dir:
-        ap.error('pass --league and/or --dds-dir')
+    if not args.league and not args.dds_dir and not args.derived:
+        ap.error('pass --league, --dds-dir and/or --derived')
     if args.wad_textures and not args.league:
         ap.error('--wad-textures needs --league')
+    if args.ui and not args.league:
+        ap.error('--ui needs --league')
     if (args.emote_gallery or args.emotes) and not args.league:
         ap.error('--emote-gallery and --emotes need --league')
     if args.dds_dir:
         convert_textures(args.dds_dir)
-    if args.emote_gallery:
+    if args.dds_dir or args.derived:
+        derive_textures()
+    if args.ui:
+        extract_ui(args.league)
+    elif args.emote_gallery:
         import emote_bake
 
         sys.stdout.reconfigure(encoding='utf-8')

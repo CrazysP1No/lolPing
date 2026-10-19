@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveEmoteFile } from '../../src/main/appProtocol';
 import { EmoteLibrary, emoteFileFrom, resolveEmoteArt } from '../../src/main/emoteLibrary';
-import { VIDEO_MAX_BYTES, type CustomEmote, type EmoteFile } from '../../src/shared/emotes';
+import { customAnimUrl, customStillUrl, type CustomEmote, type EmoteFile } from '../../src/shared/emotes';
 
 vi.mock('electron', () => ({ net: {}, protocol: {} }));
 
@@ -49,90 +49,15 @@ const webpAnim =(w = 200, h = 200, total = 2000): Uint8Array =>
 const stillExtended = (flags: number, w = 160, h = 120, total = 600): Uint8Array =>
   padded([...ascii('RIFF'), ...le32(total - 8), ...ascii('WEBPVP8X'), ...le32(10), flags, 0, 0, 0, ...le24(w - 1), ...le24(h - 1)], total);
 const png = (): Uint8Array => padded([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 300);
+const ogg = (total = 500): Uint8Array => padded(ascii('OggS'), total);
+const mp3 = (total = 500): Uint8Array => padded([...ascii('ID3'), 4, 0], total);
 
 const hashOf = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex').slice(0, 32);
 const tempDir = (): string => mkdtempSync(join(tmpdir(), 'lolping-emotes-'));
 const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).sort() : []);
 const entry = (n: number): CustomEmote => ({ id: `c:${n.toString(16).padStart(32, '0')}`, name: `e${n}`, animated: false });
-const mp4 = (size = 1000): Uint8Array => padded([0, 0, 0, 24, ...ascii('ftypisom'), 0, 0, 0, 0, ...ascii('isommp42')], size);
-const webm = (): Uint8Array => padded([0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84, ...ascii('webm')], 1000);
-// Disk tests use header-only fixtures; real codec validation is exercised in Electron.
-const validVideo = async (): Promise<null> => null;
 
 describe('EmoteLibrary', () => {
-  it.each([['mp4', mp4()], ['webm', webm()]] as const)('saves and removes a %s video, sharing only its poster', async (format, video) => {
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'), validVideo);
-    const s = still();
-    const saved = await lib.save({ name: 'video', still: s, video }, []);
-    const hash = hashOf(s);
-    expect(saved).toEqual({ ok: true, emote: { id: `c:${hash}`, name: 'video', animated: true, video: true } });
-    expect(files(lib.dir)).toEqual([`${hash}.video.${format}`, `${hash}.webp`]);
-    expect(readFileSync(join(lib.dir, `${hash}.video.${format}`))).toEqual(Buffer.from(video));
-    expect(lib.readStill(hash)).toEqual(Buffer.from(s));
-    await lib.remove(`c:${hash}`);
-    expect(files(lib.dir)).toEqual([]);
-  });
-
-  it('rejects invalid, oversize or ambiguous video payloads without writing files', async () => {
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
-    for (const [video, error] of [[png(), 'type'], [new Uint8Array(), 'type'], [mp4(20_971_521), 'videoSize']] as const) {
-      expect(await lib.save({ name: 'x', still: still(), video }, [])).toEqual({ ok: false, error });
-    }
-    expect(await lib.save({ name: 'x', still: still(), video: mp4(), anim: gif() }, [])).toEqual({ ok: false, error: 'type' });
-    expect(files(lib.dir)).toEqual([]);
-  });
-
-  it('cleans a video in the other format when reimporting its poster', async () => {
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'), validVideo);
-    const s = still();
-    const hash = hashOf(s);
-    mkdirSync(lib.dir, { recursive: true });
-    writeFileSync(join(lib.dir, `${hash}.video.mp4`), mp4());
-    expect(await lib.save({ name: 'x', still: s, video: webm() }, [])).toMatchObject({ ok: true });
-    expect(files(lib.dir)).toEqual([`${hash}.video.webm`, `${hash}.webp`]);
-  });
-
-  it.each(['type', 'videoSize'] as const)('refuses a video failing native validation (%s) before writing files', async (error) => {
-    const validate = vi.fn(async () => error);
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'), validate);
-    const video = mp4();
-    expect(await lib.save({ name: 'clip', still: still(), video }, [])).toEqual({ ok: false, error });
-    expect(validate).toHaveBeenCalledWith(video);
-    expect(files(lib.dir)).toEqual([]);
-  });
-  it('accepts the 100th image', async () => {
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
-    expect(await lib.save({ name: 'last', still: still() }, Array.from({ length: 99 }, (_, i) => entry(i)))).toMatchObject({ ok: true });
-  });
-  it('shares the validated still only, refusing missing, unsafe or oversized files', async () => {
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
-    const s = still();
-    await lib.save({ name: 'moving', still: s, anim: gif() }, []);
-    expect(lib.readStill(hashOf(s))).toEqual(Buffer.from(s));
-    expect(lib.readStill('../anything')).toBeNull();
-    expect(lib.readStill('f'.repeat(32))).toBeNull();
-    writeFileSync(join(lib.dir, `${hashOf(s)}.webp`), still(160, 160, 12_289));
-    expect(lib.readStill(hashOf(s))).toBeNull();
-    writeFileSync(join(lib.dir, `${hashOf(s)}.webp`), webpAnim());
-    expect(lib.readStill(hashOf(s))).toBeNull();
-  });
-  it('reads only a bounded video with the matching container from its own folder', async () => {
-    const lib = new EmoteLibrary(join(tempDir(), 'emotes'), validVideo);
-    const s = still();
-    const video = mp4();
-    await lib.save({ name: 'video', still: s, video }, []);
-    const hash = hashOf(s);
-    expect(lib.readVideo(hash)).toEqual(Buffer.from(video));
-    expect(lib.readVideo('../anything')).toBeNull();
-    expect(lib.readVideo('f'.repeat(32))).toBeNull();
-
-    writeFileSync(join(lib.dir, `${hash}.video.mp4`), webm());
-    expect(lib.readVideo(hash)).toBeNull();
-    writeFileSync(join(lib.dir, `${hash}.video.mp4`), mp4(VIDEO_MAX_BYTES + 1));
-    expect(lib.readVideo(hash)).toBeNull();
-    writeFileSync(join(lib.dir, `${hash}.video.webm`), webm());
-    expect(lib.readVideo(hash)).toEqual(Buffer.from(webm()));
-  });
   it('saves a still and an animation', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
     const s = still();
@@ -184,7 +109,7 @@ describe('EmoteLibrary', () => {
       ['a payload that is not bytes', { name: 'x', still: [1, 2, 3] as unknown as Uint8Array }, [], 'type'],
       ['a name that is not a string', { name: 5 as unknown as string, still: still() }, [], 'type'],
       ['an image that is already imported', { name: 'x', still: still() }, [{ id: `c:${hashOf(still())}`, name: 'y', animated: false }], 'duplicate'],
-      ['a 101st image', { name: 'x', still: still() }, Array.from({ length: 100 }, (_, i) => entry(i)), 'full'],
+      ['a 25th image', { name: 'x', still: still() }, Array.from({ length: 24 }, (_, i) => entry(i)), 'full'],
     ];
     for (const [label, file, existing, error] of cases) {
       const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
@@ -252,6 +177,39 @@ describe('EmoteLibrary', () => {
     expect(files(lib.dir)).toHaveLength(1);
   });
 
+  it('saves a sound, replaces it in another format, and deletes it', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const s = still();
+    const hash = hashOf(s);
+    await lib.save({ name: 'x', still: s }, []);
+    expect(await lib.setSound(`c:${hash}`, ogg())).toBeNull();
+    expect(files(lib.dir)).toEqual([`${hash}.sound.ogg`, `${hash}.webp`]);
+    expect(await lib.setSound(`c:${hash}`, mp3())).toBeNull(); // the OGG would be served first: it goes
+    expect(files(lib.dir)).toEqual([`${hash}.sound.mp3`, `${hash}.webp`]);
+    expect(await lib.setSound(`c:${hash}`, null)).toBeNull();
+    expect(files(lib.dir)).toEqual([`${hash}.webp`]);
+  });
+
+  it('refuses a sound that is not OGG, MP3 or WAV, or is over 1 MB, and keeps the old one', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const hash = hashOf(still());
+    await lib.save({ name: 'x', still: still() }, []);
+    await lib.setSound(`c:${hash}`, ogg());
+    expect(await lib.setSound(`c:${hash}`, png())).toBe('type');
+    expect(await lib.setSound(`c:${hash}`, ogg(1_048_577))).toBe('size');
+    expect(await lib.setSound('../settings', ogg())).toBe('type');
+    expect(files(lib.dir)).toEqual([`${hash}.sound.ogg`, `${hash}.webp`]);
+  });
+
+  it('removes an emote together with its sound', async () => {
+    const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
+    const id = `c:${hashOf(still())}`;
+    await lib.save({ name: 'x', still: still() }, []);
+    await lib.setSound(id, mp3());
+    await lib.remove(id);
+    expect(files(lib.dir)).toEqual([]);
+  });
+
   it('present drops entries whose still is gone', async () => {
     const lib = new EmoteLibrary(join(tempDir(), 'emotes'));
     const a = await lib.save({ name: 'a', still: still(100, 100), anim: gif() }, []);
@@ -264,12 +222,6 @@ describe('EmoteLibrary', () => {
 });
 
 describe('emoteFileFrom', () => {
-  it('accepts video bytes but refuses simultaneous video and animation', () => {
-    const file = { name: 'clip', still: still(), video: mp4() };
-    expect(emoteFileFrom({ ...file, extra: 1 })).toEqual(file);
-    for (const video of [null, 'video', [1, 2]]) expect(emoteFileFrom({ ...file, video })).toBeNull();
-    expect(emoteFileFrom({ ...file, anim: gif() })).toBeNull();
-  });
   it('accepts a name and bytes, building a fresh object', () => {
     const s = still();
     const a = gif();
@@ -290,16 +242,24 @@ describe('resolveEmoteArt', () => {
   const hash = 'ab'.repeat(16);
   const moving: CustomEmote = { id: `c:${hash}`, name: 'm', animated: true };
   const plain: CustomEmote = { id: `c:${'cd'.repeat(16)}`, name: 'p', animated: false };
-  it('plays a local video with a poster, while remote peers still receive the poster', () => {
-    const video: CustomEmote = { ...moving, video: true };
-    expect(resolveEmoteArt(video.id, [video], false)).toEqual({ kind: 'video', url: `lolping://emotes/${hash}.video`, poster: `lolping://emotes/${hash}.webp` });
-    expect(resolveEmoteArt(video.id, [video], true)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false });
-  });
 
   it('plays our own animation, but shows a room member’s emote as its still', () => {
-    expect(resolveEmoteArt(moving.id, [moving], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.anim`, animated: true });
-    expect(resolveEmoteArt(moving.id, [moving], true)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false });
-    expect(resolveEmoteArt(plain.id, [plain], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${'cd'.repeat(16)}.webp`, animated: false });
+    expect(resolveEmoteArt(moving.id, [moving], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.anim`, animated: true, fx: 0 });
+    expect(resolveEmoteArt(moving.id, [moving], true)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 0 });
+    expect(resolveEmoteArt(plain.id, [plain], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${'cd'.repeat(16)}.webp`, animated: false, fx: 0 });
+  });
+
+  it('carries the stored effect through to the art', () => {
+    const picked: CustomEmote = { id: `c:${hash}`, name: 'm', animated: false, fx: 5 };
+    expect(resolveEmoteArt(picked.id, [picked], false)).toEqual({ kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 5 });
+  });
+
+  it('plays our own emote’s sound, never a room member’s', () => {
+    const loud: CustomEmote = { ...plain, sound: true };
+    const sound = `lolping://emotes/${'cd'.repeat(16)}.sound`;
+    expect(resolveEmoteArt(loud.id, [loud], false)).toMatchObject({ kind: 'custom', sound });
+    expect(resolveEmoteArt(loud.id, [loud], true)).not.toHaveProperty('sound');
+    expect(resolveEmoteArt(plain.id, [plain], false)).not.toHaveProperty('sound');
   });
 
   it('resolves bundled emotes and stands a placeholder in for unknown ones', () => {
@@ -327,16 +287,6 @@ describe('resolveEmoteFile', () => {
     expect(resolveEmoteFile([a], `/${hash}.webp`)).toBeNull();
   });
 
-  it('serves videos only through a validated hash path, without returning a still as video', () => {
-    const [a] = setup([`${hash}.video.mp4`], []);
-    const [b] = setup([`${hash}.video.webm`], []);
-    const [c] = setup([`${hash}.webp`], []);
-    expect(resolveEmoteFile([a], `/${hash}.video`)).toBe(join(a, `${hash}.video.mp4`));
-    expect(resolveEmoteFile([b], `/${hash}.video`)).toBe(join(b, `${hash}.video.webm`));
-    expect(resolveEmoteFile([c], `/${hash}.video`)).toBeNull();
-    for (const path of [`/${hash}.video.mp4`, `/../${hash}.video`, `/${hash.toUpperCase()}.video`]) expect(resolveEmoteFile([a], path)).toBeNull();
-  });
-
   it('serves the animation as .anim.gif, then .anim.webp, then the still', () => {
     const [a] = setup([`${hash}.anim.gif`, `${hash}.anim.webp`, `${hash}.webp`], []);
     expect(resolveEmoteFile([a], `/${hash}.anim`)).toBe(join(a, `${hash}.anim.gif`));
@@ -346,6 +296,14 @@ describe('resolveEmoteFile', () => {
     expect(resolveEmoteFile([c], `/${hash}.anim`)).toBe(join(c, `${hash}.webp`)); // a missing animation shows as its still
     const [d] = setup([], []);
     expect(resolveEmoteFile([d], `/${hash}.anim`)).toBeNull();
+  });
+
+  it('serves a sound as .sound.ogg, .mp3 or .wav, and nothing in its place', () => {
+    const [a] = setup([`${hash}.sound.mp3`, `${hash}.webp`], []);
+    expect(resolveEmoteFile([a], `/${hash}.sound`)).toBe(join(a, `${hash}.sound.mp3`));
+    const [b] = setup([`${hash}.webp`], []);
+    expect(resolveEmoteFile([b], `/${hash}.sound`)).toBeNull();
+    expect(resolveEmoteFile([a], `/${hash}.sound.mp3`)).toBeNull();
   });
 
   it('serves no other names', () => {
@@ -407,5 +365,24 @@ describe('an emotes folder that can’t be read', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     statError.code = null;
     expect(resolveEmoteFile([dir], `/${hash}.webp`)).toBe(join(dir, `${hash}.webp`)); // and again once it can be read
+  });
+});
+
+describe('resolveEmoteArt with the cache', () => {
+  const HASH = 'a'.repeat(32);
+
+  it('shows a friend’s still from the cache, never the animation, at the plain pop', () => {
+    expect(resolveEmoteArt(`c:${HASH}`, [], true, (h) => h === HASH)).toEqual({ kind: 'custom', url: customStillUrl(HASH), animated: false, fx: 0 });
+    expect(resolveEmoteArt(`c:${HASH}`, [], true, () => false)).toEqual({ kind: 'placeholder' });
+  });
+
+  it('never serves own emotes from the cache, and the library still wins with its animation and its effect', () => {
+    const mine = [{ id: `c:${HASH}`, name: 'Mine', animated: true, fx: 5 }];
+    expect(resolveEmoteArt(`c:${HASH}`, mine, false, () => true)).toEqual({ kind: 'custom', url: customAnimUrl(HASH), animated: true, fx: 5 });
+    expect(resolveEmoteArt(`c:${HASH}`, mine, true, () => true)).toEqual({ kind: 'custom', url: customStillUrl(HASH), animated: false, fx: 5 });
+  });
+
+  it('keeps the placeholder for a malformed ref', () => {
+    expect(resolveEmoteArt('nope', [], true, () => true)).toEqual({ kind: 'placeholder' });
   });
 });

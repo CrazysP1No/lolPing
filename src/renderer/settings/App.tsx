@@ -1,12 +1,13 @@
 import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@fluentui/react-components';
 import {
-  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
+  ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Games24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular, Pin24Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
-  Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
+  Apps24Regular, Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LANGUAGE_NAMES, LANGUAGE_PREFS, resolveLang, strings, type LanguagePref, type Strings } from '../../shared/i18n';
 import type { AppStatus } from '../../shared/ipc';
+import { featureOn, type FeatureId } from '../../shared/features';
 import { hotkeyParts } from '../../shared/keys';
 import { ALL_PINGS, DEFAULT_CLICK_PING, DEFAULT_WHEEL, textureUrl, type PingId } from '../../shared/pings';
 import { triggerLabel, type Settings } from '../../shared/settings';
@@ -14,6 +15,7 @@ import type { WheelPatch } from '../../shared/wheelLayout';
 import { api } from './api';
 import { AboutSection } from './components/AboutSection';
 import { EmoteSection } from './components/EmoteSection';
+import { FeaturesSection } from './components/FeaturesSection';
 import { KeyCapture } from './components/KeyCapture';
 import { PermissionCard } from './components/PermissionCard';
 import { RoomSection } from './components/RoomSection';
@@ -31,18 +33,19 @@ const MAC = PLATFORM === 'mac';
 /** macOS measures the screen in points. */
 const LENGTH_UNIT = MAC ? 'pt' : 'px';
 
-const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode }[] = [
+const SECTIONS: { id: string; label: (t: Strings) => string; icon: ReactNode; feature?: FeatureId }[] = [
   { id: 'trigger', label: (t) => t.navTrigger, icon: <Cursor24Regular /> },
   { id: 'toggle', label: (t) => t.navToggle, icon: <Keyboard24Regular /> },
   { id: 'pings', label: (t) => t.navPings, icon: <Speaker224Regular /> },
   { id: 'wheel', label: (t) => t.navWheel, icon: <DataPie24Regular /> },
-  { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular /> },
-  { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular /> },
+  { id: 'emotes', label: (t) => t.navEmotes, icon: <Emoji24Regular />, feature: 'emotes' },
+  { id: 'room', label: (t) => t.navRoom, icon: <PeopleCommunity24Regular />, feature: 'rooms' },
+  { id: 'features', label: (t) => t.navFeatures, icon: <Apps24Regular /> },
   { id: 'app', label: (t) => t.navApp, icon: <Settings24Regular /> },
 ];
 
 /** Pings that aren't in League's default wheel layout get a "new" badge. */
-const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'ward', 'orb_gray', 'orb_blue', 'orb_gold', 'orb_prismatic', 'orb_void']);
+const NEW_PINGS = new Set<PingId>(['bait', 'visioncleared', 'missingflip']);
 
 /** The settings change for a ping wheel edit: only the fields it touches, since an undefined field would reset that setting. */
 function pingPatch(p: WheelPatch<PingId>): Partial<Settings> {
@@ -90,10 +93,10 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const mainRef = useRef<HTMLElement>(null);
   const updateState = useUpdateState() ?? null; // no update checker in this build, or not known yet: no update controls
   const [active, setActive] = useState(SECTIONS[0].id);
+  const sections = SECTIONS.filter((sec) => !sec.feature || featureOn(s, sec.feature));
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
-  const [textHotkeyError, setTextHotkeyError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
   const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
@@ -110,8 +113,8 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const onScroll = () => {
     const main = mainRef.current;
     if (!main) return;
-    let current = SECTIONS[0].id;
-    for (const sec of SECTIONS) {
+    let current = sections[0].id;
+    for (const sec of sections) {
       const el = document.getElementById(sec.id);
       if (el && el.offsetTop - main.offsetTop - 40 <= main.scrollTop) current = sec.id;
     }
@@ -132,7 +135,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
             <span className="desc">{t.tagline}</span>
           </div>
         </div>
-        {SECTIONS.map((sec) => (
+        {sections.map((sec) => (
           <button key={sec.id} className={`navItem${active === sec.id ? ' sel' : ''}`} onClick={() => document.getElementById(sec.id)?.scrollIntoView({ behavior: 'smooth' })}>
             {sec.icon}
             {sec.label(t)}
@@ -141,7 +144,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
       </nav>
       <main className="content" ref={mainRef} onScroll={onScroll}>
         <h1 className="pageTitle">{t.pageTitle}</h1>
-        {status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
+        {MAC && status.helper === 'noAccess' ? <PermissionCard stale={status.staleAccess === true} /> : null}
         <StatusCard settings={s} status={status} />
 
         <div className="section" id="trigger">{t.navTrigger}</div>
@@ -160,7 +163,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         <SwitchRow icon={<CursorClick24Regular />} title={t.clickPing(trigger)}
           description={t.clickPingDesc(trigger)}
           checked={s.clickPing} onChange={(v) => void update({ clickPing: v })} dim={off} />
-        {!MAC && ( // the macOS helper has no fullscreen probe yet
+        {PLATFORM === 'win' && ( // only the Windows helper has a fullscreen probe
           <SwitchRow icon={<Games24Regular />} title={t.gameCheck}
             description={t.gameCheckDesc}
             checked={s.gameCheck} onChange={(v) => void update({ gameCheck: v })} dim={off} />
@@ -180,19 +183,14 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         </SettingRow>
         <SwitchRow icon={<Power24Regular />} title={t.startEnabled} description={t.startEnabledDesc}
           checked={s.enabledOnStart} onChange={(v) => void update({ enabledOnStart: v })} />
-        <SettingRow icon={<Keyboard24Regular />} title={t.textShortcut} description={t.textShortcutDesc} dim={off}>
-          <KeyCapture parts={hotkeyParts(s.textHotkey, PLATFORM)} requireModifier error={textHotkeyError}
-            onCapture={async (c) => {
-              const result = await update({ textHotkey: c });
-              setTextHotkeyError(result.ok ? null : result.error);
-            }} />
-        </SettingRow>
 
         <div className="section" id="pings">{t.navPings}</div>
         <SliderRow limit="pingSizePx" icon={<ResizeLarge24Regular />} title={t.pingSize} value={s.pingSizePx}
           format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ pingSizePx: v })} />
         <SliderRow limit="pingDurationS" icon={<Timer24Regular />} title={t.pingDuration} description={t.pingDurationDesc}
           value={s.pingDurationS} format={(v) => `${v.toFixed(1)} s`} onChange={(v) => void update({ pingDurationS: v })} />
+        <SwitchRow icon={<Pin24Regular />} title={t.keepLastPing} description={t.keepLastPingDesc}
+          checked={s.keepLastPing} onChange={(v) => void update({ keepLastPing: v })} />
         <SliderRow limit="volume" icon={<Speaker224Regular />} title={t.volume} value={s.volume}
           format={(v) => `${v}`} onChange={(v) => void update({ volume: v })} dim={s.muted} />
         <SwitchRow icon={<SpeakerMute24Regular />} title={t.mute} checked={s.muted} onChange={(v) => void update({ muted: v })} />
@@ -200,16 +198,29 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
           checked={s.tickSound} onChange={(v) => void update({ tickSound: v })} />
 
         <div className="section" id="wheel">{t.navWheel}</div>
-        <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool} allowDuplicates
+        <SliderRow limit="wheelSizePx" icon={<ResizeLarge24Regular />} title={t.wheelSize} description={t.wheelSizeDesc}
+          value={s.wheelSizePx} format={(v) => `${v} ${LENGTH_UNIT}`} onChange={(v) => void update({ wheelSizePx: v })} />
+        <WheelEditor wheel={s.wheel} center={s.clickPingId} centerOn={s.clickPing} trigger={trigger} pool={pingPool}
           defaults={{ wheel: DEFAULT_WHEEL, center: DEFAULT_CLICK_PING }}
           labels={{ title: t.wheelTitle, desc: t.wheelDesc(trigger), poolTitle: t.allPings, poolDesc: t.allPingsDesc }}
           onChange={(patch) => void update(pingPatch(patch))} onPreview={(id) => void api.previewPing(id)} />
 
-        <div className="section" id="emotes">{t.navEmotes}</div>
-        <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
+        {featureOn(s, 'emotes') ? (
+          <>
+            <div className="section" id="emotes">{t.navEmotes}</div>
+            <EmoteSection settings={s} update={update} lengthUnit={LENGTH_UNIT} />
+          </>
+        ) : null}
 
-        <div className="section" id="room">{t.navRoom}</div>
-        <RoomSection settings={s} update={update} />
+        {featureOn(s, 'rooms') ? (
+          <>
+            <div className="section" id="room">{t.navRoom}</div>
+            <RoomSection settings={s} update={update} />
+          </>
+        ) : null}
+
+        <div className="section" id="features">{t.navFeatures}</div>
+        <FeaturesSection settings={s} update={update} />
 
         <div className="section" id="app">{t.navApp}</div>
         <SwitchRow icon={<Rocket24Regular />} title={t.launchAtStartup} description={t.launchAtStartupDesc}

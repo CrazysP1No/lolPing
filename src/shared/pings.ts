@@ -1,9 +1,6 @@
 export type PingId =
   | 'danger' | 'push' | 'omw' | 'allin' | 'assist' | 'needvision' | 'missing' | 'enemyvision' | 'generic'
-  | 'bait' | 'visioncleared' | 'ward'
-  | 'orb_gray' | 'orb_blue' | 'orb_gold' | 'orb_prismatic' | 'orb_void';
-
-export const WARD_CLEAR_SOUND = 'ward_clear';
+  | 'bait' | 'visioncleared' | 'missingflip';
 
 export interface PingDef {
   id: PingId;
@@ -18,7 +15,7 @@ export interface PingDef {
   color: string;
 }
 
-/** Every ping in the settings gallery: standard signals followed by loot orbs. */
+/** Every ping, in the order the settings window lists them: the default wheel, then the extras. */
 export const ALL_PINGS: readonly PingDef[] = [
   { id: 'danger', name: 'Danger', icon: 'pingwheel_retreatrender', art: ['pingwheel_retreatrender'], sound: 'SRP_12', color: '#ff3b55' },
   { id: 'push', name: 'Push', icon: 'push', art: ['pingwheel_pushrender'], sound: 'SRP_9', color: '#35d27a' },
@@ -27,25 +24,18 @@ export const ALL_PINGS: readonly PingDef[] = [
   { id: 'assist', name: 'Assist Me', icon: 'assist_me', art: ['assist_me'], sound: 'ComeHere', color: '#56d43c' },
   { id: 'needvision', name: 'Need Vision', icon: 'need_vision', art: ['need_vision'], sound: 'SRP_7', color: '#56d43c' },
   { id: 'missing', name: 'Enemy Missing', icon: 'enemy_missing', art: ['enemy_missing'], sound: 'MIA', color: '#f2c518' },
-  { id: 'enemyvision', name: 'Enemy Vision', icon: 'enemy_vision', art: ['pingwheel_enemyvisionrender'], sound: 'AreaIsWarded', color: '#ff3b55' },
+  { id: 'enemyvision', name: 'Enemy Vision', icon: 'pingwheel_enemyvisionrender', art: ['pingwheel_enemyvisionrender'], sound: 'AreaIsWarded', color: '#ff3b55' },
   { id: 'generic', name: 'Generic', icon: 'generic_ping', art: ['pingwheel_basicpingrender'], sound: 'Base', color: '#2e8bff' },
   { id: 'bait', name: 'Bait', icon: 'pingwheel_baitrender', art: ['pingwheel_baitrender'], sound: 'SRP_11', color: '#efbc12' },
   { id: 'visioncleared', name: 'Vision Cleared', icon: 'vision_cleared', art: ['pingwheel_visionclearedrender'], sound: 'SRP_6', color: '#2b80ff' },
-  { id: 'ward', name: 'Place Ward', icon: 'ward', art: ['ward'], sound: 'ward_place', color: '#63eea0' },
-  { id: 'orb_gray', name: 'Gray Loot Orb', icon: 'orb_gray', art: ['orb_gray'], sound: 'Base', color: '#aab8c8' },
-  { id: 'orb_blue', name: 'Blue Loot Orb', icon: 'orb_blue', art: ['orb_blue'], sound: 'Base', color: '#59b8ff' },
-  { id: 'orb_gold', name: 'Gold Loot Orb', icon: 'orb_gold', art: ['orb_gold'], sound: 'Base', color: '#ffd66a' },
-  { id: 'orb_prismatic', name: 'Prismatic Loot Orb', icon: 'orb_prismatic', art: ['orb_prismatic'], sound: 'Base', color: '#ceb5ff' },
-  { id: 'orb_void', name: 'Void Loot Orb', icon: 'orb_void', art: ['orb_void'], sound: 'Base', color: '#a05cff' },
+  // Not a League ping: Enemy Missing turned upside down ("¿"), asked for in #24. Older room peers drop it.
+  { id: 'missingflip', name: 'Upside-down Missing', icon: 'enemy_missing_flipped', art: ['enemy_missing_flipped'], sound: 'MIA', color: '#f2c518' },
 ];
 
-/** Original compass slots stay at even indices; the extra slots include the five loot orb styles. */
-export const DEFAULT_WHEEL: readonly PingId[] = [
-  'danger', 'bait', 'push', 'visioncleared', 'omw', 'orb_prismatic', 'allin', 'ward',
-  'assist', 'orb_gray', 'needvision', 'orb_blue', 'missing', 'orb_gold', 'enemyvision', 'orb_void',
-];
+/** The wheel as League ships it, top (N) then clockwise. Array index = slice index from pickSlice(). */
+export const DEFAULT_WHEEL: readonly PingId[] = ['danger', 'push', 'omw', 'allin', 'assist', 'needvision', 'missing', 'enemyvision'];
 export const DEFAULT_CLICK_PING: PingId = 'generic';
-export const WHEEL_SLOTS = 16;
+export const WHEEL_SLOTS = 8;
 
 export const TICK_SOUND = 'button';
 export const FALLBACK_TEXTURE = 'generic_ping';
@@ -66,7 +56,7 @@ export const textureUrl = (name: string): string => `../textures/${name}.png`;
 export const soundUrl = (name: string): string => `../sounds/${name}.wav`;
 
 export function allSoundNames(): string[] {
-  return [...new Set([...ALL_PINGS.map((p) => p.sound), TICK_SOUND, WARD_CLEAR_SOUND])];
+  return [...new Set([...ALL_PINGS.map((p) => p.sound), TICK_SOUND])];
 }
 
 export function allTextureNames(): string[] {

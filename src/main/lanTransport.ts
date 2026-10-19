@@ -2,7 +2,7 @@ import { createSocket, type Socket } from 'node:dgram';
 import { EventEmitter } from 'node:events';
 import { networkInterfaces } from 'node:os';
 import { DEFAULT_FLOOD_LIMITS, FloodGuard } from './floodGuard';
-import { packetLimit, type RoomKeys } from './roomCrypto';
+import { MAX_PACKET, type RoomKeys } from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export const LAN_PORT = 47474;
@@ -126,7 +126,7 @@ export class LanTransport extends EventEmitter implements Transport {
     const sock: Sock = { socket, pending: 0, drained: null };
     this.sock = sock;
     socket.on('message', (msg, rinfo) => {
-      if (msg.length > packetLimit(msg)) return;
+      if (msg.length > MAX_PACKET) return;
       if (!this.flood.allow(rinfo.address)) return;
       this.emit('packet', `lan:${rinfo.address}:${rinfo.port}`, msg);
     });

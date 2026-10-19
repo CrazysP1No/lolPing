@@ -8,8 +8,8 @@ const at = (deg: number, r = 150) => {
 };
 
 describe('pickSlice', () => {
-  it('maps all 16 directions clockwise from N', () => {
-    expect(Array.from({ length: 16 }, (_, i) => at(i * 22.5))).toEqual(Array.from({ length: 16 }, (_, i) => i));
+  it('maps the 8 compass directions to slices 0..7 clockwise from N', () => {
+    expect([0, 45, 90, 135, 180, 225, 270, 315].map((d) => at(d))).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('returns -1 inside the dead zone and a slice at its edge', () => {
@@ -18,11 +18,11 @@ describe('pickSlice', () => {
     expect(pickSlice(0, -WHEEL.innerR)).toBe(0);
   });
 
-  it('splits slices at ±11.25° and wraps around N', () => {
-    expect(at(11.24)).toBe(0);
-    expect(at(11.26)).toBe(1);
+  it('splits slices exactly at ±22.5° and wraps around N', () => {
+    expect(at(22.4)).toBe(0);
+    expect(at(22.6)).toBe(1);
     expect(at(-1)).toBe(0);
-    expect(at(-11.26)).toBe(15);
+    expect(at(-22.6)).toBe(7);
     expect(at(359.9)).toBe(0);
   });
 

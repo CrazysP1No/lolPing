@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLICK_EMOTE, DEFAULT_EMOTE_WHEEL, EMOTE_CATALOG } from '../../src/shared/emoteCatalog';
 import {
-  allEmoteAssetFiles, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl, emoteName,
-  emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote, normalizeEmoteWheel, type CustomEmote,
+  allEmoteAssetFiles, announcedEmoteHashes, catalogEmote, customAnimUrl, customHash, customStillUrl, emoteAnimUrl, emoteIconUrl,
+  EMOTE_FX_VARIANTS, emoteName, emoteSoundUrl, isBundledEmote, isCustomRef, isEmoteRefShape, normalizeClickEmote,
+  normalizeEmoteWheel, type CustomEmote,
 } from '../../src/shared/emotes';
 
 const HASH = 'a'.repeat(32);
@@ -52,14 +53,6 @@ describe('emote refs', () => {
 });
 
 describe('normalizeEmoteWheel', () => {
-  it('expands legacy slots at the same directions without losing custom refs or repeating emotes', () => {
-    const old = [`c:${HASH}`, 'facepalm', 'bee_sad', 'poro_snax', 'gg_heart', 'unworthy_cn', 'wahaha', 'nice'];
-    const out = normalizeEmoteWheel(old, [custom(HASH)]);
-    expect(out).toHaveLength(16);
-    expect(out.filter((_, i) => i % 2 === 0)).toEqual(old);
-    expect(new Set(out).size).toBe(16);
-    expect(normalizeEmoteWheel(out, [custom(HASH)])).toEqual(out);
-  });
   it('falls back to the default wheel', () => {
     expect(normalizeEmoteWheel(undefined, [])).toEqual(DEFAULT_EMOTE_WHEEL);
     const seven = DEFAULT_EMOTE_WHEEL.slice(0, 7);
@@ -106,7 +99,7 @@ describe('normalizeEmoteWheel', () => {
     const out = normalizeEmoteWheel(wheel, []);
     const free = EMOTE_CATALOG.map((e) => e.slug).find((s) => !wheel.includes(s));
     expect(out[3]).toBe(free);
-    expect(new Set(out).size).toBe(16);
+    expect(new Set(out).size).toBe(8);
   });
 
   it('never repeats a ref when several slots are replaced', () => {
@@ -116,7 +109,7 @@ describe('normalizeEmoteWheel', () => {
     wheel[1] = `c:${HASH}`;
     wheel[2] = `c:${HASH_B}`;
     const out = normalizeEmoteWheel(wheel, []);
-    expect(new Set(out).size).toBe(16);
+    expect(new Set(out).size).toBe(8);
     expect(out.every(isBundledEmote)).toBe(true);
     expect(out[0]).toBe(DEFAULT_EMOTE_WHEEL[1]); // a valid ref is never the one that moves
   });
@@ -166,5 +159,17 @@ describe('emoteName', () => {
   it('gives ? for a ref it does not know', () => {
     expect(emoteName('not_in_catalog', 'en', [])).toBe('?');
     expect(emoteName(`c:${HASH}`, 'en', [])).toBe('?');
+  });
+});
+
+describe('announcedEmoteHashes', () => {
+  it('lists the custom emotes on the centre and wheel, distinct, centre first', () => {
+    expect(announcedEmoteHashes([`c:${HASH}`, 'gg', `c:${HASH}`], `c:${HASH_B}`)).toEqual([HASH_B, HASH]);
+    expect(announcedEmoteHashes(['gg', 'bait'], 'gg')).toEqual([]);
+  });
+
+  it('announces at most 9 hashes', () => {
+    const many = Array.from({ length: 12 }, (_, i) => `c:${i.toString(16).padStart(32, '0')}`);
+    expect(announcedEmoteHashes(many.slice(1), many[0])).toHaveLength(9);
   });
 });

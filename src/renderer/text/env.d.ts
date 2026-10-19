@@ -1,7 +1,9 @@
-import type { TextInputApi } from '../../preload/text';
+import type { TextApi } from '../../shared/ipc';
 
 declare global {
   interface Window {
-    textInput: TextInputApi;
+    textApi: TextApi;
   }
 }
+
+export {};

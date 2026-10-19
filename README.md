@@ -25,6 +25,12 @@
 
 Pings and emotes show up in whole-screen capture, so friends watching your Discord or OBS stream see them too. lolPing is a desktop toy: it doesn't read, change or hook into League itself.
 
+## Linux (experimental)
+
+This source tree includes an **X11 Linux port**, with AppImage and Debian package targets. It requires a genuine X11 session, XInput 2.1/XTest and a compositor. Wayland sessions, including XWayland inside Wayland, are not supported yet. Caps Lock triggers and automatic fullscreen-game detection are not available on Linux. Build with Node.js 22.12+, a C++20 compiler and `libx11-dev libxi-dev libxtst-dev`, then run `npm ci` and `npm run dist:linux`.
+
+See [Linux build, installation and testing instructions](docs/linux.md) for package usage, desktop shortcut conflicts, tray requirements, HiDPI behavior and manual updates. Upstream releases may not yet contain this port.
+
 ## Install
 
 ### Windows
@@ -37,7 +43,7 @@ lolPing is built for Windows 11, 64-bit. Windows 10 may work, but it isn't teste
 
 ### macOS (experimental)
 
-The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 12 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/darrenprx/lolPing/issues) anything that doesn't work.
+The Mac version needs an Apple Silicon Mac (M1 or later) and macOS 13 or later. It is built and tested automatically, but hasn't had much use on real Macs yet. Please [report](https://github.com/darrenprx/lolPing/issues) anything that doesn't work.
 
 1. Download `lolPing-<version>-arm64.dmg` from the [latest release](https://github.com/darrenprx/lolPing/releases/latest), open it, and drag lolPing into Applications.
 2. Open lolPing. It isn't signed by a registered Apple developer, so macOS says it can't check it for malware. Select **Done**, open **System Settings → Privacy & Security**, scroll down, select **Open Anyway** next to the lolPing message, and confirm.
@@ -57,30 +63,30 @@ Updating from v0.4 or earlier: download the new version by hand once. From v0.5 
 | --- | --- |
 | Ping | Hold **Alt**, drag, and let go on a slice |
 | Emote | Hold **Ctrl**, drag, and let go on an emote |
-| Send text | **Ctrl + Alt + T**, type, then **Enter** to send; **Esc** or clicking elsewhere cancels |
 | Cancel | Let go in the centre, right-click, or press **Esc** |
 | Pause or resume pinging | **Ctrl + Alt + P** |
+| Type a line to the room (in a room) | **Alt + T**, type, then press **Enter** |
+| Show who is in the room (in a room) | Hold **Tab** |
 | Open settings | Click the tray icon |
 | Quit, or restart the input helper | Right-click the tray icon |
 
 On a Mac, use **⌥ Option** instead of Alt, **⌃ Control** instead of Ctrl for emotes, **⌃⌥P** to pause, and the ping icon in the menu bar instead of the tray icon.
 
-Text uses **⌃⌥T** on a Mac. Up to 120 characters appear near the cursor for 5 seconds. Chinese input and paste work; Enter while choosing an input-method candidate does not send. While the input is open, wheel gestures are suspended. Pausing lolPing also disables text input. Change the combination in **Settings → Toggle → Send text shortcut**.
-
-Both the ping wheel and the emote wheel have 16 slots. The original eight pings retain their compass directions, with extra slots between them for Bait, Vision Cleared, Place Ward and five loot orb styles: gray, blue, gold, prismatic and void. Ping slots may repeat a signal. Customize either wheel in settings; existing eight-slot layouts expand automatically while preserving their directions. For a saved 16-slot layout, drag orbs from All pings onto the wheel, or reset it to the new defaults.
+The wheel, from the top going clockwise: Danger, Push, On My Way, All In, Assist Me, Need Vision, Enemy Missing, Enemy Vision. You can rearrange it and add Bait, Vision Cleared or an upside-down Enemy Missing ("¿") in settings. The emote wheel has 8 slots too, and you pick its emotes in settings. Each imported image plays its own signature effect (a spin, a bounce, a heartbeat...), picked by right-clicking it in the settings window from a grid where every effect plays live on that image.
 
 ## Settings
 
 <img src="docs/media/settings.png" width="760" alt="The lolPing settings window, with sections for trigger, toggle, pings and sound, wheel, emotes, room and app">
 
-- **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key (on a Mac: Option, Control, Shift, Command, Mouse 4, Mouse 5 or any other key). The custom key won't type in other apps while pinging is on.
+- **Trigger key:** Alt, Ctrl, Shift, Win, Caps Lock, Mouse 4, Mouse 5 or any other key (on a Mac: Option, Control, Shift, Command, Mouse 4, Mouse 5 or any other key). A custom key still types when tapped, but its letter appears when the key comes up, and holding it alone doesn't repeat.
 - **Alt + click places a ping:** off by default, so ordinary Alt + click shortcuts keep working. The ping is the one in the centre of the wheel editor (Generic unless you change it).
 - **Pause in fullscreen apps:** on by default. A fullscreen game keeps every click — trigger + click does nothing there — and gestures resume on the desktop and on other monitors. Windowed games aren't detected, and with an auto-hiding taskbar only borderless fullscreen counts. Windows only for now.
 - **Enable / disable shortcut:** must include Ctrl, Alt or Win (⌃, ⌥ or ⌘ on a Mac).
-- **Send text shortcut:** Ctrl + Alt + T by default, editable like the pause shortcut; the two combinations must differ.
-- **Pings and sound:** size, duration, volume, mute and the wheel's tick sound.
-- **Wheel:** drag any ping onto any slice, including Bait, Vision Cleared and the five loot orb styles, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back the 16-slot default layout.
-- **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the 16-slot emote wheel. **Add image or video…**, or dropping files on the list, adds up to 100 custom images and videos in total. Images accept PNG, JPG, GIF or WebP (up to 8 MB, 8192 px); videos accept MP4 or WebM (up to 20 MB, 1920 px on the longest side, using a codec supported by Electron). Videos play muted from the start and disappear when playback finishes, both locally and on updated room members' screens. First playback waits for encrypted transfer and validation; repeat sends use the receiver's cache. Large videos take longer over public relays. Images and animated images retain their three-second display time; animated images are shared as stills.
+- **Pings and sound:** size, duration, volume, mute and the wheel's tick sound. **Keep my last ping on screen** leaves your newest ping up until your next one or until you pause lolPing, for example to mark where you stopped reading.
+- **Wheel:** adjust the size of both the ping and emote wheels, without changing placed pings or emotes. Drag any ping onto any slice, including Bait, Vision Cleared and the upside-down Enemy Missing, or onto the centre to make it the Alt + click ping. Click a ping to preview it. **Reset to default** brings back League's layout.
+- **Emotes:** the emote key (Ctrl by default, or off), **Ctrl + click places an emote** (off by default), emote size, emote sound and the emote wheel, which you edit like the ping wheel. **Add image…**, or dropping a file on the list, adds your own images: PNG, JPG, GIF or WebP, up to 24. Animated ones play on your screen only. The speaker on one of your images gives it a sound (MP3, OGG or WAV, up to 1 MB and 5 seconds), which plays on your computer only.
+- **Room:** your name and tag colour, how friends' text appears (at the spot they pointed at, or scrolling across the top as 弹幕), the **text shortcut** (Alt + T by default) and the **room panel key** (Tab by default). The text shortcut and the panel key reach other apps except while you are in a room.
+- **Features:** turns off the parts you don't use: emotes, rooms, room text, votes and the room panel. A feature that is off has no keys, no settings section, sends nothing and ignores what friends send for it.
 - **Launch at Windows startup** (**Open at login** on a Mac): starts hidden in the tray or menu bar.
 - **Language:** follows the system display language, or pick English or 简体中文.
 
@@ -107,18 +113,22 @@ Join a room and everyone in it sees your pings on their own screen, at the same 
 - **Same network:** the first time, Windows asks whether lolPing may use the network: allow it, and set your Wi‑Fi to **Private** (Windows blocks it on Public networks). A Mac asks to find devices on the local network.
 - **Different networks:** with **Allow internet connections** on (the default), friends anywhere join with the same code. Their pings travel through free public [Nostr](https://nostr.com) relays and take a moment longer than on a local network, which is still used whenever it works. Virtual LANs such as ZeroTier or Radmin VPN work too, and Tailscale users simply connect over the internet.
 - A ping lands on the display with the same number (1 is the primary display), or on display 1.
-- **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images are shared as stills, encrypted like pings, and cached for the current room session. The first use may briefly show "?" while the image arrives. Both ends need a build with custom image sharing; older builds keep showing "?". Friends on v0.4 or older don't see emotes, and the Room page says so under their names.
-- **Text** is shared automatically while you are in a room, at the same relative screen position with your name. Both ends need a build with text sharing; older builds ignore text while still receiving pings and emotes.
-- **Wards & points:** in **Settings → Wheel**, add **Place Ward** to a slice and keep **Enemy Vision** (the eye icon) on another. Place Ward leaves a glowing, animated ward on the other room members’ screens with a placement sound. Wards have no timeout and normal clicks or other pings cannot remove them. Aim **Enemy Vision** at a ward on your screen to clear the nearest one, play its clear effect and sound, and earn **+1 point**. Each ward counts once. The Room page shows everyone’s points; leaving or changing rooms clears your wards and resets your points. Each receiver accepts up to 32 wards across its displays, without replacing existing ones. Wards use the usual display mapping, mute and incoming limit; both ends need a build with ward support.
-- **Mute room**, muting one person, and an **Incoming ping, emote and text limit** (up to Unlimited, counted together) keep the spam under control. Pausing lolPing pauses all three too.
-- A room holds up to 8 people. Leave and create a new room to get rid of someone.
-- **Privacy:** pings, emotes, text and names are end-to-end encrypted with a key made from the room code. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your pings, emotes, text or name. Turn **Allow internet connections** off to stay on your local network.
+- **Emotes** travel like pings: friends see yours on their own screen with your name under it. Your own images reach friends as a small still picture; animations and sounds stay on your computer. Friends' images are kept in a small cache on your computer. **Show friends' custom emotes** in Settings → Room turns this off both ways: nothing is sent or fetched, and friends' images show as "?". Friends on v0.4 or older don't see emotes, and the Room page says so under their names. Friends on older versions may not see newer message types.
+- **Text:** press **Alt + T** (**⌥T** on a Mac), type up to 120 characters and press **Enter**. Esc cancels. Friends see the line with your name, either at the spot where your pointer was or scrolling across the top of their screen, as they chose in Settings → Room. You see it too. `/ff`, `/noff` and `/ready` work as in League's chat and are not sent as text.
+- **Votes:** `/ff` or the **Surrender** button on the panel starts a surrender vote. It passes when 70% of the people in the room say yes (4 of 5), and ends early once the result is clear. **Ready check** needs everyone to accept. **Kick** (the button on a person's row) removes someone when more than half of the others say yes. Votes last 60 seconds, a ready check 15. A missing answer counts as no. Answer a surrender or kick vote with the ✓ and ✗ at the right edge of your screen, and a ready check with Accept or Decline in the centre, which plays League's ready check sounds at your ping volume; they take clicks without taking focus from your game or app.
+- **Kick is best effort:** every app counts the votes itself, so a lost packet can leave someone in a room that others have left. A kicked person can join again by typing the room code again; to keep someone out, leave and create a new room.
+- **Room panel:** hold **Tab** to see everyone in the room, with their tag colour, whether they are on, paused, muted or can't see text and votes, and whether they are on your network or the internet. Click a name to post "<name> - Alive", as on League's scoreboard. The speaker button mutes one person. The **History** tab lists this session's text and vote results, up to 200 lines, and is cleared when you leave.
+- **Tab and other apps:** while you are in a room, a held Tab doesn't reach other apps, because the panel takes it. Alt + Tab, Ctrl + Tab and Shift + Tab are not touched, and a fullscreen game keeps its own Tab while **Pause in fullscreen apps** is on (Windows). Outside a room, or with lolPing paused, Tab works as usual. You can pick another panel key or turn the panel off in Settings → Room and Settings → Features.
+- **Mute room**, muting one person, and an **Incoming ping, emote and text limit** (up to Unlimited, counted together) keep the spam under control. Pausing lolPing with the shortcut pauses all room content too.
+- A room holds up to 16 people. To remove someone, start a kick vote, or leave and create a new room.
+- **Privacy:** pings, emotes, text, votes, your emote images and names are end-to-end encrypted with a key made from the room code, and text and votes use no new network hosts. People on your network can see your local IP address. With internet connections on, public relays see your IP address, an anonymous room ID and when you send, but never your content, images or name. Turn **Allow internet connections** off to stay on your local network.
 
 ## Known limitations
 
 - The wheel can't open over windows running as administrator, such as Task Manager. Windows hides their input from normal apps.
 - Exclusive-fullscreen games draw above the overlay.
 - Sharing a single window doesn't include the pings. Share your entire screen instead.
+- While you are in a room, a held Tab shows the room panel and doesn't reach other apps, and Alt + T opens the text box instead of reaching the app underneath. Change these keys, or turn the features off, in Settings → Room and Settings → Features.
 - While lolPing is on, Ctrl + drag opens the emote wheel instead of copying files or text. Pick another emote key, or turn it off, in Settings → Emotes.
 - On a Mac, the wheel can't open while a secure screen is showing, such as the login window or a password prompt, and Accessibility has to be allowed again after each update.
 
@@ -150,12 +160,6 @@ npm run dev
 | `node tools/room-peer/run.mjs <code>` | Joins a room as a fake member that pings at random, to try rooms with one computer; `--relay` joins through the relays and `--emotes` also sends emotes (see [`tools/room-peer`](tools/room-peer)) |
 | `node tools/relay-probe/run.mjs` | Tests which public Nostr relays can carry rooms; it chose the list in `src/main/relays.ts` (see [`tools/relay-probe`](tools/relay-probe)) |
 
-### Build installers with GitHub Actions
-
-Open **Actions → Build installers → Run workflow**, choose the source branch under **Branch**, and click **Run workflow**. Windows x64 EXE and macOS arm64 DMG builds run together, including the native helpers and tests. The version comes from that branch's `package.json`.
-
-When the run succeeds, download `lolPing-windows-x64` and `lolPing-mac-arm64` under **Artifacts**. The ZIPs contain the installers and update files and are kept for 14 days. The workflow must exist on the default branch and the branch you select; sync the workflow to an older branch before building it.
-
 ### Releasing
 
 Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2.0`. The Release workflow creates the GitHub release as a draft. The Windows job attaches the installer, `latest.yml` and the installer's `.blockmap`, and the Mac job attaches the disk image. electron-updater needs both `latest.yml` and the `.blockmap` to update installed copies. A last job publishes the release once everything is attached.
@@ -170,11 +174,18 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 - **Demo page:** [`site`](site) runs the same overlay code in the browser, with a small input shim in place of the helper. The README GIF is recorded from it.
 - **Design notes:** [docs/design.md](docs/design.md) covers the protocol, the input state machine and the multi-monitor maths. [docs/design-macos.md](docs/design-macos.md) covers the Mac port.
 
+## Contributing
+
+Pull requests and ideas are welcome. Before you start:
+
+- Read [AGENTS.md](AGENTS.md): the layout, the behaviour every change keeps, and the code, test and commit conventions. If you use an AI tool, give it that file too. Claude Code reads it through `CLAUDE.md`, and most other agents read `AGENTS.md` on their own.
+- Title the pull request in [Conventional Commits](https://www.conventionalcommits.org/) style, such as `fix(helper): keep clicks in order after a cancelled wheel`. Pull requests are squash-merged, so the title becomes the commit on `main`.
+- Keep one change per pull request and fill in the template. CI has to pass on Windows and macOS before anything merges.
+- For bigger ideas, open an issue or a [discussion](https://github.com/darrenprx/lolPing/discussions) first, so we can agree on the approach before you write it.
+
 ## Ping assets
 
 The icons in `assets/textures` and the sounds in `assets/sounds` come from a local League of Legends install. [`tools/extract-assets`](tools/extract-assets) explains how to extract them again after a patch. The emote animations, icons and sounds in `assets/emotes` are © Riot Games too, and `tools/extract-assets --emotes` bakes them from the same install.
-
-The exceptions are `assets/textures/ward.png` and `orb_*.png` (original generated sprites with alpha channels) and `assets/sounds/ward_place.wav` / `ward_clear.wav` (original synthesized sounds). These original assets are included under the project’s MIT license. The loot orb sprites are TFT-inspired originals; their prompts and production notes are in [docs/orb-assets.md](docs/orb-assets.md).
 
 ## License
 

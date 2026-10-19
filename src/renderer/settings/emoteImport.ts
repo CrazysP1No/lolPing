@@ -1,10 +1,12 @@
+import { sniffAudio } from '../../shared/audioSniff';
 import {
-  ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, STILL_FALLBACK_SIDE, STILL_MAX_BYTES, STILL_SIDE,
-  VIDEO_MAX_BYTES, VIDEO_MAX_SIDE, type EmoteFile, type ImportError,
+  ANIM_MAX_BYTES, ANIM_MAX_SIDE, INPUT_MAX_BYTES, INPUT_MAX_SIDE, SOUND_MAX_BYTES, SOUND_MAX_S, STILL_FALLBACK_SIDE, STILL_MAX_BYTES,
+  STILL_SIDE, type EmoteFile, type ImportError, type SoundError,
 } from '../../shared/emotes';
-import { imageSize, sniffImage, sniffVideo, type ImageType, type VideoType } from '../../shared/imageSniff';
+import { imageSize, sniffImage, type ImageType } from '../../shared/imageSniff';
 
 export type Prepared = { ok: true; file: EmoteFile } | { ok: false; error: ImportError };
+export type PreparedSound = { ok: true; bytes: Uint8Array } | { ok: false; error: SoundError };
 
 const QUALITIES: readonly number[] = [0.85, 0.75, 0.65, 0.55, 0.45];
 const MIME: Record<ImageType, string> = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
@@ -22,9 +24,8 @@ export function fitSize(w: number, h: number, side: number): { width: number; he
   return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
 }
 
-/** Supported image or video container, with separate byte limits. */
+/** PNG, JPEG, GIF or WebP by its first bytes, whatever the file is called, and at most INPUT_MAX_BYTES. */
 export function checkInput(bytes: Uint8Array): ImportError | null {
-  if (sniffVideo(bytes)) return bytes.length > VIDEO_MAX_BYTES ? 'videoSize' : null;
   if (!sniffImage(bytes)) return 'type';
   return bytes.length > INPUT_MAX_BYTES ? 'size' : null;
 }
@@ -49,10 +50,10 @@ export function checkAnimation(bytes: Uint8Array, width: number, height: number)
 export const nameFromFile = (fileName: string): string => fileName.replace(/(.)\.[^.]*$/, '$1');
 
 /** The first encoding of `frame` that fits STILL_MAX_BYTES, or null when even the smallest is too big. */
-async function encodeStill(frame: CanvasImageSource, width: number, height: number): Promise<Uint8Array | null> {
+async function encodeStill(frame: VideoFrame): Promise<Uint8Array | null> {
   let canvas: OffscreenCanvas | null = null;
   for (const { side, quality } of stillAttempts()) {
-    const size = fitSize(width, height, side);
+    const size = fitSize(frame.displayWidth, frame.displayHeight, side);
     if (!canvas || canvas.width !== size.width || canvas.height !== size.height) {
       canvas = new OffscreenCanvas(size.width, size.height);
       const ctx = canvas.getContext('2d');
@@ -66,51 +67,18 @@ async function encodeStill(frame: CanvasImageSource, width: number, height: numb
   return null;
 }
 
-async function prepareVideo(file: File, bytes: Uint8Array<ArrayBuffer>, type: VideoType): Promise<Prepared> {
-  const video = document.createElement('video');
-  const url = URL.createObjectURL(new Blob([bytes], { type: `video/${type}` }));
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    video.muted = true;
-    video.preload = 'auto';
-    await new Promise<void>((resolve, reject) => {
-      timeout = setTimeout(() => reject(new Error('Video load timed out')), 15_000);
-      video.onloadeddata = () => resolve();
-      video.onerror = () => reject(new Error('Video decode failed'));
-      video.src = url;
-    });
-    if (!video.videoWidth || !video.videoHeight) return fail('type');
-    if (Math.max(video.videoWidth, video.videoHeight) > VIDEO_MAX_SIDE) return fail('videoSize');
-    const still = await encodeStill(video, video.videoWidth, video.videoHeight);
-    return still ? { ok: true, file: { name: nameFromFile(file.name), still, video: bytes } } : fail('detail');
-  } catch {
-    return fail('type');
-  } finally {
-    clearTimeout(timeout);
-    video.onloadeddata = null;
-    video.onerror = null;
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    URL.revokeObjectURL(url);
-  }
-}
-
 /**
  * Turns a picked or dropped file into what main saves: a small WebP still of its first frame and, for a GIF or WebP with
  * more than one frame, the original bytes as the animation.
  */
 export async function prepareEmote(file: File): Promise<Prepared> {
-  const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
-  const videoType = sniffVideo(header);
-  if (file.size > (videoType ? VIDEO_MAX_BYTES : INPUT_MAX_BYTES)) {
+  if (file.size > INPUT_MAX_BYTES) {
     // Refused without reading the rest of what may be a huge file.
-    return fail(videoType ? 'videoSize' : sniffImage(header) ? 'size' : 'type');
+    return fail(sniffImage(new Uint8Array(await file.slice(0, 16).arrayBuffer())) ? 'size' : 'type');
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const bad = checkInput(bytes) ?? (videoType ? null : checkDimensions(bytes));
+  const bad = checkInput(bytes) ?? checkDimensions(bytes);
   if (bad) return fail(bad);
-  if (videoType) return prepareVideo(file, bytes, videoType);
   const type = sniffImage(bytes) as ImageType;
 
   let decoder: ImageDecoder | null = null;
@@ -125,7 +93,7 @@ export async function prepareEmote(file: File): Promise<Prepared> {
       const tooBig = checkAnimation(bytes, frame.displayWidth, frame.displayHeight);
       if (tooBig) return fail(tooBig);
     }
-    const still = await encodeStill(frame, frame.displayWidth, frame.displayHeight);
+    const still = await encodeStill(frame);
     if (!still) return fail('detail');
     const name = nameFromFile(file.name);
     return { ok: true, file: animated ? { name, still, anim: bytes } : { name, still } };
@@ -134,5 +102,28 @@ export async function prepareEmote(file: File): Promise<Prepared> {
   } finally {
     frame?.close();
     decoder?.close();
+  }
+}
+
+/** A sound's type by its first bytes, its size, and its length in seconds once decoded (null before decoding). */
+export function checkSound(head: Uint8Array, size: number, seconds: number | null): SoundError | null {
+  if (!sniffAudio(head)) return 'type';
+  if (size > SOUND_MAX_BYTES) return 'size';
+  return seconds !== null && seconds > SOUND_MAX_S + 0.05 ? 'long' : null; // a little slack for encoder padding
+}
+
+/** Reads a picked sound file and checks it: OGG, MP3 or WAV, at most SOUND_MAX_BYTES and SOUND_MAX_S seconds. */
+export async function prepareSound(file: File): Promise<PreparedSound> {
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const early = checkSound(head, file.size, null); // refused without reading the rest of what may be a huge file
+  if (early) return { ok: false, error: early };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const ctx = new OfflineAudioContext(1, 1, 44100);
+  try {
+    const decoded = await ctx.decodeAudioData(bytes.slice().buffer); // decoding detaches the buffer it gets: hand it a copy
+    const long = checkSound(head, bytes.length, decoded.duration);
+    return long ? { ok: false, error: long } : { ok: true, bytes };
+  } catch {
+    return { ok: false, error: 'type' }; // looked like a sound, but doesn't decode
   }
 }

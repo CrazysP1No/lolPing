@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { TEXT_CH, type TextInputConfig } from '../shared/textChannels';
+import type { TextApi } from '../shared/ipc';
 
-const api = {
-  getConfig: (): Promise<TextInputConfig | null> => ipcRenderer.invoke(TEXT_CH.get),
-  submit: (text: string): Promise<boolean> => ipcRenderer.invoke(TEXT_CH.submit, text),
-  cancel: (): Promise<void> => ipcRenderer.invoke(TEXT_CH.cancel),
+const api: TextApi = {
+  // Inlined: a sandboxed preload can require electron, but not a generated sibling chunk.
+  submit: (text) => ipcRenderer.invoke('text:submit', text),
+  cancel: () => ipcRenderer.send('text:cancel'),
+  strings: () => ipcRenderer.invoke('text:strings'),
 };
 
-contextBridge.exposeInMainWorld('textInput', api);
-export type TextInputApi = typeof api;
+contextBridge.exposeInMainWorld('textApi', api);

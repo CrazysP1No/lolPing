@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EmoteStage } from '../../src/renderer/overlay/emoteFx';
+import { emoteFxContent } from '../../src/renderer/shared/emoteFx';
+import { EmoteStage } from '../../src/renderer/overlay/emoteStage';
 
 /** Just enough of the DOM for EmoteStage: elements with classes, children, text and a src. */
 class FakeElement {
@@ -8,17 +9,6 @@ class FakeElement {
   src = '';
   alt = '';
   draggable = true;
-  muted = false;
-  loop = false;
-  playsInline = false;
-  poster = '';
-  play = vi.fn(() => Promise.resolve());
-  pause = vi.fn();
-  load = vi.fn();
-  setAttribute(_name: string, _value: string): void {}
-  removeAttribute(name: string): void {
-    if (name === 'src') this.src = '';
-  }
   parent: FakeElement | null = null;
   children: FakeElement[] = [];
   readonly style: Record<string, unknown> & { setProperty(k: string, v: string): void } = { setProperty: () => undefined };
@@ -64,77 +54,10 @@ beforeEach(() => {
   vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
 });
 afterEach(() => {
-  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('EmoteStage', () => {
-  const videoArt = { kind: 'video' as const, url: 'lolping://emotes/clip.video', poster: 'lolping://emotes/clip.webp' };
-  it('keeps a receiving-video poster visible until it is replaced by the completed video', async () => {
-    vi.useFakeTimers();
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    stage.spawn('friend', { kind: 'video-loading', poster: videoArt.poster }, 10, 20, { sizePx: 150 });
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(layer.find('emote')).toHaveLength(1);
-    stage.spawn('friend', videoArt, 10, 20, { sizePx: 150 });
-    const video = layer.find('fx')[0].children[0];
-    expect(video.tagName).toBe('video');
-    video.dispatch('playing'); video.dispatch('ended');
-    expect(layer.find('emote')).toHaveLength(0);
-  });
-  it('keeps a video past three seconds and removes it only after playback ends', async () => {
-    vi.useFakeTimers();
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
-    const [video] = layer.find('fx')[0].children;
-    expect(video.tagName).toBe('video');
-    expect(video.src).toBe(videoArt.url);
-    expect(video.poster).toBe(videoArt.poster);
-    expect(video.muted).toBe(true);
-    expect(video.loop).toBe(false);
-    expect(video.play).toHaveBeenCalledOnce();
-    video.dispatch('playing');
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(layer.find('emote')).toHaveLength(1);
-    video.dispatch('ended');
-    expect(layer.find('emote')).toHaveLength(0);
-    expect(video.pause).toHaveBeenCalled();
-    expect(video.src).toBe('');
-    expect(video.load).toHaveBeenCalled();
-  });
-
-  it('releases a replaced video and ignores its late playback events', () => {
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
-    const old = layer.find('fx')[0].children[0];
-    stage.spawn('self', videoArt, 30, 40, { sizePx: 150 });
-    expect(old.pause).toHaveBeenCalled();
-    old.dispatch('ended');
-    old.dispatch('error');
-    expect(layer.find('emote')).toHaveLength(1);
-    expect(layer.find('fx')[0].children[0]).not.toBe(old);
-    stage.clear('self');
-  });
-
-  it('shows a short-lived poster when video decoding fails', async () => {
-    vi.useFakeTimers();
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
-    const video = layer.find('fx')[0].children[0];
-    video.dispatch('error');
-    const poster = layer.find('fx')[0].children[0];
-    expect(poster.tagName).toBe('img');
-    expect(poster.src).toBe(videoArt.poster);
-    expect(video.pause).toHaveBeenCalled();
-    video.dispatch('ended'); // releasing the failed player must not remove its fallback
-    expect(layer.find('emote')).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(3200);
-    expect(layer.find('emote')).toHaveLength(0);
-  });
   it('shows the placeholder when a bundled emote’s animation arrives but cannot be decoded', async () => {
     const layer = new FakeElement('div');
     const stage = new EmoteStage(layer as unknown as HTMLElement, () => Promise.resolve(new Blob(['not a webp'])));
@@ -152,22 +75,6 @@ describe('EmoteStage', () => {
     expect(emote.find('fx')).toHaveLength(1);
     expect(emote.find('bubble')).toHaveLength(1);
     stage.clear('self');
-    expect(layer.find('emote')).toHaveLength(0);
-  });
-
-  it('falls back after stalled loading, while an actively playing video has no lifetime timer', async () => {
-    vi.useFakeTimers();
-    const layer = new FakeElement('div');
-    const stage = new EmoteStage(layer as unknown as HTMLElement);
-    stage.spawn('self', videoArt, 10, 20, { sizePx: 150 });
-    const video = layer.find('fx')[0].children[0];
-    video.dispatch('playing');
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(layer.find('fx')[0].children[0]).toBe(video);
-    video.dispatch('waiting');
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(layer.find('fx')[0].children[0].tagName).toBe('img');
-    await vi.advanceTimersByTimeAsync(3200);
     expect(layer.find('emote')).toHaveLength(0);
   });
 
@@ -238,5 +145,69 @@ describe('EmoteStage', () => {
     fail(new Error('404'));
     await flush();
     expect(layer.find('emote')).toHaveLength(0);
+  });
+});
+
+describe('custom emote effects', () => {
+  it('plays an imported emote in the envelope its entry picks', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    const hash = '000a' + '0'.repeat(28);
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${hash}.webp`, animated: false, fx: 1 }, 10, 20, { sizePx: 150 });
+    const [emote] = layer.find('emote');
+    const [fx] = emote.find('fx');
+    expect(fx.className.split(' ')).toEqual(['fx', 'v1']);
+    expect(fx.children[0].tagName).toBe('img'); // the fake DOM finds by class only, so check the tag
+    stage.clear('self');
+
+    const other = '000b' + '0'.repeat(28);
+    stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${other}.anim`, animated: true, fx: 2 }, 10, 20, { sizePx: 150 });
+    expect(layer.find('emote')[0].find('fx')[0].className.split(' ')).toEqual(['fx', 'v2']);
+    stage.clear('self');
+  });
+
+  it('keeps the plain envelope for the placeholder, whatever the URL looks like', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    stage.spawn('self', { kind: 'placeholder' }, 10, 20, { sizePx: 150 });
+    const [fx] = layer.find('emote')[0].find('fx');
+    expect(fx.className.split(' ')).toEqual(['fx', 'v0']);
+    expect(fx.find('bubble')).toHaveLength(1);
+    stage.clear('self');
+  });
+});
+
+describe('plain effects', () => {
+  it('add nothing around the art, and neither does the placeholder', () => {
+    const layer = new FakeElement('div');
+    const stage = new EmoteStage(layer as unknown as HTMLElement);
+    for (let n = 0; n < 6; n++) {
+      stage.spawn('self', { kind: 'custom', url: `lolping://emotes/${n.toString(16).repeat(16)}.webp`, animated: false, fx: n }, 10, 20, { sizePx: 150 });
+      const [fx] = layer.find('emote')[0].find('fx');
+      expect(fx.children.filter((c) => c.tagName === 'i')).toHaveLength(0);
+      stage.clear('self');
+    }
+    stage.spawn('self', { kind: 'placeholder' }, 10, 20, { sizePx: 150 });
+    expect(layer.find('emote')[0].find('fx')[0].children.filter((c) => c.tagName === 'i')).toHaveLength(0);
+    stage.clear('self');
+  });
+});
+
+describe('emoteFxContent (the effect picker builds the same nodes)', () => {
+  const url = 'lolping://emotes/still/0123456789abcdef0123456789abcdef.webp';
+
+  it('variant 0 is just the art in the plain envelope, with no ornaments', () => {
+    const fx = emoteFxContent(0, url) as unknown as FakeElement;
+    expect(fx.className).toBe('fx v0');
+    expect(fx.children).toHaveLength(1); // the art, nothing else
+    expect(fx.find('blob')).toHaveLength(0);
+    expect(fx.find('ring')).toHaveLength(0);
+    expect(fx.find('spark')).toHaveLength(0);
+  });
+
+  it('an art that cannot load falls back to the placeholder bubble', () => {
+    const fx = emoteFxContent(5, url) as unknown as FakeElement;
+    fx.children[0].dispatch('error');
+    expect(fx.find('bubble')).toHaveLength(1);
   });
 });
